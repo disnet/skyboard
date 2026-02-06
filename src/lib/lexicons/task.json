@@ -1,0 +1,51 @@
+{
+  "lexicon": 1,
+  "id": "blue.kanban.task",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "A task on a kanban board",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": ["title", "columnId", "boardUri", "order", "createdAt"],
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 1024,
+            "description": "Title of the task"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 10240,
+            "description": "Optional description of the task"
+          },
+          "columnId": {
+            "type": "string",
+            "description": "ID of the column this task belongs to"
+          },
+          "boardUri": {
+            "type": "string",
+            "format": "at-uri",
+            "description": "AT URI of the parent board"
+          },
+          "order": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Sort order within the column"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "When the task was created"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "When the task was last updated"
+          }
+        }
+      }
+    }
+  }
+}

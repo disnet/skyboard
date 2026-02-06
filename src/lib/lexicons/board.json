@@ -1,0 +1,59 @@
+{
+  "lexicon": 1,
+  "id": "blue.kanban.board",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "A kanban board",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": ["name", "columns", "createdAt"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 256,
+            "description": "Name of the board"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 2048,
+            "description": "Optional description of the board"
+          },
+          "columns": {
+            "type": "array",
+            "minLength": 1,
+            "maxLength": 20,
+            "items": { "type": "ref", "ref": "#column" },
+            "description": "Columns in this board"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "When the board was created"
+          }
+        }
+      }
+    },
+    "column": {
+      "type": "object",
+      "required": ["id", "name", "order"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "TID identifier for the column"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 256,
+          "description": "Name of the column"
+        },
+        "order": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Sort order of the column"
+        }
+      }
+    }
+  }
+}

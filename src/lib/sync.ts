@@ -1,0 +1,238 @@
+import type { Agent } from '@atproto/api';
+import { db } from './db.js';
+import { BOARD_COLLECTION, TASK_COLLECTION, buildAtUri } from './tid.js';
+import type { Board, Task, BoardRecord, TaskRecord } from './types.js';
+
+let syncInterval: ReturnType<typeof setInterval> | null = null;
+
+function boardToRecord(board: Board): BoardRecord {
+	return {
+		$type: 'blue.kanban.board',
+		name: board.name,
+		...(board.description ? { description: board.description } : {}),
+		columns: board.columns,
+		createdAt: board.createdAt
+	};
+}
+
+function taskToRecord(task: Task): TaskRecord {
+	return {
+		$type: 'blue.kanban.task',
+		title: task.title,
+		...(task.description ? { description: task.description } : {}),
+		columnId: task.columnId,
+		boardUri: task.boardUri,
+		order: task.order,
+		createdAt: task.createdAt,
+		...(task.updatedAt ? { updatedAt: task.updatedAt } : {})
+	};
+}
+
+export async function syncPendingToPDS(agent: Agent, did: string): Promise<void> {
+	const pendingBoards = await db.boards
+		.where('syncStatus')
+		.equals('pending')
+		.filter((b) => b.did === did)
+		.toArray();
+
+	for (const board of pendingBoards) {
+		try {
+			await agent.com.atproto.repo.putRecord({
+				repo: did,
+				collection: BOARD_COLLECTION,
+				rkey: board.rkey,
+				record: boardToRecord(board),
+				validate: false
+			});
+			if (board.id) {
+				await db.boards.update(board.id, { syncStatus: 'synced' });
+			}
+		} catch (err) {
+			console.error('Failed to sync board to PDS:', err);
+			if (board.id) {
+				await db.boards.update(board.id, { syncStatus: 'error' });
+			}
+		}
+	}
+
+	const pendingTasks = await db.tasks
+		.where('syncStatus')
+		.equals('pending')
+		.filter((t) => t.did === did)
+		.toArray();
+
+	for (const task of pendingTasks) {
+		try {
+			await agent.com.atproto.repo.putRecord({
+				repo: did,
+				collection: TASK_COLLECTION,
+				rkey: task.rkey,
+				record: taskToRecord(task),
+				validate: false
+			});
+			if (task.id) {
+				await db.tasks.update(task.id, { syncStatus: 'synced' });
+			}
+		} catch (err) {
+			console.error('Failed to sync task to PDS:', err);
+			if (task.id) {
+				await db.tasks.update(task.id, { syncStatus: 'error' });
+			}
+		}
+	}
+}
+
+export async function pullFromPDS(agent: Agent, did: string): Promise<void> {
+	// Pull boards
+	let cursor: string | undefined;
+	do {
+		const res = await agent.com.atproto.repo.listRecords({
+			repo: did,
+			collection: BOARD_COLLECTION,
+			limit: 100,
+			cursor
+		});
+
+		for (const record of res.data.records) {
+			const rkey = record.uri.split('/').pop()!;
+			const value = record.value as Record<string, unknown>;
+
+			const existing = await db.boards.where('rkey').equals(rkey).first();
+			if (existing && existing.syncStatus === 'pending') {
+				// Local pending wins
+				continue;
+			}
+
+			const boardData: Omit<Board, 'id'> = {
+				rkey,
+				did,
+				name: (value.name as string) ?? '',
+				description: value.description as string | undefined,
+				columns: (value.columns as Board['columns']) ?? [],
+				createdAt: (value.createdAt as string) ?? new Date().toISOString(),
+				syncStatus: 'synced'
+			};
+
+			if (existing?.id) {
+				await db.boards.update(existing.id, boardData);
+			} else {
+				await db.boards.add(boardData as Board);
+			}
+		}
+
+		cursor = res.data.cursor;
+	} while (cursor);
+
+	// Pull tasks
+	cursor = undefined;
+	do {
+		const res = await agent.com.atproto.repo.listRecords({
+			repo: did,
+			collection: TASK_COLLECTION,
+			limit: 100,
+			cursor
+		});
+
+		for (const record of res.data.records) {
+			const rkey = record.uri.split('/').pop()!;
+			const value = record.value as Record<string, unknown>;
+
+			const existing = await db.tasks.where('rkey').equals(rkey).first();
+			if (existing && existing.syncStatus === 'pending') {
+				continue;
+			}
+
+			const taskData: Omit<Task, 'id'> = {
+				rkey,
+				did,
+				title: (value.title as string) ?? '',
+				description: value.description as string | undefined,
+				columnId: (value.columnId as string) ?? '',
+				boardUri: (value.boardUri as string) ?? '',
+				order: (value.order as number) ?? 0,
+				createdAt: (value.createdAt as string) ?? new Date().toISOString(),
+				updatedAt: value.updatedAt as string | undefined,
+				syncStatus: 'synced'
+			};
+
+			if (existing?.id) {
+				await db.tasks.update(existing.id, taskData);
+			} else {
+				await db.tasks.add(taskData as Task);
+			}
+		}
+
+		cursor = res.data.cursor;
+	} while (cursor);
+}
+
+export async function deleteBoardFromPDS(
+	agent: Agent,
+	did: string,
+	board: Board
+): Promise<void> {
+	// Delete tasks from PDS first
+	const boardUri = buildAtUri(did, BOARD_COLLECTION, board.rkey);
+	const tasks = await db.tasks.where('boardUri').equals(boardUri).toArray();
+
+	for (const task of tasks) {
+		if (task.syncStatus === 'synced') {
+			try {
+				await agent.com.atproto.repo.deleteRecord({
+					repo: did,
+					collection: TASK_COLLECTION,
+					rkey: task.rkey
+				});
+			} catch (err) {
+				console.error('Failed to delete task from PDS:', err);
+			}
+		}
+	}
+
+	// Delete board from PDS
+	if (board.syncStatus === 'synced') {
+		try {
+			await agent.com.atproto.repo.deleteRecord({
+				repo: did,
+				collection: BOARD_COLLECTION,
+				rkey: board.rkey
+			});
+		} catch (err) {
+			console.error('Failed to delete board from PDS:', err);
+		}
+	}
+}
+
+export async function deleteTaskFromPDS(
+	agent: Agent,
+	did: string,
+	task: Task
+): Promise<void> {
+	if (task.syncStatus === 'synced') {
+		try {
+			await agent.com.atproto.repo.deleteRecord({
+				repo: did,
+				collection: TASK_COLLECTION,
+				rkey: task.rkey
+			});
+		} catch (err) {
+			console.error('Failed to delete task from PDS:', err);
+		}
+	}
+}
+
+export function startBackgroundSync(agent: Agent, did: string): void {
+	stopBackgroundSync();
+	syncInterval = setInterval(() => {
+		syncPendingToPDS(agent, did).catch(console.error);
+	}, 30_000);
+	// Also run immediately
+	syncPendingToPDS(agent, did).catch(console.error);
+}
+
+export function stopBackgroundSync(): void {
+	if (syncInterval) {
+		clearInterval(syncInterval);
+		syncInterval = null;
+	}
+}

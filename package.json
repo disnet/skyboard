@@ -1,21 +1,26 @@
 {
   "name": "at-kanban",
   "version": "1.0.0",
-  "description": "",
-  "homepage": "https://github.com/disnet/at-kanban#readme",
   "private": true,
-  "bugs": {
-    "url": "https://github.com/disnet/at-kanban/issues"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/disnet/at-kanban.git"
-  },
-  "license": "ISC",
-  "author": "",
-  "type": "commonjs",
-  "main": "index.js",
+  "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "vite preview",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json"
+  },
+  "dependencies": {
+    "@atproto/api": "^0.13.20",
+    "@atproto/oauth-client-browser": "^0.3.17",
+    "dexie": "^4.0.11"
+  },
+  "devDependencies": {
+    "@sveltejs/adapter-static": "^3.0.8",
+    "@sveltejs/kit": "^2.15.2",
+    "@sveltejs/vite-plugin-svelte": "^5.0.3",
+    "svelte": "^5.16.6",
+    "svelte-check": "^4.1.4",
+    "typescript": "^5.7.3",
+    "vite": "^6.0.7"
   }
 }
