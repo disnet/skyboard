@@ -1,5 +1,7 @@
 import { Agent } from '@atproto/api';
-import { BrowserOAuthClient } from '@atproto/oauth-client-browser';
+import { BrowserOAuthClient, buildAtprotoLoopbackClientMetadata } from '@atproto/oauth-client-browser';
+
+const OAUTH_SCOPE = 'atproto repo:blue.kanban.board repo:blue.kanban.task';
 
 let agent = $state<Agent | null>(null);
 let did = $state<string | null>(null);
@@ -19,9 +21,15 @@ export async function initAuth(): Promise<void> {
 
 	try {
 		if (isLoopback()) {
-			// Let BrowserOAuthClient auto-detect loopback mode.
+			// Build loopback client metadata with proper scopes.
 			// Access the app via http://127.0.0.1:PORT for the redirect to work.
+			const host = window.location.hostname === 'localhost' ? '127.0.0.1' : window.location.hostname;
+			const port = window.location.port ? `:${window.location.port}` : '';
 			oauthClient = new BrowserOAuthClient({
+				clientMetadata: buildAtprotoLoopbackClientMetadata({
+					scope: OAUTH_SCOPE,
+					redirect_uris: [`http://${host}${port}/`]
+				}),
 				handleResolver: 'https://bsky.social'
 			});
 		} else {
@@ -31,7 +39,7 @@ export async function initAuth(): Promise<void> {
 					client_name: 'AT Kanban',
 					client_uri: window.location.origin,
 					redirect_uris: [`${window.location.origin}/`],
-					scope: 'atproto repo:blue.kanban.board repo:blue.kanban.task',
+					scope: OAUTH_SCOPE,
 					grant_types: ['authorization_code', 'refresh_token'],
 					response_types: ['code'],
 					token_endpoint_auth_method: 'none',
