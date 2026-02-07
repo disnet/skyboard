@@ -22,4 +22,12 @@ db.version(2).stores({
 	knownParticipants: '++id, did, boardUri, [did+boardUri]'
 });
 
+db.version(3).stores({
+	boards: '++id, rkey, did, syncStatus',
+	tasks: '++id, rkey, did, columnId, boardUri, order, syncStatus, [did+rkey]',
+	ops: '++id, rkey, did, targetTaskUri, boardUri, createdAt, syncStatus, [did+rkey]',
+	trusts: '++id, rkey, did, trustedDid, boardUri, syncStatus, [did+boardUri+trustedDid], [did+rkey]',
+	knownParticipants: '++id, did, boardUri, [did+boardUri]'
+});
+
 export { db };

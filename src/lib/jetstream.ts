@@ -1,7 +1,10 @@
 import { db } from './db.js';
-import { TASK_COLLECTION, OP_COLLECTION } from './tid.js';
+import { TASK_COLLECTION, OP_COLLECTION, TRUST_COLLECTION } from './tid.js';
 
 const JETSTREAM_URL = 'wss://jetstream2.us-east.bsky.network/subscribe';
+
+// 48 hours in microseconds — well within Jetstream's ~72h retention window
+const CURSOR_MAX_AGE_US = 48 * 60 * 60 * 1_000_000;
 
 export interface JetstreamCommitEvent {
 	did: string;
@@ -22,6 +25,7 @@ export interface JetstreamOptions {
 	onEvent: (event: JetstreamCommitEvent) => void;
 	onError?: (error: Event) => void;
 	onConnect?: () => void;
+	onReconnect?: () => void;
 }
 
 const CURSOR_KEY = 'jetstream-cursor';
@@ -35,6 +39,7 @@ export class JetstreamClient {
 	private shouldReconnect = true;
 	private lastCursor: number | null = null;
 	private cursorSaveTimer: ReturnType<typeof setInterval> | null = null;
+	private hasConnectedBefore = false;
 
 	constructor(options: JetstreamOptions) {
 		this.options = options;
@@ -57,6 +62,10 @@ export class JetstreamClient {
 
 		this.ws.onopen = () => {
 			this.reconnectDelay = 1000;
+			if (this.hasConnectedBefore) {
+				this.options.onReconnect?.();
+			}
+			this.hasConnectedBefore = true;
 			this.options.onConnect?.();
 			this.startCursorSaving();
 		};
@@ -125,10 +134,22 @@ export class JetstreamClient {
 	}
 }
 
+export function isCursorStale(cursor: number): boolean {
+	const nowUs = Date.now() * 1000;
+	return nowUs - cursor > CURSOR_MAX_AGE_US;
+}
+
 export async function loadJetstreamCursor(): Promise<number | undefined> {
 	try {
 		const value = localStorage.getItem(CURSOR_KEY);
-		return value ? Number(value) : undefined;
+		if (!value) return undefined;
+		const cursor = Number(value);
+		// Discard cursors older than the retention window
+		if (isCursorStale(cursor)) {
+			localStorage.removeItem(CURSOR_KEY);
+			return undefined;
+		}
+		return cursor;
 	} catch {
 		return undefined;
 	}
@@ -143,29 +164,40 @@ async function saveJetstreamCursor(cursor: number): Promise<void> {
 }
 
 /**
- * Process a Jetstream event and upsert it into the local DB if it's relevant
- * to any board we're tracking. Returns the DID of the event author if it was
- * relevant (for known participant tracking).
+ * Process a Jetstream event and upsert it into the local DB.
+ * Stores all task/op/trust events regardless of board — the UI queries
+ * already filter by boardUri, and skipping events here would cause
+ * the cursor to advance past data for boards not currently viewed.
+ *
+ * Returns the DID of the event author and the boardUri if it was relevant
+ * (for known participant tracking).
  */
 export async function processJetstreamEvent(
-	event: JetstreamCommitEvent,
-	watchedBoardUris: Set<string>
-): Promise<string | null> {
+	event: JetstreamCommitEvent
+): Promise<{ did: string; boardUri: string } | null> {
 	const { did, commit } = event;
 
 	if (commit.operation === 'delete') {
-		// Handle deletions
 		if (commit.collection === TASK_COLLECTION) {
 			const existing = await db.tasks.where('[did+rkey]').equals([did, commit.rkey]).first();
 			if (existing?.id) {
+				const boardUri = existing.boardUri;
 				await db.tasks.delete(existing.id);
-				return did;
+				return { did, boardUri };
 			}
 		} else if (commit.collection === OP_COLLECTION) {
 			const existing = await db.ops.where('[did+rkey]').equals([did, commit.rkey]).first();
 			if (existing?.id) {
+				const boardUri = existing.boardUri;
 				await db.ops.delete(existing.id);
-				return did;
+				return { did, boardUri };
+			}
+		} else if (commit.collection === TRUST_COLLECTION) {
+			const existing = await db.trusts.where('[did+rkey]').equals([did, commit.rkey]).first();
+			if (existing?.id) {
+				const boardUri = existing.boardUri;
+				await db.trusts.delete(existing.id);
+				return { did, boardUri };
 			}
 		}
 		return null;
@@ -176,8 +208,7 @@ export async function processJetstreamEvent(
 	const record = commit.record;
 	const boardUri = record.boardUri as string | undefined;
 
-	// Only process records that reference boards we're watching
-	if (!boardUri || !watchedBoardUris.has(boardUri)) return null;
+	if (!boardUri) return null;
 
 	if (commit.collection === TASK_COLLECTION) {
 		const existing = await db.tasks.where('[did+rkey]').equals([did, commit.rkey]).first();
@@ -200,7 +231,7 @@ export async function processJetstreamEvent(
 		} else {
 			await db.tasks.add(taskData);
 		}
-		return did;
+		return { did, boardUri };
 	}
 
 	if (commit.collection === OP_COLLECTION) {
@@ -221,7 +252,30 @@ export async function processJetstreamEvent(
 		} else {
 			await db.ops.add(opData);
 		}
-		return did;
+		return { did, boardUri };
+	}
+
+	if (commit.collection === TRUST_COLLECTION) {
+		const existing = await db.trusts
+			.where('[did+boardUri+trustedDid]')
+			.equals([did, boardUri, (record.trustedDid as string) ?? ''])
+			.first();
+
+		const trustData = {
+			rkey: commit.rkey,
+			did,
+			trustedDid: (record.trustedDid as string) ?? '',
+			boardUri,
+			createdAt: (record.createdAt as string) ?? new Date().toISOString(),
+			syncStatus: 'synced' as const
+		};
+
+		if (existing?.id) {
+			await db.trusts.update(existing.id, trustData);
+		} else {
+			await db.trusts.add(trustData);
+		}
+		return { did, boardUri };
 	}
 
 	return null;
