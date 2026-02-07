@@ -1,129 +1,72 @@
 <script lang="ts">
-	import { db } from '$lib/db.js';
 	import type { MaterializedTask } from '$lib/types.js';
-	import { shouldCreateOp, createOp } from '$lib/ops.js';
 	import AuthorBadge from './AuthorBadge.svelte';
 
 	let {
 		task,
-		currentUserDid
+		currentUserDid,
+		onedit
 	}: {
 		task: MaterializedTask;
 		currentUserDid: string;
+		onedit: (task: MaterializedTask) => void;
 	} = $props();
-
-	let editing = $state(false);
-	let editTitle = $state('');
-	let editDescription = $state('');
 
 	const isOwned = $derived(task.ownerDid === currentUserDid);
 
-	function startEdit() {
-		editTitle = task.effectiveTitle;
-		editDescription = task.effectiveDescription ?? '';
-		editing = true;
-	}
-
-	async function saveEdit() {
-		const title = editTitle.trim();
-		if (!title) return;
-
-		const description = editDescription.trim() || undefined;
-
-		if (isOwned && task.sourceTask.id) {
-			// Direct edit — we own this task
-			await db.tasks.update(task.sourceTask.id, {
-				title,
-				description,
-				updatedAt: new Date().toISOString(),
-				syncStatus: 'pending'
-			});
-		} else {
-			// Create an op — we don't own this task
-			const fields: Record<string, unknown> = {};
-			if (title !== task.effectiveTitle) fields.title = title;
-			if (description !== task.effectiveDescription) fields.description = description;
-			if (Object.keys(fields).length > 0) {
-				await createOp(currentUserDid, task.sourceTask, task.boardUri, fields);
-			}
-		}
-		editing = false;
-	}
-
-	async function deleteTask() {
-		if (!isOwned || !task.sourceTask.id) return;
-		await db.tasks.delete(task.sourceTask.id);
-	}
-
-	function handleKeydown(e: KeyboardEvent) {
-		if (e.key === 'Escape') editing = false;
-		if (e.key === 'Enter' && !e.shiftKey) {
-			e.preventDefault();
-			saveEdit();
-		}
-	}
+	let wasDragged = false;
 
 	function handleDragStart(e: DragEvent) {
 		if (!e.dataTransfer || !task.sourceTask.id) return;
-		// Encode both the task ID and the owner DID so the column can decide op vs direct
+		wasDragged = true;
 		e.dataTransfer.setData(
 			'application/x-kanban-task',
 			JSON.stringify({ id: task.sourceTask.id, did: task.ownerDid })
 		);
 		e.dataTransfer.effectAllowed = 'move';
 	}
+
+	function handleDragEnd() {
+		setTimeout(() => {
+			wasDragged = false;
+		}, 0);
+	}
+
+	function handleClick() {
+		if (wasDragged) {
+			wasDragged = false;
+			return;
+		}
+		onedit(task);
+	}
 </script>
 
-{#if editing}
-	<!-- svelte-ignore a11y_no_static_element_interactions -->
-	<div class="task-card editing" onkeydown={handleKeydown}>
-		<input
-			class="edit-title"
-			type="text"
-			bind:value={editTitle}
-			placeholder="Task title"
-		/>
-		<textarea
-			class="edit-desc"
-			bind:value={editDescription}
-			placeholder="Description (optional)"
-			rows="2"
-		></textarea>
-		<div class="edit-actions">
-			<button class="save-btn" onclick={saveEdit}>Save</button>
-			<button class="cancel-btn" onclick={() => (editing = false)}>Cancel</button>
-			{#if isOwned}
-				<button class="delete-btn" onclick={deleteTask}>Delete</button>
-			{/if}
-		</div>
-	</div>
-{:else}
-	<!-- svelte-ignore a11y_no_static_element_interactions -->
-	<div
-		class="task-card"
-		draggable="true"
-		ondragstart={handleDragStart}
-		ondblclick={startEdit}
-	>
-		<div class="task-title">{task.effectiveTitle}</div>
-		{#if task.effectiveDescription}
-			<div class="task-desc">{task.effectiveDescription}</div>
-		{/if}
-		<div class="task-meta">
-			<AuthorBadge did={task.ownerDid} isCurrentUser={isOwned} />
-			{#if task.pendingOps.length > 0}
-				<span class="pending-badge" title="Has pending proposals">
-					{task.pendingOps.length}
-				</span>
-			{/if}
-		</div>
-		{#if task.sourceTask.syncStatus === 'pending'}
-			<span class="sync-dot pending" title="Pending sync"></span>
-		{:else if task.sourceTask.syncStatus === 'error'}
-			<span class="sync-dot error" title="Sync error"></span>
+<!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
+<div
+	class="task-card"
+	draggable="true"
+	ondragstart={handleDragStart}
+	ondragend={handleDragEnd}
+	onclick={handleClick}
+>
+	<div class="task-title">{task.effectiveTitle}</div>
+	{#if task.effectiveDescription}
+		<div class="task-desc">{task.effectiveDescription}</div>
+	{/if}
+	<div class="task-meta">
+		<AuthorBadge did={task.ownerDid} isCurrentUser={isOwned} />
+		{#if task.pendingOps.length > 0}
+			<span class="pending-badge" title="Has pending proposals">
+				{task.pendingOps.length}
+			</span>
 		{/if}
 	</div>
-{/if}
+	{#if task.sourceTask.syncStatus === 'pending'}
+		<span class="sync-dot pending" title="Pending sync"></span>
+	{:else if task.sourceTask.syncStatus === 'error'}
+		<span class="sync-dot error" title="Sync error"></span>
+	{/if}
+</div>
 
 <style>
 	.task-card {
@@ -145,10 +88,6 @@
 	.task-card:hover {
 		box-shadow: var(--shadow-sm);
 		border-color: var(--color-border);
-	}
-
-	.task-card.editing {
-		cursor: default;
 	}
 
 	.task-title {
@@ -199,70 +138,5 @@
 
 	.sync-dot.error {
 		background: var(--color-error);
-	}
-
-	.edit-title {
-		width: 100%;
-		padding: 0.375rem 0.5rem;
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-sm);
-		font-size: 0.8125rem;
-		font-weight: 500;
-		background: var(--color-bg);
-		color: var(--color-text);
-		margin-bottom: 0.375rem;
-	}
-
-	.edit-title:focus {
-		outline: none;
-		border-color: var(--color-primary);
-	}
-
-	.edit-desc {
-		width: 100%;
-		padding: 0.375rem 0.5rem;
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-sm);
-		font-size: 0.75rem;
-		background: var(--color-bg);
-		color: var(--color-text);
-		resize: vertical;
-		font-family: inherit;
-		margin-bottom: 0.375rem;
-	}
-
-	.edit-desc:focus {
-		outline: none;
-		border-color: var(--color-primary);
-	}
-
-	.edit-actions {
-		display: flex;
-		gap: 0.375rem;
-	}
-
-	.edit-actions button {
-		padding: 0.25rem 0.5rem;
-		border: none;
-		border-radius: var(--radius-sm);
-		font-size: 0.75rem;
-		cursor: pointer;
-	}
-
-	.save-btn {
-		background: var(--color-primary);
-		color: white;
-	}
-
-	.cancel-btn {
-		background: var(--color-bg);
-		color: var(--color-text-secondary);
-		border: 1px solid var(--color-border) !important;
-	}
-
-	.delete-btn {
-		background: var(--color-error-bg);
-		color: var(--color-error);
-		margin-left: auto;
 	}
 </style>

@@ -17,6 +17,7 @@
 	import Column from '$lib/components/Column.svelte';
 	import BoardSettingsModal from '$lib/components/BoardSettingsModal.svelte';
 	import ProposalPanel from '$lib/components/ProposalPanel.svelte';
+	import TaskEditModal from '$lib/components/TaskEditModal.svelte';
 
 	const auth = getAuth();
 
@@ -98,6 +99,11 @@
 
 	let showSettings = $state(false);
 	let showProposals = $state(false);
+	let editingTask = $state<MaterializedTask | null>(null);
+
+	function openTaskEditor(task: MaterializedTask) {
+		editingTask = task;
+	}
 
 	// --- Jetstream lifecycle ---
 	let jetstreamClient: JetstreamClient | null = null;
@@ -223,6 +229,7 @@
 					tasks={tasksByColumn.get(column.id) ?? []}
 					{boardUri}
 					did={auth.did ?? ''}
+					onedit={openTaskEditor}
 				/>
 			{/each}
 		</div>
@@ -238,6 +245,14 @@
 			{untrustedTasks}
 			{boardUri}
 			onclose={() => (showProposals = false)}
+		/>
+	{/if}
+
+	{#if editingTask}
+		<TaskEditModal
+			task={editingTask}
+			currentUserDid={auth.did ?? ''}
+			onclose={() => (editingTask = null)}
 		/>
 	{/if}
 {:else}

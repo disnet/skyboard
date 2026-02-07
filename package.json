@@ -12,6 +12,9 @@
   "dependencies": {
     "@atproto/api": "^0.13.20",
     "@atproto/oauth-client-browser": "^0.3.17",
+    "@codemirror/lang-markdown": "^6.5.0",
+    "@codemirror/language-data": "^6.5.2",
+    "codemirror": "^6.0.2",
     "dexie": "^4.0.11"
   },
   "devDependencies": {

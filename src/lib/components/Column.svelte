@@ -9,12 +9,14 @@
 		column,
 		tasks,
 		boardUri,
-		did
+		did,
+		onedit
 	}: {
 		column: Column;
 		tasks: MaterializedTask[];
 		boardUri: string;
 		did: string;
+		onedit: (task: MaterializedTask) => void;
 	} = $props();
 
 	let newTaskTitle = $state('');
@@ -117,7 +119,7 @@
 
 	<div class="task-list">
 		{#each sortedTasks as task (task.rkey + task.did)}
-			<TaskCard {task} currentUserDid={did} />
+			<TaskCard {task} currentUserDid={did} {onedit} />
 		{/each}
 	</div>
 
