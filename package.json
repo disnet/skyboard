@@ -15,7 +15,8 @@
     "@codemirror/lang-markdown": "^6.5.0",
     "@codemirror/language-data": "^6.5.2",
     "codemirror": "^6.0.2",
-    "dexie": "^4.0.11"
+    "dexie": "^4.0.11",
+    "marked": "^17.0.1"
   },
   "devDependencies": {
     "@sveltejs/adapter-static": "^3.0.8",

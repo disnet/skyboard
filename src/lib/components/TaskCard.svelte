@@ -1,6 +1,15 @@
 <script lang="ts">
 	import type { MaterializedTask } from '$lib/types.js';
+	import { Marked } from 'marked';
 	import AuthorBadge from './AuthorBadge.svelte';
+
+	const marked = new Marked({
+		renderer: {
+			html({ text }: { text: string }) {
+				return text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+			}
+		}
+	});
 
 	let {
 		task,
@@ -13,6 +22,10 @@
 		pending?: boolean;
 		onedit: (task: MaterializedTask) => void;
 	} = $props();
+
+	const renderedDescription = $derived(
+		task.effectiveDescription ? (marked.parse(task.effectiveDescription) as string) : ''
+	);
 
 	const isOwned = $derived(task.ownerDid === currentUserDid);
 
@@ -60,7 +73,7 @@
 	{/if}
 	<div class="task-title">{task.effectiveTitle}</div>
 	{#if task.effectiveDescription}
-		<div class="task-desc">{task.effectiveDescription}</div>
+		<div class="task-desc">{@html renderedDescription}</div>
 	{/if}
 	<div class="task-meta">
 		<AuthorBadge did={task.ownerDid} isCurrentUser={isOwned} />
@@ -137,12 +150,74 @@
 	.task-desc {
 		margin-top: 0.25rem;
 		font-size: 0.75rem;
+		line-height: 1.4;
 		color: var(--color-text-secondary);
-		display: -webkit-box;
-		-webkit-line-clamp: 2;
-		-webkit-box-orient: vertical;
+		max-height: calc(7 * 1.4em);
 		overflow: hidden;
 		word-break: break-word;
+		-webkit-mask-image: linear-gradient(to bottom, black 70%, transparent 100%);
+		mask-image: linear-gradient(to bottom, black 70%, transparent 100%);
+	}
+
+	.task-desc :global(p),
+	.task-desc :global(h1),
+	.task-desc :global(h2),
+	.task-desc :global(h3),
+	.task-desc :global(h4),
+	.task-desc :global(h5),
+	.task-desc :global(h6) {
+		margin: 0 0 0.25em;
+	}
+
+	.task-desc :global(h1),
+	.task-desc :global(h2),
+	.task-desc :global(h3),
+	.task-desc :global(h4),
+	.task-desc :global(h5),
+	.task-desc :global(h6) {
+		font-size: 0.8125rem;
+		font-weight: 600;
+	}
+
+	.task-desc :global(ul),
+	.task-desc :global(ol) {
+		margin: 0 0 0.25em;
+		padding-left: 1.25em;
+	}
+
+	.task-desc :global(li) {
+		margin: 0;
+	}
+
+	.task-desc :global(code) {
+		font-size: 0.6875rem;
+		background: var(--color-border-light);
+		padding: 0.1em 0.3em;
+		border-radius: var(--radius-sm);
+	}
+
+	.task-desc :global(pre) {
+		margin: 0.25em 0;
+		padding: 0.375em 0.5em;
+		background: var(--color-border-light);
+		border-radius: var(--radius-sm);
+		overflow: hidden;
+	}
+
+	.task-desc :global(pre code) {
+		background: none;
+		padding: 0;
+	}
+
+	.task-desc :global(blockquote) {
+		margin: 0.25em 0;
+		padding-left: 0.5em;
+		border-left: 2px solid var(--color-border);
+		color: var(--color-text-secondary);
+	}
+
+	.task-desc :global(:last-child) {
+		margin-bottom: 0;
 	}
 
 	.task-meta {
