@@ -2,12 +2,18 @@
 	import { onMount } from 'svelte';
 	import { initAuth, getAuth, logout } from '$lib/auth.svelte.js';
 	import { pullFromPDS, startBackgroundSync, stopBackgroundSync } from '$lib/sync.js';
+	import { getProfile, ensureProfile } from '$lib/profile-cache.svelte.js';
 	import LoginForm from '$lib/components/LoginForm.svelte';
 	import SyncStatus from '$lib/components/SyncStatus.svelte';
 	import '../app.css';
 
 	const auth = getAuth();
 	let { children } = $props();
+	const currentProfile = $derived(auth.did ? getProfile(auth.did) : null);
+
+	$effect(() => {
+		if (auth.did) ensureProfile(auth.did);
+	});
 
 	onMount(() => {
 		initAuth();
@@ -45,7 +51,14 @@
 			</div>
 			<div class="header-right">
 				<SyncStatus />
-				<span class="user-did" title={auth.did ?? ''}>{auth.did}</span>
+				<span class="user-did" title={auth.did ?? ''}>
+					{#if currentProfile?.data?.avatar}
+						<img class="user-avatar" src={currentProfile.data.avatar} alt="" />
+					{/if}
+					{currentProfile?.data
+						? (currentProfile.data.displayName || `@${currentProfile.data.handle}`)
+						: auth.did}
+				</span>
 				<button class="sign-out-btn" onclick={handleLogout}>Sign Out</button>
 			</div>
 		</header>
@@ -121,12 +134,23 @@
 	}
 
 	.user-did {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
 		font-size: 0.75rem;
 		color: var(--color-text-secondary);
 		max-width: 200px;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
+	}
+
+	.user-avatar {
+		width: 24px;
+		height: 24px;
+		border-radius: 50%;
+		object-fit: cover;
+		flex-shrink: 0;
 	}
 
 	.sign-out-btn {
