@@ -97,6 +97,7 @@ export async function fetchRemoteTasks(
 			description: value.description as string | undefined,
 			columnId: (value.columnId as string) ?? '',
 			boardUri,
+			position: value.position as string | undefined,
 			order: (value.order as number) ?? 0,
 			createdAt: (value.createdAt as string) ?? new Date().toISOString(),
 			updatedAt: value.updatedAt as string | undefined,

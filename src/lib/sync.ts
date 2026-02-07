@@ -25,7 +25,8 @@ function taskToRecord(task: Task): TaskRecord {
 		...(task.description ? { description: task.description } : {}),
 		columnId: task.columnId,
 		boardUri: task.boardUri,
-		order: task.order,
+		...(task.position ? { position: task.position } : {}),
+		order: task.order ?? 0,
 		createdAt: task.createdAt,
 		...(task.updatedAt ? { updatedAt: task.updatedAt } : {})
 	};
@@ -207,6 +208,7 @@ export async function pullFromPDS(agent: Agent, did: string): Promise<void> {
 				description: value.description as string | undefined,
 				columnId: (value.columnId as string) ?? '',
 				boardUri: (value.boardUri as string) ?? '',
+				position: value.position as string | undefined,
 				order: (value.order as number) ?? 0,
 				createdAt: (value.createdAt as string) ?? new Date().toISOString(),
 				updatedAt: value.updatedAt as string | undefined,

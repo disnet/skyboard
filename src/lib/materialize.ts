@@ -1,8 +1,23 @@
 import { buildAtUri, TASK_COLLECTION } from './tid.js';
+import { generateKeyBetween } from 'fractional-indexing';
 import type { Task, Op, OpFields, MaterializedTask, BoardPermissions } from './types.js';
 import { hasPermission, fieldToOperation, getBoardPermissions } from './permissions.js';
 
-const MUTABLE_FIELDS: (keyof OpFields)[] = ['title', 'description', 'columnId', 'order'];
+const MUTABLE_FIELDS: (keyof OpFields)[] = ['title', 'description', 'columnId', 'position'];
+
+/**
+ * Convert a legacy integer order to a fractional index position string.
+ * Generates a position that maintains relative ordering.
+ */
+function orderToPosition(order: number | undefined): string {
+	if (order === undefined || order === null) return generateKeyBetween(null, null);
+	// Generate a chain of positions: null -> pos0 -> pos1 -> ... -> posN
+	let pos: string | null = null;
+	for (let i = 0; i <= order; i++) {
+		pos = generateKeyBetween(pos, null);
+	}
+	return pos!;
+}
 
 interface FieldState {
 	value: unknown;
@@ -80,8 +95,13 @@ export function materializeTasks(
 		// Start with base task values
 		const fieldStates: Record<string, FieldState> = {};
 		for (const field of MUTABLE_FIELDS) {
+			let value: unknown = task[field as keyof Task];
+			// Backward compat: derive position from legacy order if not set
+			if (field === 'position' && !value) {
+				value = orderToPosition(task.order);
+			}
 			fieldStates[field] = {
-				value: task[field as keyof Task],
+				value,
 				timestamp: task.updatedAt || task.createdAt,
 				author: task.did
 			};
@@ -125,6 +145,7 @@ export function materializeTasks(
 			description: task.description,
 			columnId: task.columnId,
 			boardUri: task.boardUri,
+			position: task.position,
 			order: task.order,
 			createdAt: task.createdAt,
 			updatedAt: task.updatedAt,
@@ -134,7 +155,7 @@ export function materializeTasks(
 			effectiveTitle: fieldStates.title.value as string,
 			effectiveDescription: fieldStates.description.value as string | undefined,
 			effectiveColumnId: fieldStates.columnId.value as string,
-			effectiveOrder: fieldStates.order.value as number,
+			effectivePosition: fieldStates.position.value as string,
 			ownerDid: task.did,
 			lastModifiedBy,
 			lastModifiedAt

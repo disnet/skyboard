@@ -8,7 +8,7 @@
       "key": "tid",
       "record": {
         "type": "object",
-        "required": ["title", "columnId", "boardUri", "order", "createdAt"],
+        "required": ["title", "columnId", "boardUri", "createdAt"],
         "properties": {
           "title": {
             "type": "string",
@@ -29,10 +29,15 @@
             "format": "at-uri",
             "description": "AT URI of the parent board"
           },
+          "position": {
+            "type": "string",
+            "maxLength": 256,
+            "description": "Fractional index position for sort ordering within a column"
+          },
           "order": {
             "type": "integer",
             "minimum": 0,
-            "description": "Sort order within the column"
+            "description": "Deprecated. Sort order within the column"
           },
           "createdAt": {
             "type": "string",

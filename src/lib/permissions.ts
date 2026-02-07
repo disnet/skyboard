@@ -104,6 +104,7 @@ export function fieldToOperation(
 			return 'edit_description';
 		case 'columnId':
 			return 'move_task';
+		case 'position':
 		case 'order':
 			return hasColumnIdChange ? 'move_task' : 'reorder';
 		default:

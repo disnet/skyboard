@@ -48,6 +48,10 @@
         "columnId": {
           "type": "string"
         },
+        "position": {
+          "type": "string",
+          "maxLength": 256
+        },
         "order": {
           "type": "integer",
           "minimum": 0
