@@ -17,6 +17,7 @@
 	import Column from '$lib/components/Column.svelte';
 	import BoardSettingsModal from '$lib/components/BoardSettingsModal.svelte';
 	import ProposalPanel from '$lib/components/ProposalPanel.svelte';
+	import OpsPanel from '$lib/components/OpsPanel.svelte';
 	import TaskEditModal from '$lib/components/TaskEditModal.svelte';
 
 	const auth = getAuth();
@@ -99,6 +100,7 @@
 
 	let showSettings = $state(false);
 	let showProposals = $state(false);
+	let showOpsPanel = $state(false);
 	let editingTask = $state<MaterializedTask | null>(null);
 
 	function openTaskEditor(task: MaterializedTask) {
@@ -202,6 +204,9 @@
 				{/if}
 			</div>
 			<div class="board-header-right">
+				<button class="activity-btn" onclick={() => (showOpsPanel = true)}>
+					Activity
+				</button>
 				{#if pendingProposals.length > 0 || untrustedTasks.length > 0}
 					<button class="proposals-btn" onclick={() => (showProposals = true)}>
 						Proposals
@@ -245,6 +250,14 @@
 			{untrustedTasks}
 			{boardUri}
 			onclose={() => (showProposals = false)}
+		/>
+	{/if}
+
+	{#if showOpsPanel}
+		<OpsPanel
+			ops={allOps.current ?? []}
+			tasks={allTasks.current ?? []}
+			onclose={() => (showOpsPanel = false)}
 		/>
 	{/if}
 
@@ -338,6 +351,27 @@
 		background: var(--color-error-bg);
 		color: var(--color-error);
 		border-color: var(--color-error);
+	}
+
+	.activity-btn {
+		padding: 0.375rem 0.75rem;
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-md);
+		font-size: 0.8125rem;
+		cursor: pointer;
+		background: var(--color-surface);
+		color: var(--color-text-secondary);
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		transition:
+			background 0.15s,
+			color 0.15s;
+	}
+
+	.activity-btn:hover {
+		background: var(--color-bg);
+		color: var(--color-text);
 	}
 
 	.proposals-btn {
