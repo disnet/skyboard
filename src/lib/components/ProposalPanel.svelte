@@ -2,6 +2,7 @@
 	import type { Op, Task } from '$lib/types.js';
 	import { grantTrust } from '$lib/trust.js';
 	import { getAuth } from '$lib/auth.svelte.js';
+	import AuthorBadge from './AuthorBadge.svelte';
 
 	let {
 		proposals,
@@ -49,10 +50,6 @@
 		if (op.fields.order !== undefined) parts.push('order');
 		return parts.length > 0 ? `Change ${parts.join(', ')}` : 'Unknown change';
 	}
-
-	function shortDid(did: string): string {
-		return did.length > 24 ? did.slice(0, 14) + '...' + did.slice(-6) : did;
-	}
 </script>
 
 <div class="panel-backdrop" onclick={onclose} role="presentation">
@@ -69,7 +66,7 @@
 			{#each [...groupedByAuthor.entries()] as [authorDid, { ops, tasks }]}
 				<div class="author-section">
 					<div class="author-header">
-						<span class="author-did" title={authorDid}>{shortDid(authorDid)}</span>
+						<AuthorBadge did={authorDid} />
 						<button class="trust-btn" onclick={() => trustUser(authorDid)}>
 							Trust Editor
 						</button>
@@ -161,12 +158,6 @@
 		justify-content: space-between;
 		gap: 0.5rem;
 		margin-bottom: 0.5rem;
-	}
-
-	.author-did {
-		font-family: monospace;
-		font-size: 0.6875rem;
-		color: var(--color-text-secondary);
 	}
 
 	.subsection-label {

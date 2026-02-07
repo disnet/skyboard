@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { getProfile, ensureProfile, shortDid } from '$lib/profile-cache.svelte.js';
+
 	let {
 		did,
 		isCurrentUser = false
@@ -7,18 +9,33 @@
 		isCurrentUser?: boolean;
 	} = $props();
 
-	const shortDid = $derived(
-		did.length > 24 ? did.slice(0, 14) + '...' + did.slice(-6) : did
+	$effect(() => {
+		ensureProfile(did);
+	});
+
+	const profile = $derived(getProfile(did));
+	const displayText = $derived(
+		profile.data
+			? (profile.data.displayName || `@${profile.data.handle}`)
+			: shortDid(did)
 	);
+	const avatarUrl = $derived(profile.data?.avatar ?? null);
 </script>
 
 <span class="author-badge" class:own={isCurrentUser} title={did}>
-	{shortDid}
+	{#if avatarUrl}
+		<img class="avatar" src={avatarUrl} alt="" />
+	{/if}
+	<span class="author-name">
+		{displayText}
+	</span>
 </span>
 
 <style>
 	.author-badge {
-		display: inline-block;
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
 		font-size: 0.625rem;
 		color: var(--color-text-secondary);
 		background: var(--color-bg);
@@ -26,13 +43,24 @@
 		border-radius: var(--radius-sm);
 		max-width: 100%;
 		overflow: hidden;
-		text-overflow: ellipsis;
 		white-space: nowrap;
-		font-family: monospace;
 	}
 
 	.author-badge.own {
 		color: var(--color-primary);
 		background: var(--color-primary-alpha, rgba(0, 102, 204, 0.08));
+	}
+
+	.avatar {
+		width: 16px;
+		height: 16px;
+		border-radius: 50%;
+		object-fit: cover;
+		flex-shrink: 0;
+	}
+
+	.author-name {
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
 </style>
