@@ -5,13 +5,17 @@
 	const pendingCount = useLiveQuery<number>(async () => {
 		const boards = await db.boards.where('syncStatus').equals('pending').count();
 		const tasks = await db.tasks.where('syncStatus').equals('pending').count();
-		return boards + tasks;
+		const ops = await db.ops.where('syncStatus').equals('pending').count();
+		const trusts = await db.trusts.where('syncStatus').equals('pending').count();
+		return boards + tasks + ops + trusts;
 	});
 
 	const errorCount = useLiveQuery<number>(async () => {
 		const boards = await db.boards.where('syncStatus').equals('error').count();
 		const tasks = await db.tasks.where('syncStatus').equals('error').count();
-		return boards + tasks;
+		const ops = await db.ops.where('syncStatus').equals('error').count();
+		const trusts = await db.trusts.where('syncStatus').equals('error').count();
+		return boards + tasks + ops + trusts;
 	});
 </script>
 

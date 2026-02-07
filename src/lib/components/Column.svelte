@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { db } from '$lib/db.js';
 	import { generateTID } from '$lib/tid.js';
-	import type { Column, Task } from '$lib/types.js';
+	import type { Column, MaterializedTask } from '$lib/types.js';
+	import { createOp } from '$lib/ops.js';
 	import TaskCard from './TaskCard.svelte';
 
 	let {
@@ -11,7 +12,7 @@
 		did
 	}: {
 		column: Column;
-		tasks: Task[];
+		tasks: MaterializedTask[];
 		boardUri: string;
 		did: string;
 	} = $props();
@@ -21,7 +22,7 @@
 	let dragOver = $state(false);
 
 	const sortedTasks = $derived(
-		[...tasks].sort((a, b) => a.order - b.order)
+		[...tasks].sort((a, b) => a.effectiveOrder - b.effectiveOrder)
 	);
 
 	async function addTask(e: Event) {
@@ -31,7 +32,7 @@
 
 		adding = true;
 		try {
-			const maxOrder = tasks.reduce((max, t) => Math.max(max, t.order), -1);
+			const maxOrder = tasks.reduce((max, t) => Math.max(max, t.effectiveOrder), -1);
 			await db.tasks.add({
 				rkey: generateTID(),
 				did,
@@ -67,16 +68,37 @@
 		dragOver = false;
 
 		if (!e.dataTransfer) return;
-		const taskId = Number(e.dataTransfer.getData('text/plain'));
-		if (!taskId) return;
+		const raw = e.dataTransfer.getData('application/x-kanban-task');
+		if (!raw) return;
 
-		const maxOrder = tasks.reduce((max, t) => Math.max(max, t.order), -1);
-		await db.tasks.update(taskId, {
-			columnId: column.id,
-			order: maxOrder + 1,
-			updatedAt: new Date().toISOString(),
-			syncStatus: 'pending'
-		});
+		let data: { id: number; did: string };
+		try {
+			data = JSON.parse(raw);
+		} catch {
+			return;
+		}
+
+		const maxOrder = tasks.reduce((max, t) => Math.max(max, t.effectiveOrder), -1);
+		const newOrder = maxOrder + 1;
+
+		if (data.did === did) {
+			// We own this task — direct update
+			await db.tasks.update(data.id, {
+				columnId: column.id,
+				order: newOrder,
+				updatedAt: new Date().toISOString(),
+				syncStatus: 'pending'
+			});
+		} else {
+			// Not our task — create an op
+			const task = await db.tasks.get(data.id);
+			if (task) {
+				await createOp(did, task, boardUri, {
+					columnId: column.id,
+					order: newOrder
+				});
+			}
+		}
 	}
 </script>
 
@@ -94,8 +116,8 @@
 	</div>
 
 	<div class="task-list">
-		{#each sortedTasks as task (task.id)}
-			<TaskCard {task} />
+		{#each sortedTasks as task (task.rkey + task.did)}
+			<TaskCard {task} currentUserDid={did} />
 		{/each}
 	</div>
 

@@ -1,0 +1,32 @@
+{
+  "lexicon": 1,
+  "id": "blue.kanban.trust",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "A trust grant for a user on a specific board",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": ["trustedDid", "boardUri", "createdAt"],
+        "properties": {
+          "trustedDid": {
+            "type": "string",
+            "format": "did",
+            "description": "The DID of the user being trusted"
+          },
+          "boardUri": {
+            "type": "string",
+            "format": "at-uri",
+            "description": "AT URI of the board this trust applies to"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "When the trust was granted"
+          }
+        }
+      }
+    }
+  }
+}

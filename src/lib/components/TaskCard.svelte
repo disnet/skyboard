@@ -1,35 +1,58 @@
 <script lang="ts">
 	import { db } from '$lib/db.js';
-	import type { Task } from '$lib/types.js';
+	import type { MaterializedTask } from '$lib/types.js';
+	import { shouldCreateOp, createOp } from '$lib/ops.js';
+	import AuthorBadge from './AuthorBadge.svelte';
 
-	let { task }: { task: Task } = $props();
+	let {
+		task,
+		currentUserDid
+	}: {
+		task: MaterializedTask;
+		currentUserDid: string;
+	} = $props();
 
 	let editing = $state(false);
 	let editTitle = $state('');
 	let editDescription = $state('');
 
+	const isOwned = $derived(task.ownerDid === currentUserDid);
+
 	function startEdit() {
-		editTitle = task.title;
-		editDescription = task.description ?? '';
+		editTitle = task.effectiveTitle;
+		editDescription = task.effectiveDescription ?? '';
 		editing = true;
 	}
 
 	async function saveEdit() {
 		const title = editTitle.trim();
-		if (!title || !task.id) return;
+		if (!title) return;
 
-		await db.tasks.update(task.id, {
-			title,
-			description: editDescription.trim() || undefined,
-			updatedAt: new Date().toISOString(),
-			syncStatus: 'pending'
-		});
+		const description = editDescription.trim() || undefined;
+
+		if (isOwned && task.sourceTask.id) {
+			// Direct edit — we own this task
+			await db.tasks.update(task.sourceTask.id, {
+				title,
+				description,
+				updatedAt: new Date().toISOString(),
+				syncStatus: 'pending'
+			});
+		} else {
+			// Create an op — we don't own this task
+			const fields: Record<string, unknown> = {};
+			if (title !== task.effectiveTitle) fields.title = title;
+			if (description !== task.effectiveDescription) fields.description = description;
+			if (Object.keys(fields).length > 0) {
+				await createOp(currentUserDid, task.sourceTask, task.boardUri, fields);
+			}
+		}
 		editing = false;
 	}
 
 	async function deleteTask() {
-		if (!task.id) return;
-		await db.tasks.delete(task.id);
+		if (!isOwned || !task.sourceTask.id) return;
+		await db.tasks.delete(task.sourceTask.id);
 	}
 
 	function handleKeydown(e: KeyboardEvent) {
@@ -41,8 +64,12 @@
 	}
 
 	function handleDragStart(e: DragEvent) {
-		if (!e.dataTransfer || !task.id) return;
-		e.dataTransfer.setData('text/plain', String(task.id));
+		if (!e.dataTransfer || !task.sourceTask.id) return;
+		// Encode both the task ID and the owner DID so the column can decide op vs direct
+		e.dataTransfer.setData(
+			'application/x-kanban-task',
+			JSON.stringify({ id: task.sourceTask.id, did: task.ownerDid })
+		);
 		e.dataTransfer.effectAllowed = 'move';
 	}
 </script>
@@ -65,7 +92,9 @@
 		<div class="edit-actions">
 			<button class="save-btn" onclick={saveEdit}>Save</button>
 			<button class="cancel-btn" onclick={() => (editing = false)}>Cancel</button>
-			<button class="delete-btn" onclick={deleteTask}>Delete</button>
+			{#if isOwned}
+				<button class="delete-btn" onclick={deleteTask}>Delete</button>
+			{/if}
 		</div>
 	</div>
 {:else}
@@ -76,13 +105,21 @@
 		ondragstart={handleDragStart}
 		ondblclick={startEdit}
 	>
-		<div class="task-title">{task.title}</div>
-		{#if task.description}
-			<div class="task-desc">{task.description}</div>
+		<div class="task-title">{task.effectiveTitle}</div>
+		{#if task.effectiveDescription}
+			<div class="task-desc">{task.effectiveDescription}</div>
 		{/if}
-		{#if task.syncStatus === 'pending'}
+		<div class="task-meta">
+			<AuthorBadge did={task.ownerDid} isCurrentUser={isOwned} />
+			{#if task.pendingOps.length > 0}
+				<span class="pending-badge" title="Has pending proposals">
+					{task.pendingOps.length}
+				</span>
+			{/if}
+		</div>
+		{#if task.sourceTask.syncStatus === 'pending'}
 			<span class="sync-dot pending" title="Pending sync"></span>
-		{:else if task.syncStatus === 'error'}
+		{:else if task.sourceTask.syncStatus === 'error'}
 			<span class="sync-dot error" title="Sync error"></span>
 		{/if}
 	</div>
@@ -129,6 +166,22 @@
 		-webkit-box-orient: vertical;
 		overflow: hidden;
 		word-break: break-word;
+	}
+
+	.task-meta {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		margin-top: 0.375rem;
+	}
+
+	.pending-badge {
+		font-size: 0.625rem;
+		background: var(--color-warning);
+		color: white;
+		padding: 0 0.3125rem;
+		border-radius: var(--radius-sm);
+		font-weight: 600;
 	}
 
 	.sync-dot {

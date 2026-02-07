@@ -1,7 +1,9 @@
 import type { Agent } from '@atproto/api';
 import { db } from './db.js';
-import { BOARD_COLLECTION, TASK_COLLECTION, buildAtUri } from './tid.js';
-import type { Board, Task, BoardRecord, TaskRecord } from './types.js';
+import { BOARD_COLLECTION, TASK_COLLECTION, OP_COLLECTION, TRUST_COLLECTION, buildAtUri } from './tid.js';
+import type { Board, Task, Op, Trust, BoardRecord, TaskRecord } from './types.js';
+import { opToRecord } from './ops.js';
+import { trustToRecord } from './trust.js';
 
 let syncInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -77,6 +79,60 @@ export async function syncPendingToPDS(agent: Agent, did: string): Promise<void>
 			console.error('Failed to sync task to PDS:', err);
 			if (task.id) {
 				await db.tasks.update(task.id, { syncStatus: 'error' });
+			}
+		}
+	}
+
+	// Sync pending ops
+	const pendingOps = await db.ops
+		.where('syncStatus')
+		.equals('pending')
+		.filter((o) => o.did === did)
+		.toArray();
+
+	for (const op of pendingOps) {
+		try {
+			await agent.com.atproto.repo.putRecord({
+				repo: did,
+				collection: OP_COLLECTION,
+				rkey: op.rkey,
+				record: opToRecord(op),
+				validate: false
+			});
+			if (op.id) {
+				await db.ops.update(op.id, { syncStatus: 'synced' });
+			}
+		} catch (err) {
+			console.error('Failed to sync op to PDS:', err);
+			if (op.id) {
+				await db.ops.update(op.id, { syncStatus: 'error' });
+			}
+		}
+	}
+
+	// Sync pending trusts
+	const pendingTrusts = await db.trusts
+		.where('syncStatus')
+		.equals('pending')
+		.filter((t) => t.did === did)
+		.toArray();
+
+	for (const trust of pendingTrusts) {
+		try {
+			await agent.com.atproto.repo.putRecord({
+				repo: did,
+				collection: TRUST_COLLECTION,
+				rkey: trust.rkey,
+				record: trustToRecord(trust),
+				validate: false
+			});
+			if (trust.id) {
+				await db.trusts.update(trust.id, { syncStatus: 'synced' });
+			}
+		} catch (err) {
+			console.error('Failed to sync trust to PDS:', err);
+			if (trust.id) {
+				await db.trusts.update(trust.id, { syncStatus: 'error' });
 			}
 		}
 	}
@@ -159,6 +215,86 @@ export async function pullFromPDS(agent: Agent, did: string): Promise<void> {
 				await db.tasks.update(existing.id, taskData);
 			} else {
 				await db.tasks.add(taskData as Task);
+			}
+		}
+
+		cursor = res.data.cursor;
+	} while (cursor);
+
+	// Pull ops
+	cursor = undefined;
+	do {
+		const res = await agent.com.atproto.repo.listRecords({
+			repo: did,
+			collection: OP_COLLECTION,
+			limit: 100,
+			cursor
+		});
+
+		for (const record of res.data.records) {
+			const rkey = record.uri.split('/').pop()!;
+			const value = record.value as Record<string, unknown>;
+
+			const existing = await db.ops.where('[did+rkey]').equals([did, rkey]).first();
+			if (existing && existing.syncStatus === 'pending') {
+				continue;
+			}
+
+			const opData: Omit<Op, 'id'> = {
+				rkey,
+				did,
+				targetTaskUri: (value.targetTaskUri as string) ?? '',
+				boardUri: (value.boardUri as string) ?? '',
+				fields: (value.fields as Op['fields']) ?? {},
+				createdAt: (value.createdAt as string) ?? new Date().toISOString(),
+				syncStatus: 'synced'
+			};
+
+			if (existing?.id) {
+				await db.ops.update(existing.id, opData);
+			} else {
+				await db.ops.add(opData as Op);
+			}
+		}
+
+		cursor = res.data.cursor;
+	} while (cursor);
+
+	// Pull trusts
+	cursor = undefined;
+	do {
+		const res = await agent.com.atproto.repo.listRecords({
+			repo: did,
+			collection: TRUST_COLLECTION,
+			limit: 100,
+			cursor
+		});
+
+		for (const record of res.data.records) {
+			const rkey = record.uri.split('/').pop()!;
+			const value = record.value as Record<string, unknown>;
+
+			const existing = await db.trusts
+				.where('[did+boardUri+trustedDid]')
+				.equals([did, (value.boardUri as string) ?? '', (value.trustedDid as string) ?? ''])
+				.first();
+			if (existing && existing.syncStatus === 'pending') {
+				continue;
+			}
+
+			const trustData: Omit<Trust, 'id'> = {
+				rkey,
+				did,
+				trustedDid: (value.trustedDid as string) ?? '',
+				boardUri: (value.boardUri as string) ?? '',
+				createdAt: (value.createdAt as string) ?? new Date().toISOString(),
+				syncStatus: 'synced'
+			};
+
+			if (existing?.id) {
+				await db.trusts.update(existing.id, trustData);
+			} else {
+				await db.trusts.add(trustData as Trust);
 			}
 		}
 
