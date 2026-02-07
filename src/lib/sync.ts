@@ -363,7 +363,7 @@ export function startBackgroundSync(agent: Agent, did: string): void {
 	stopBackgroundSync();
 	syncInterval = setInterval(() => {
 		syncPendingToPDS(agent, did).catch(console.error);
-	}, 30_000);
+	}, 5_000);
 	// Also run immediately
 	syncPendingToPDS(agent, did).catch(console.error);
 }
