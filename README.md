@@ -13,8 +13,8 @@ All data is stored locally in IndexedDB (via Dexie) and synced to each user's PD
 There are four record types, each stored as AT Protocol records in the user's repo:
 
 - **Board** (`blue.kanban.board`) — name, description, column configuration, and permission rules. Owned by whoever created it.
-- **Task** (`blue.kanban.task`) — a card on the board with title, description, column, and sort order. Owned by whoever created it.
-- **Op** (`blue.kanban.op`) — an edit to someone else's task. Contains partial field updates (title, description, columnId, order) and targets a task by AT URI.
+- **Task** (`blue.kanban.task`) — a card on the board with title, description, column, and fractional index position. Owned by whoever created it.
+- **Op** (`blue.kanban.op`) — an edit to someone else's task. Contains partial field updates (title, description, columnId, position) and targets a task by AT URI.
 - **Trust** (`blue.kanban.trust`) — a per-board grant allowing another user's ops to take effect on your view of the board.
 
 ### Why ops?
@@ -23,9 +23,13 @@ You can only write to your own AT Protocol repo. If you want to move or edit som
 
 ## Conflict resolution
 
-Edits are resolved using **per-field last-writer-wins** (LWW) with ISO 8601 timestamps. Each mutable field — `title`, `description`, `columnId`, `order` — is independently resolved. The value with the latest timestamp wins.
+Edits are resolved using **per-field last-writer-wins** (LWW) with ISO 8601 timestamps. Each mutable field — `title`, `description`, `columnId`, `position` — is independently resolved. The value with the latest timestamp wins.
 
 This is formally an **LWW-Register Map**, a well-known CRDT. The merge function is commutative, associative, and idempotent, so all clients converge to the same state regardless of the order they receive operations.
+
+### Fractional indexing
+
+Task ordering within columns uses [fractional indexing](https://www.npmjs.com/package/fractional-indexing) — each task has a `position` string that sorts lexicographically. Moving a task generates a new position string between its neighbors, so **only the moved task is ever updated**. This is critical for the distributed model: since you can only write to your own repo, integer-based ordering (which requires renumbering multiple tasks) would fail when moving other users' cards. With fractional indexing, a single op with the new position is sufficient.
 
 A trust layer sits on top: only ops from the task owner, the current user, or explicitly trusted users are merged into the effective board state. Untrusted ops are stored but shown separately in a Proposals panel. Once trust converges (all participants agree on who to trust), the underlying LWW properties guarantee full convergence.
 
@@ -84,6 +88,7 @@ On reconnect or stale cursor (>48h offline), the app backfills by fetching direc
 
 - [SvelteKit](https://kit.svelte.dev/) with Svelte 5 and TypeScript
 - [Dexie](https://dexie.org/) (IndexedDB) for local-first persistence
+- [fractional-indexing](https://www.npmjs.com/package/fractional-indexing) for CRDT-friendly task ordering
 - [@atproto/api](https://www.npmjs.com/package/@atproto/api) and [@atproto/oauth-client-browser](https://www.npmjs.com/package/@atproto/oauth-client-browser) for AT Protocol
 - [CodeMirror](https://codemirror.net/) for markdown card editing
 - Static build via [@sveltejs/adapter-static](https://www.npmjs.com/package/@sveltejs/adapter-static)
