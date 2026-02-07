@@ -12,7 +12,7 @@ All data is stored locally in IndexedDB (via Dexie) and synced to each user's PD
 
 There are four record types, each stored as AT Protocol records in the user's repo:
 
-- **Board** (`blue.kanban.board`) — name, description, and column configuration. Owned by whoever created it.
+- **Board** (`blue.kanban.board`) — name, description, column configuration, and permission rules. Owned by whoever created it.
 - **Task** (`blue.kanban.task`) — a card on the board with title, description, column, and sort order. Owned by whoever created it.
 - **Op** (`blue.kanban.op`) — an edit to someone else's task. Contains partial field updates (title, description, columnId, order) and targets a task by AT URI.
 - **Trust** (`blue.kanban.trust`) — a per-board grant allowing another user's ops to take effect on your view of the board.
@@ -36,6 +36,36 @@ A trust layer sits on top: only ops from the task owner, the current user, or ex
 - Other users require an explicit trust grant (per-board) before their ops affect your view.
 - Joining a board auto-trusts the board owner.
 - Untrusted ops and tasks from unknown users appear in the Proposals panel, where you can review them and grant trust.
+
+## Board permissions
+
+On top of the trust system, board authors can configure fine-grained permission rules that control what operations are allowed and by whom. Permissions are stored on the board record and enforced during operation materialization.
+
+### Operations
+
+Five operation types can be independently controlled:
+
+- `create_task` — creating new cards on the board
+- `edit_title` — changing a card's title
+- `edit_description` — changing a card's description
+- `move_task` — moving a card to a different column
+- `reorder` — reordering cards within a column
+
+### Scopes
+
+Each operation is assigned one of three scopes:
+
+- **author_only** — only the board owner can perform the operation
+- **trusted** — the board owner and explicitly trusted users (default for all operations)
+- **anyone** — any user can perform the operation
+
+### Per-column rules
+
+Permission rules can optionally be scoped to specific columns, allowing patterns like "anyone can create tasks in the Inbox column, but only trusted users can move tasks to Done."
+
+### Pending operations
+
+When a user performs an action they don't have full permission for (e.g. scope is `trusted` but the user hasn't been trusted yet), the operation is stored but shown greyed out as pending, awaiting board author approval.
 
 ## Sync architecture
 
