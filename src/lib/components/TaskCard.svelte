@@ -1,13 +1,14 @@
 <script lang="ts">
 	import type { MaterializedTask } from '$lib/types.js';
 	import { Marked } from 'marked';
+	import DOMPurify from 'dompurify';
 	import AuthorBadge from './AuthorBadge.svelte';
 
-	const marked = new Marked({
-		renderer: {
-			html({ text }: { text: string }) {
-				return text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-			}
+	const marked = new Marked();
+
+	DOMPurify.addHook('afterSanitizeAttributes', (node) => {
+		if (node.tagName === 'A') {
+			node.setAttribute('rel', 'noopener noreferrer');
 		}
 	});
 
@@ -24,7 +25,9 @@
 	} = $props();
 
 	const renderedDescription = $derived(
-		task.effectiveDescription ? (marked.parse(task.effectiveDescription) as string) : ''
+		task.effectiveDescription
+			? DOMPurify.sanitize(marked.parse(task.effectiveDescription) as string)
+			: ''
 	);
 
 	const isOwned = $derived(task.ownerDid === currentUserDid);
