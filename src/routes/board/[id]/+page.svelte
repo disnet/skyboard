@@ -5,7 +5,7 @@
 	import { db } from '$lib/db.js';
 	import { useLiveQuery } from '$lib/db.svelte.js';
 	import { getAuth } from '$lib/auth.svelte.js';
-	import { buildAtUri, BOARD_COLLECTION, TASK_COLLECTION, OP_COLLECTION } from '$lib/tid.js';
+	import { buildAtUri, BOARD_COLLECTION, TASK_COLLECTION, OP_COLLECTION, TRUST_COLLECTION } from '$lib/tid.js';
 	import { materializeTasks } from '$lib/materialize.js';
 	import {
 		JetstreamClient,
@@ -105,26 +105,35 @@
 	$effect(() => {
 		if (!boardUri) return;
 
-		const watchedBoards = new Set([boardUri]);
-
 		// Cold start: fetch from known participants
 		fetchAllKnownParticipants(boardUri).catch(console.error);
 
 		// Start Jetstream
 		loadJetstreamCursor().then((cursor) => {
+			// If cursor was stale (discarded by loadJetstreamCursor), do an extra
+			// PDS backfill since we'll be streaming from "now" and missed events
+			if (!cursor) {
+				fetchAllKnownParticipants(boardUri).catch(console.error);
+			}
+
 			jetstreamClient = new JetstreamClient({
-				wantedCollections: [TASK_COLLECTION, OP_COLLECTION],
+				wantedCollections: [TASK_COLLECTION, OP_COLLECTION, TRUST_COLLECTION],
 				cursor,
 				onEvent: async (event) => {
 					// Don't process our own events
 					if (event.did === auth.did) return;
-					const relevantDid = await processJetstreamEvent(event, watchedBoards);
-					if (relevantDid) {
-						addKnownParticipant(relevantDid, boardUri).catch(console.error);
+					const result = await processJetstreamEvent(event);
+					if (result) {
+						addKnownParticipant(result.did, result.boardUri).catch(console.error);
 					}
 				},
 				onConnect: () => {
 					console.log('Jetstream connected');
+				},
+				onReconnect: () => {
+					// Backfill from PDS on reconnect to catch events missed during the gap
+					console.log('Jetstream reconnected, backfilling from PDS');
+					fetchAllKnownParticipants(boardUri).catch(console.error);
 				},
 				onError: (err) => {
 					console.warn('Jetstream error:', err);
@@ -133,7 +142,14 @@
 			jetstreamClient.connect();
 		});
 
+		// Save cursor on tab close as a safety net
+		const handleBeforeUnload = () => {
+			jetstreamClient?.disconnect();
+		};
+		window.addEventListener('beforeunload', handleBeforeUnload);
+
 		return () => {
+			window.removeEventListener('beforeunload', handleBeforeUnload);
 			jetstreamClient?.disconnect();
 			jetstreamClient = null;
 		};
