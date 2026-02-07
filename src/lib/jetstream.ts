@@ -220,6 +220,7 @@ export async function processJetstreamEvent(
 			description: record.description as string | undefined,
 			columnId: (record.columnId as string) ?? '',
 			boardUri,
+			position: record.position as string | undefined,
 			order: (record.order as number) ?? 0,
 			createdAt: (record.createdAt as string) ?? new Date().toISOString(),
 			updatedAt: record.updatedAt as string | undefined,

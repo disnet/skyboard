@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { MaterializedTask } from '$lib/types.js';
 	import { Marked } from 'marked';
+	import { getDraggedCard, setDraggedCard } from '$lib/drag-state.svelte.js';
 	import DOMPurify from 'dompurify';
 	import AuthorBadge from './AuthorBadge.svelte';
 
@@ -32,6 +33,11 @@
 
 	const isOwned = $derived(task.ownerDid === currentUserDid);
 
+	const isDragging = $derived(
+		getDraggedCard()?.id === task.sourceTask.id &&
+		getDraggedCard()?.did === task.ownerDid
+	);
+
 	let wasDragged = false;
 
 	function handleDragStart(e: DragEvent) {
@@ -42,9 +48,16 @@
 			JSON.stringify({ id: task.sourceTask.id, did: task.ownerDid })
 		);
 		e.dataTransfer.effectAllowed = 'move';
+		setDraggedCard({
+			id: task.sourceTask.id,
+			did: task.ownerDid,
+			rkey: task.rkey,
+			columnId: task.effectiveColumnId
+		});
 	}
 
 	function handleDragEnd() {
+		setDraggedCard(null);
 		setTimeout(() => {
 			wasDragged = false;
 		}, 0);
@@ -63,6 +76,7 @@
 <div
 	class="task-card"
 	class:task-pending={pending}
+	class:dragging={isDragging}
 	draggable="true"
 	ondragstart={handleDragStart}
 	ondragend={handleDragEnd}
@@ -113,6 +127,10 @@
 	.task-card:hover {
 		box-shadow: var(--shadow-sm);
 		border-color: var(--color-border);
+	}
+
+	.task-card.dragging {
+		opacity: 0.3;
 	}
 
 	.task-card.task-pending {

@@ -1,10 +1,12 @@
 <script lang="ts">
 	import { db } from '$lib/db.js';
 	import { generateTID } from '$lib/tid.js';
+	import { generateKeyBetween } from 'fractional-indexing';
 	import type { Column, MaterializedTask, BoardPermissions } from '$lib/types.js';
 	import { createOp } from '$lib/ops.js';
 	import { getPermissionStatus } from '$lib/permissions.js';
 	import type { PermissionStatus } from '$lib/permissions.js';
+	import { getDraggedCard } from '$lib/drag-state.svelte.js';
 	import TaskCard from './TaskCard.svelte';
 
 	let {
@@ -37,10 +39,15 @@
 
 	let newTaskTitle = $state('');
 	let adding = $state(false);
-	let dragOver = $state(false);
+	let dropIndex = $state<number | null>(null);
+	let taskListEl: HTMLElement | undefined = $state();
 
 	const sortedTasks = $derived(
-		[...tasks].sort((a, b) => a.effectiveOrder - b.effectiveOrder)
+		[...tasks].sort((a, b) => {
+			if (a.effectivePosition < b.effectivePosition) return -1;
+			if (a.effectivePosition > b.effectivePosition) return 1;
+			return (a.rkey + a.did).localeCompare(b.rkey + b.did);
+		})
 	);
 
 	async function addTask(e: Event) {
@@ -50,14 +57,14 @@
 
 		adding = true;
 		try {
-			const maxOrder = tasks.reduce((max, t) => Math.max(max, t.effectiveOrder), -1);
+			const lastPosition = sortedTasks.at(-1)?.effectivePosition ?? null;
 			await db.tasks.add({
 				rkey: generateTID(),
 				did,
 				title,
 				columnId: column.id,
 				boardUri,
-				order: maxOrder + 1,
+				position: generateKeyBetween(lastPosition, null),
 				createdAt: new Date().toISOString(),
 				syncStatus: 'pending'
 			});
@@ -75,7 +82,37 @@
 		if (e.dataTransfer) {
 			e.dataTransfer.dropEffect = 'move';
 		}
-		dragOver = true;
+
+		if (!taskListEl) {
+			dropIndex = sortedTasks.length;
+			return;
+		}
+
+		const dragged = getDraggedCard();
+		const children = Array.from(taskListEl.querySelectorAll(':scope > .card-slot')) as HTMLElement[];
+		let newDropIndex = children.length;
+
+		for (let i = 0; i < children.length; i++) {
+			const rect = children[i].getBoundingClientRect();
+			const midY = rect.top + rect.height / 2;
+			if (e.clientY < midY) {
+				newDropIndex = i;
+				break;
+			}
+		}
+
+		// If dragging within the same column and hovering over the card's own position, no gap needed
+		if (dragged) {
+			const draggedIndex = sortedTasks.findIndex(
+				t => t.sourceTask.id === dragged.id && t.ownerDid === dragged.did
+			);
+			if (draggedIndex !== -1 && (newDropIndex === draggedIndex || newDropIndex === draggedIndex + 1)) {
+				dropIndex = null;
+				return;
+			}
+		}
+
+		dropIndex = newDropIndex;
 	}
 
 	function isTaskPending(task: MaterializedTask): boolean {
@@ -83,13 +120,17 @@
 		return getPermissionStatus(task.ownerDid, boardOwnerDid, ownerTrustedDids, permissions, 'create_task', task.columnId) === 'pending';
 	}
 
-	function handleDragLeave() {
-		dragOver = false;
+	function handleDragLeave(e: DragEvent) {
+		const relatedTarget = e.relatedTarget as Node | null;
+		const currentTarget = e.currentTarget as HTMLElement;
+		if (relatedTarget && currentTarget.contains(relatedTarget)) return;
+		dropIndex = null;
 	}
 
 	async function handleDrop(e: DragEvent) {
 		e.preventDefault();
-		dragOver = false;
+		const currentDropIndex = dropIndex;
+		dropIndex = null;
 
 		if (!e.dataTransfer) return;
 		const raw = e.dataTransfer.getData('application/x-kanban-task');
@@ -102,15 +143,31 @@
 			return;
 		}
 
-		const maxOrder = tasks.reduce((max, t) => Math.max(max, t.effectiveOrder), -1);
-		const newOrder = maxOrder + 1;
+		// Filter out the dragged card and compute insert position
+		const filtered = sortedTasks.filter(t => !(t.sourceTask.id === data.id && t.ownerDid === data.did));
+		let insertIdx = currentDropIndex ?? filtered.length;
+
+		// Adjust for same-column drag (dragged card still in DOM)
+		const draggedIndex = sortedTasks.findIndex(
+			t => t.sourceTask.id === data.id && t.ownerDid === data.did
+		);
+		if (draggedIndex !== -1 && currentDropIndex !== null && currentDropIndex > draggedIndex) {
+			insertIdx = currentDropIndex - 1;
+		}
+		insertIdx = Math.max(0, Math.min(insertIdx, filtered.length));
+
+		// Generate a position between the neighbors
+		const before = filtered[insertIdx - 1]?.effectivePosition ?? null;
+		const after = filtered[insertIdx]?.effectivePosition ?? null;
+		const newPosition = generateKeyBetween(before, after);
+		const now = new Date().toISOString();
 
 		if (data.did === did) {
 			// We own this task — direct update
 			await db.tasks.update(data.id, {
 				columnId: column.id,
-				order: newOrder,
-				updatedAt: new Date().toISOString(),
+				position: newPosition,
+				updatedAt: now,
 				syncStatus: 'pending'
 			});
 		} else {
@@ -119,7 +176,7 @@
 			if (task) {
 				await createOp(did, task, boardUri, {
 					columnId: column.id,
-					order: newOrder
+					position: newPosition
 				});
 			}
 		}
@@ -129,7 +186,7 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
 	class="column"
-	class:drag-over={dragOver}
+	class:drag-over={dropIndex !== null}
 	ondragover={handleDragOver}
 	ondragleave={handleDragLeave}
 	ondrop={handleDrop}
@@ -139,10 +196,15 @@
 		<span class="task-count">{tasks.length}</span>
 	</div>
 
-	<div class="task-list">
-		{#each sortedTasks as task (task.rkey + task.did)}
-			<TaskCard {task} currentUserDid={did} pending={isTaskPending(task)} {onedit} />
+	<div class="task-list" bind:this={taskListEl}>
+		{#each sortedTasks as task, i (task.rkey + task.did)}
+			<div class="card-slot" class:drop-above={dropIndex === i}>
+				<TaskCard {task} currentUserDid={did} pending={isTaskPending(task)} {onedit} />
+			</div>
 		{/each}
+		{#if dropIndex !== null && dropIndex >= sortedTasks.length}
+			<div class="drop-indicator-end"></div>
+		{/if}
 	</div>
 
 	{#if createStatus !== 'denied'}
@@ -214,6 +276,33 @@
 		flex-direction: column;
 		gap: 0.375rem;
 		min-height: 40px;
+	}
+
+	.card-slot {
+		transition: margin-top 0.15s ease;
+	}
+
+	.card-slot.drop-above {
+		margin-top: 3rem;
+		position: relative;
+	}
+
+	.card-slot.drop-above::before {
+		content: '';
+		position: absolute;
+		top: -1.625rem;
+		left: 0.5rem;
+		right: 0.5rem;
+		height: 2px;
+		background: var(--color-primary);
+		border-radius: 1px;
+	}
+
+	.drop-indicator-end {
+		height: 2px;
+		margin: 0.5rem 0.5rem 0;
+		background: var(--color-primary);
+		border-radius: 1px;
 	}
 
 	.add-task-form {
