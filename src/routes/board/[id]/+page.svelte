@@ -7,6 +7,7 @@
 	import { getAuth } from '$lib/auth.svelte.js';
 	import { buildAtUri, BOARD_COLLECTION, TASK_COLLECTION, OP_COLLECTION, TRUST_COLLECTION } from '$lib/tid.js';
 	import { materializeTasks } from '$lib/materialize.js';
+	import { getBoardPermissions, hasPermission } from '$lib/permissions.js';
 	import {
 		JetstreamClient,
 		loadJetstreamCursor,
@@ -16,6 +17,7 @@
 	import type { Board, Task, Op, Trust, MaterializedTask } from '$lib/types.js';
 	import Column from '$lib/components/Column.svelte';
 	import BoardSettingsModal from '$lib/components/BoardSettingsModal.svelte';
+	import PermissionsModal from '$lib/components/PermissionsModal.svelte';
 	import ProposalPanel from '$lib/components/ProposalPanel.svelte';
 	import OpsPanel from '$lib/components/OpsPanel.svelte';
 	import TaskEditModal from '$lib/components/TaskEditModal.svelte';
@@ -47,32 +49,53 @@
 		return db.ops.where('boardUri').equals(boardUri).toArray();
 	});
 
-	// Trust records from the current user for this board
-	const trusts = useLiveQuery<Trust[]>(() => {
-		if (!boardUri || !auth.did) return [];
+	// Trust records from the board owner for this board (defines "trusted" for permissions)
+	const ownerTrusts = useLiveQuery<Trust[]>(() => {
+		if (!boardUri || !board.current) return [];
 		return db.trusts
 			.where('did')
-			.equals(auth.did)
+			.equals(board.current.did)
 			.filter((t) => t.boardUri === boardUri)
 			.toArray();
 	});
 
+	const ownerTrustedDids = $derived(
+		new Set((ownerTrusts.current ?? []).map((t) => t.trustedDid))
+	);
+
+	const permissions = $derived(board.current ? getBoardPermissions(board.current) : getBoardPermissions({ permissions: undefined } as any));
+
 	// Materialized view with LWW merge
 	const materializedTasks = $derived.by(() => {
-		if (!allTasks.current || !allOps.current || !auth.did) return [];
-		const trustedDids = new Set((trusts.current ?? []).map((t) => t.trustedDid));
-		return materializeTasks(allTasks.current, allOps.current, trustedDids, auth.did);
+		if (!allTasks.current || !allOps.current || !auth.did || !board.current) return [];
+		return materializeTasks(
+			allTasks.current,
+			allOps.current,
+			ownerTrustedDids,
+			auth.did,
+			board.current.did,
+			permissions
+		);
 	});
 
 	// Pending proposals from untrusted users
 	const pendingProposals = $derived(materializedTasks.flatMap((t) => t.pendingOps));
 
-	// Tasks from untrusted DIDs (these don't show on the board until trusted)
+	// Tasks that don't pass create_task permission (shown in Proposals panel)
 	const untrustedTasks = $derived.by(() => {
-		const trustedDids = new Set((trusts.current ?? []).map((t) => t.trustedDid));
-		return (allTasks.current ?? []).filter(
-			(t) => t.did !== auth.did && !trustedDids.has(t.did)
-		);
+		if (!board.current) return [];
+		return (allTasks.current ?? []).filter((t) => {
+			if (t.did === auth.did) return false;
+			if (t.did === board.current!.did) return false;
+			return !hasPermission(
+				t.did,
+				board.current!.did,
+				ownerTrustedDids,
+				permissions,
+				'create_task',
+				t.columnId
+			);
+		});
 	});
 
 	// Group materialized tasks by effective column
@@ -83,12 +106,25 @@
 			map.set(col.id, []);
 		}
 		for (const task of materializedTasks) {
-			// Only show tasks from trusted users + self
-			const trustedDids = new Set((trusts.current ?? []).map((t) => t.trustedDid));
-			if (task.ownerDid !== auth.did && !trustedDids.has(task.ownerDid)) continue;
-			const list = map.get(task.effectiveColumnId);
-			if (list) {
-				list.push(task);
+			// Board owner and current user tasks always show
+			if (task.ownerDid === board.current.did || task.ownerDid === auth.did) {
+				const list = map.get(task.effectiveColumnId);
+				if (list) list.push(task);
+				continue;
+			}
+			// Check create_task permission for the task's original column
+			if (
+				hasPermission(
+					task.ownerDid,
+					board.current.did,
+					ownerTrustedDids,
+					permissions,
+					'create_task',
+					task.columnId
+				)
+			) {
+				const list = map.get(task.effectiveColumnId);
+				if (list) list.push(task);
 			}
 		}
 		return map;
@@ -99,6 +135,7 @@
 	);
 
 	let showSettings = $state(false);
+	let showPermissions = $state(false);
 	let showProposals = $state(false);
 	let showOpsPanel = $state(false);
 	let editingTask = $state<MaterializedTask | null>(null);
@@ -219,6 +256,9 @@
 					{shareCopied ? 'Copied!' : 'Share'}
 				</button>
 				{#if isBoardOwner}
+					<button class="settings-btn" onclick={() => (showPermissions = true)}>
+						Permissions
+					</button>
 					<button class="settings-btn" onclick={() => (showSettings = true)}>
 						Settings
 					</button>
@@ -234,6 +274,9 @@
 					tasks={tasksByColumn.get(column.id) ?? []}
 					{boardUri}
 					did={auth.did ?? ''}
+					boardOwnerDid={board.current.did}
+					{permissions}
+					{ownerTrustedDids}
 					onedit={openTaskEditor}
 				/>
 			{/each}
@@ -242,6 +285,10 @@
 
 	{#if showSettings && isBoardOwner}
 		<BoardSettingsModal board={board.current} onclose={() => (showSettings = false)} />
+	{/if}
+
+	{#if showPermissions && isBoardOwner}
+		<PermissionsModal board={board.current} onclose={() => (showPermissions = false)} />
 	{/if}
 
 	{#if showProposals}
@@ -265,6 +312,9 @@
 		<TaskEditModal
 			task={editingTask}
 			currentUserDid={auth.did ?? ''}
+			boardOwnerDid={board.current.did}
+			{permissions}
+			{ownerTrustedDids}
 			onclose={() => (editingTask = null)}
 		/>
 	{/if}

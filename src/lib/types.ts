@@ -1,5 +1,21 @@
 export type SyncStatus = 'synced' | 'pending' | 'error';
 
+// --- Permission types ---
+
+export type PermissionScope = 'author_only' | 'trusted' | 'anyone';
+
+export type OperationType = 'create_task' | 'edit_title' | 'edit_description' | 'move_task' | 'reorder';
+
+export interface PermissionRule {
+	operation: OperationType;
+	scope: PermissionScope;
+	columnIds?: string[]; // For create_task: restrict to specific columns
+}
+
+export interface BoardPermissions {
+	rules: PermissionRule[];
+}
+
 export interface Column {
 	id: string;
 	name: string;
@@ -13,6 +29,7 @@ export interface Board {
 	name: string;
 	description?: string;
 	columns: Column[];
+	permissions?: BoardPermissions;
 	createdAt: string;
 	syncStatus: SyncStatus;
 }
@@ -36,6 +53,7 @@ export interface BoardRecord {
 	name: string;
 	description?: string;
 	columns: Column[];
+	permissions?: BoardPermissions;
 	createdAt: string;
 }
 

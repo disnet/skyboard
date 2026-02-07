@@ -1,5 +1,6 @@
 import { buildAtUri, TASK_COLLECTION } from './tid.js';
-import type { Task, Op, OpFields, MaterializedTask } from './types.js';
+import type { Task, Op, OpFields, MaterializedTask, BoardPermissions } from './types.js';
+import { hasPermission, fieldToOperation, getBoardPermissions } from './permissions.js';
 
 const MUTABLE_FIELDS: (keyof OpFields)[] = ['title', 'description', 'columnId', 'order'];
 
@@ -12,8 +13,10 @@ interface FieldState {
 export function materializeTasks(
 	tasks: Task[],
 	ops: Op[],
-	trustedDids: Set<string>,
-	currentUserDid: string
+	ownerTrustedDids: Set<string>,
+	currentUserDid: string,
+	boardOwnerDid: string,
+	permissions: BoardPermissions
 ): MaterializedTask[] {
 	// Group ops by targetTaskUri
 	const opsByTask = new Map<string, Op[]>();
@@ -27,16 +30,47 @@ export function materializeTasks(
 		const taskUri = buildAtUri(task.did, TASK_COLLECTION, task.rkey);
 		const taskOps = opsByTask.get(taskUri) || [];
 
-		// Separate trusted vs untrusted ops
+		// Separate permitted vs pending ops
 		const appliedOps: Op[] = [];
 		const pendingOps: Op[] = [];
 
 		for (const op of taskOps) {
-			if (
-				op.did === task.did ||
-				op.did === currentUserDid ||
-				trustedDids.has(op.did)
-			) {
+			// Board owner and task owner ops are always applied
+			if (op.did === boardOwnerDid || op.did === task.did) {
+				appliedOps.push(op);
+				continue;
+			}
+
+			// Current user's own ops are always visible to them
+			if (op.did === currentUserDid) {
+				appliedOps.push(op);
+				continue;
+			}
+
+			// Check per-field permissions
+			const hasColumnIdChange = op.fields.columnId !== undefined;
+			let allPermitted = true;
+			for (const field of MUTABLE_FIELDS) {
+				if (op.fields[field] === undefined) continue;
+				const operation = fieldToOperation(field, hasColumnIdChange);
+				const columnForCheck =
+					field === 'columnId' ? op.fields.columnId : task.columnId;
+				if (
+					!hasPermission(
+						op.did,
+						boardOwnerDid,
+						ownerTrustedDids,
+						permissions,
+						operation,
+						columnForCheck
+					)
+				) {
+					allPermitted = false;
+					break;
+				}
+			}
+
+			if (allPermitted) {
 				appliedOps.push(op);
 			} else {
 				pendingOps.push(op);

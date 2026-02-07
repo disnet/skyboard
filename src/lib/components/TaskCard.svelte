@@ -5,10 +5,12 @@
 	let {
 		task,
 		currentUserDid,
+		pending = false,
 		onedit
 	}: {
 		task: MaterializedTask;
 		currentUserDid: string;
+		pending?: boolean;
 		onedit: (task: MaterializedTask) => void;
 	} = $props();
 
@@ -44,11 +46,18 @@
 <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
 <div
 	class="task-card"
+	class:task-pending={pending}
 	draggable="true"
 	ondragstart={handleDragStart}
 	ondragend={handleDragEnd}
 	onclick={handleClick}
 >
+	{#if pending}
+		<div class="pending-bar">
+			<span class="info-icon" title="Pending acceptance from board creator">i</span>
+			<span>Pending approval</span>
+		</div>
+	{/if}
 	<div class="task-title">{task.effectiveTitle}</div>
 	{#if task.effectiveDescription}
 		<div class="task-desc">{task.effectiveDescription}</div>
@@ -88,6 +97,35 @@
 	.task-card:hover {
 		box-shadow: var(--shadow-sm);
 		border-color: var(--color-border);
+	}
+
+	.task-card.task-pending {
+		opacity: 0.55;
+		border-style: dashed;
+	}
+
+	.pending-bar {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		font-size: 0.625rem;
+		color: var(--color-text-secondary);
+		margin-bottom: 0.375rem;
+	}
+
+	.info-icon {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 0.875rem;
+		height: 0.875rem;
+		border-radius: 50%;
+		background: var(--color-border);
+		color: var(--color-surface);
+		font-size: 0.5rem;
+		font-weight: 700;
+		font-style: italic;
+		flex-shrink: 0;
 	}
 
 	.task-title {

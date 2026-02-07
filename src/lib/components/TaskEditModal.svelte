@@ -1,8 +1,10 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { db } from '$lib/db.js';
-	import type { MaterializedTask } from '$lib/types.js';
+	import type { MaterializedTask, BoardPermissions } from '$lib/types.js';
 	import { createOp } from '$lib/ops.js';
+	import { getPermissionStatus } from '$lib/permissions.js';
+	import type { PermissionStatus } from '$lib/permissions.js';
 	import AuthorBadge from './AuthorBadge.svelte';
 	import { EditorView, basicSetup } from 'codemirror';
 	import { EditorState } from '@codemirror/state';
@@ -14,14 +16,53 @@
 	let {
 		task,
 		currentUserDid,
+		boardOwnerDid,
+		permissions,
+		ownerTrustedDids,
 		onclose
 	}: {
 		task: MaterializedTask;
 		currentUserDid: string;
+		boardOwnerDid: string;
+		permissions: BoardPermissions;
+		ownerTrustedDids: Set<string>;
 		onclose: () => void;
 	} = $props();
 
 	const isOwned = $derived(task.ownerDid === currentUserDid);
+
+	const titleStatus: PermissionStatus = $derived(
+		isOwned
+			? 'allowed'
+			: getPermissionStatus(
+					currentUserDid,
+					boardOwnerDid,
+					ownerTrustedDids,
+					permissions,
+					'edit_title',
+					task.effectiveColumnId
+				)
+	);
+
+	const descriptionStatus: PermissionStatus = $derived(
+		isOwned
+			? 'allowed'
+			: getPermissionStatus(
+					currentUserDid,
+					boardOwnerDid,
+					ownerTrustedDids,
+					permissions,
+					'edit_description',
+					task.effectiveColumnId
+				)
+	);
+
+	// Best status across both fields (for footer messaging)
+	const editStatus: PermissionStatus = $derived.by(() => {
+		if (titleStatus === 'allowed' || descriptionStatus === 'allowed') return 'allowed';
+		if (titleStatus === 'pending' || descriptionStatus === 'pending') return 'pending';
+		return 'denied';
+	});
 
 	// We intentionally capture initial values for editing a copy
 	/* eslint-disable svelte/state-referenced-locally */
@@ -139,14 +180,27 @@
 				type="text"
 				bind:value={editTitle}
 				placeholder="Task title"
+				disabled={titleStatus === 'denied'}
 			/>
+			{#if titleStatus === 'denied'}
+				<span class="field-status denied">Author only</span>
+			{/if}
 			<button class="close-btn" onclick={onclose}>&times;</button>
 		</div>
 
 		<div class="modal-body">
 			<div class="field">
-				<label>Description</label>
-				<div class="editor-wrapper" bind:this={editorContainer}></div>
+				<div class="field-header">
+					<label>Description</label>
+					{#if descriptionStatus === 'denied'}
+						<span class="field-status denied">Author only</span>
+					{/if}
+				</div>
+				<div
+					class="editor-wrapper"
+					class:disabled={descriptionStatus === 'denied'}
+					bind:this={editorContainer}
+				></div>
 				<span class="char-count" class:over-limit={editDescription.length > 10240}>
 					{editDescription.length.toLocaleString()} / 10,240
 				</span>
@@ -156,8 +210,15 @@
 		<div class="modal-footer">
 			<div class="footer-left">
 				<AuthorBadge did={task.ownerDid} isCurrentUser={isOwned} />
-				{#if !isOwned}
+				{#if !isOwned && editStatus === 'allowed'}
 					<span class="op-notice">Changes will be proposed</span>
+				{:else if !isOwned && editStatus === 'pending'}
+					<span class="op-notice pending-notice">
+						<span class="info-icon">i</span>
+						Changes pending board creator approval
+					</span>
+				{:else if !isOwned && editStatus === 'denied'}
+					<span class="op-notice denied">Author only</span>
 				{/if}
 			</div>
 			<div class="footer-right">
@@ -165,13 +226,15 @@
 					<button class="delete-btn" onclick={deleteTask}>Delete</button>
 				{/if}
 				<button class="cancel-btn" onclick={onclose}>Cancel</button>
-				<button
-					class="save-btn"
-					onclick={save}
-					disabled={!editTitle.trim() || editDescription.length > 10240}
-				>
-					{isOwned ? 'Save' : 'Propose'}
-				</button>
+				{#if editStatus !== 'denied'}
+					<button
+						class="save-btn"
+						onclick={save}
+						disabled={!editTitle.trim() || editDescription.length > 10240}
+					>
+						{isOwned ? 'Save' : 'Propose'}
+					</button>
+				{/if}
 			</div>
 		</div>
 	</div>
@@ -294,10 +357,67 @@
 		gap: 0.5rem;
 	}
 
+	.field-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+	}
+
+	.field-status {
+		font-size: 0.6875rem;
+		font-weight: 500;
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
+	}
+
+	.field-status.denied {
+		color: var(--color-text-secondary);
+		font-style: italic;
+	}
+
+	.info-icon {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 0.875rem;
+		height: 0.875rem;
+		border-radius: 50%;
+		background: var(--color-border);
+		color: var(--color-surface);
+		font-size: 0.5625rem;
+		font-weight: 700;
+		font-style: italic;
+		flex-shrink: 0;
+		cursor: help;
+	}
+
 	.op-notice {
 		font-size: 0.75rem;
 		color: var(--color-warning);
 		font-weight: 500;
+	}
+
+	.op-notice.denied {
+		color: var(--color-text-secondary);
+		font-style: italic;
+	}
+
+	.op-notice.pending-notice {
+		color: var(--color-text-secondary);
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+	}
+
+	.edit-title:disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
+	}
+
+	.editor-wrapper.disabled {
+		opacity: 0.6;
+		pointer-events: none;
 	}
 
 	.footer-right {
