@@ -1,8 +1,10 @@
 <script lang="ts">
 	import { db } from '$lib/db.js';
 	import { generateTID } from '$lib/tid.js';
-	import type { Column, MaterializedTask } from '$lib/types.js';
+	import type { Column, MaterializedTask, BoardPermissions } from '$lib/types.js';
 	import { createOp } from '$lib/ops.js';
+	import { getPermissionStatus } from '$lib/permissions.js';
+	import type { PermissionStatus } from '$lib/permissions.js';
 	import TaskCard from './TaskCard.svelte';
 
 	let {
@@ -10,14 +12,28 @@
 		tasks,
 		boardUri,
 		did,
+		boardOwnerDid,
+		permissions,
+		ownerTrustedDids,
 		onedit
 	}: {
 		column: Column;
 		tasks: MaterializedTask[];
 		boardUri: string;
 		did: string;
+		boardOwnerDid: string;
+		permissions: BoardPermissions;
+		ownerTrustedDids: Set<string>;
 		onedit: (task: MaterializedTask) => void;
 	} = $props();
+
+	const createStatus: PermissionStatus = $derived(
+		getPermissionStatus(did, boardOwnerDid, ownerTrustedDids, permissions, 'create_task', column.id)
+	);
+
+	const moveStatus: PermissionStatus = $derived(
+		getPermissionStatus(did, boardOwnerDid, ownerTrustedDids, permissions, 'move_task', column.id)
+	);
 
 	let newTaskTitle = $state('');
 	let adding = $state(false);
@@ -54,11 +70,17 @@
 	}
 
 	function handleDragOver(e: DragEvent) {
+		if (moveStatus === 'denied') return;
 		e.preventDefault();
 		if (e.dataTransfer) {
 			e.dataTransfer.dropEffect = 'move';
 		}
 		dragOver = true;
+	}
+
+	function isTaskPending(task: MaterializedTask): boolean {
+		if (task.ownerDid === boardOwnerDid) return false;
+		return getPermissionStatus(task.ownerDid, boardOwnerDid, ownerTrustedDids, permissions, 'create_task', task.columnId) === 'pending';
 	}
 
 	function handleDragLeave() {
@@ -119,21 +141,27 @@
 
 	<div class="task-list">
 		{#each sortedTasks as task (task.rkey + task.did)}
-			<TaskCard {task} currentUserDid={did} {onedit} />
+			<TaskCard {task} currentUserDid={did} pending={isTaskPending(task)} {onedit} />
 		{/each}
 	</div>
 
-	<form class="add-task-form" onsubmit={addTask}>
-		<input
-			type="text"
-			bind:value={newTaskTitle}
-			placeholder="Add a task..."
-			disabled={adding}
-		/>
-		{#if newTaskTitle.trim()}
-			<button type="submit" disabled={adding}>Add</button>
-		{/if}
-	</form>
+	{#if createStatus !== 'denied'}
+		<form class="add-task-form" onsubmit={addTask}>
+			<input
+				type="text"
+				bind:value={newTaskTitle}
+				placeholder={createStatus === 'pending' ? 'Add a task (pending approval)...' : 'Add a task...'}
+				disabled={adding}
+			/>
+			{#if newTaskTitle.trim()}
+				<button type="submit" disabled={adding}>Add</button>
+			{/if}
+		</form>
+	{:else}
+		<div class="permission-notice denied">
+			<span>Author only</span>
+		</div>
+	{/if}
 </div>
 
 <style>
@@ -224,5 +252,21 @@
 
 	.add-task-form button:hover:not(:disabled) {
 		background: var(--color-primary-hover);
+	}
+
+	.permission-notice {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		margin-top: 0.5rem;
+		padding: 0.375rem 0.625rem;
+		border-radius: var(--radius-md);
+		font-size: 0.75rem;
+	}
+
+	.permission-notice.denied {
+		color: var(--color-text-secondary);
+		font-style: italic;
+		justify-content: center;
 	}
 </style>

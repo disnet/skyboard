@@ -13,6 +13,7 @@ function boardToRecord(board: Board): BoardRecord {
 		name: board.name,
 		...(board.description ? { description: board.description } : {}),
 		columns: board.columns,
+		...(board.permissions ? { permissions: board.permissions } : {}),
 		createdAt: board.createdAt
 	};
 }
@@ -165,6 +166,7 @@ export async function pullFromPDS(agent: Agent, did: string): Promise<void> {
 				name: (value.name as string) ?? '',
 				description: value.description as string | undefined,
 				columns: (value.columns as Board['columns']) ?? [],
+				permissions: value.permissions as Board['permissions'],
 				createdAt: (value.createdAt as string) ?? new Date().toISOString(),
 				syncStatus: 'synced'
 			};

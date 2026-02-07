@@ -173,6 +173,7 @@ export async function fetchRemoteBoard(
 			name: (value.name as string) ?? '',
 			description: value.description as string | undefined,
 			columns: (value.columns as Board['columns']) ?? [],
+			permissions: value.permissions as Board['permissions'],
 			createdAt: (value.createdAt as string) ?? new Date().toISOString(),
 			syncStatus: 'synced'
 		};
