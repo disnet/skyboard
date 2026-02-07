@@ -3,7 +3,7 @@
   "client_name": "AT Kanban",
   "client_uri": "https://at-kanban.example.com",
   "redirect_uris": ["https://at-kanban.example.com/"],
-  "scope": "atproto repo:blue.kanban.board repo:blue.kanban.task",
+  "scope": "atproto repo:blue.kanban.board repo:blue.kanban.task repo:blue.kanban.op repo:blue.kanban.trust",
   "grant_types": ["authorization_code", "refresh_token"],
   "response_types": ["code"],
   "token_endpoint_auth_method": "none",

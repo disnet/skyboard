@@ -1,0 +1,58 @@
+{
+  "lexicon": 1,
+  "id": "blue.kanban.op",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "An operation proposing a change to a kanban task",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": ["targetTaskUri", "boardUri", "fields", "createdAt"],
+        "properties": {
+          "targetTaskUri": {
+            "type": "string",
+            "format": "at-uri",
+            "description": "AT URI of the task this op targets"
+          },
+          "boardUri": {
+            "type": "string",
+            "format": "at-uri",
+            "description": "AT URI of the board this op pertains to"
+          },
+          "fields": {
+            "type": "ref",
+            "ref": "#opFields",
+            "description": "The fields to change on the target task"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "Timestamp of the operation, used for LWW resolution"
+          }
+        }
+      }
+    },
+    "opFields": {
+      "type": "object",
+      "description": "Subset of task fields to override. Only present fields are applied.",
+      "properties": {
+        "title": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 10240
+        },
+        "columnId": {
+          "type": "string"
+        },
+        "order": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

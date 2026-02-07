@@ -1,7 +1,8 @@
 import { Agent } from '@atproto/api';
 import { BrowserOAuthClient, buildAtprotoLoopbackClientMetadata } from '@atproto/oauth-client-browser';
 
-const OAUTH_SCOPE = 'atproto repo:blue.kanban.board repo:blue.kanban.task';
+const OAUTH_SCOPE =
+	'atproto repo:blue.kanban.board repo:blue.kanban.task repo:blue.kanban.op repo:blue.kanban.trust';
 
 let agent = $state<Agent | null>(null);
 let did = $state<string | null>(null);

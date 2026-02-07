@@ -1,0 +1,62 @@
+import { db } from './db.js';
+import { generateTID } from './tid.js';
+import type { Trust, TrustRecord } from './types.js';
+
+export async function grantTrust(
+	did: string,
+	trustedDid: string,
+	boardUri: string
+): Promise<void> {
+	const existing = await db.trusts
+		.where('[did+boardUri+trustedDid]')
+		.equals([did, boardUri, trustedDid])
+		.first();
+	if (existing) return;
+
+	await db.trusts.add({
+		rkey: generateTID(),
+		did,
+		trustedDid,
+		boardUri,
+		createdAt: new Date().toISOString(),
+		syncStatus: 'pending'
+	});
+}
+
+export async function revokeTrust(
+	did: string,
+	trustedDid: string,
+	boardUri: string
+): Promise<void> {
+	const trust = await db.trusts
+		.where('[did+boardUri+trustedDid]')
+		.equals([did, boardUri, trustedDid])
+		.first();
+	if (!trust || !trust.id) return;
+
+	// Mark for deletion from PDS if it was synced
+	if (trust.syncStatus === 'synced') {
+		// We'll handle PDS deletion in sync.ts
+		await db.trusts.delete(trust.id);
+	} else {
+		await db.trusts.delete(trust.id);
+	}
+}
+
+export async function getTrustedDids(did: string, boardUri: string): Promise<string[]> {
+	const trusts = await db.trusts
+		.where('did')
+		.equals(did)
+		.filter((t) => t.boardUri === boardUri)
+		.toArray();
+	return trusts.map((t) => t.trustedDid);
+}
+
+export function trustToRecord(trust: Trust): TrustRecord {
+	return {
+		$type: 'blue.kanban.trust',
+		trustedDid: trust.trustedDid,
+		boardUri: trust.boardUri,
+		createdAt: trust.createdAt
+	};
+}
