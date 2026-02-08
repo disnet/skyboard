@@ -40,6 +40,7 @@ export class JetstreamClient {
 	private lastCursor: number | null = null;
 	private cursorSaveTimer: ReturnType<typeof setInterval> | null = null;
 	private hasConnectedBefore = false;
+	private onlineListener: (() => void) | null = null;
 
 	constructor(options: JetstreamOptions) {
 		this.options = options;
@@ -49,6 +50,17 @@ export class JetstreamClient {
 	}
 
 	connect(): void {
+		if (!navigator.onLine) {
+			this.onlineListener = () => {
+				this.onlineListener = null;
+				if (this.shouldReconnect) {
+					this.connect();
+				}
+			};
+			window.addEventListener('online', this.onlineListener, { once: true });
+			return;
+		}
+
 		const params = new URLSearchParams();
 		for (const collection of this.options.wantedCollections) {
 			params.append('wantedCollections', collection);
@@ -99,6 +111,19 @@ export class JetstreamClient {
 	private handleClose(): void {
 		if (!this.shouldReconnect) return;
 
+		if (!navigator.onLine) {
+			// Wait for connectivity instead of retrying into the void
+			this.onlineListener = () => {
+				this.onlineListener = null;
+				if (this.shouldReconnect) {
+					this.reconnectDelay = 1000;
+					this.connect();
+				}
+			};
+			window.addEventListener('online', this.onlineListener, { once: true });
+			return;
+		}
+
 		setTimeout(() => {
 			if (this.shouldReconnect) {
 				this.reconnectDelay = Math.min(this.reconnectDelay * 2, this.maxReconnectDelay);
@@ -128,6 +153,10 @@ export class JetstreamClient {
 
 	disconnect(): void {
 		this.shouldReconnect = false;
+		if (this.onlineListener) {
+			window.removeEventListener('online', this.onlineListener);
+			this.onlineListener = null;
+		}
 		this.stopCursorSaving();
 		this.ws?.close();
 		this.ws = null;
