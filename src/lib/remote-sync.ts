@@ -1,6 +1,6 @@
 import { db } from './db.js';
-import { TASK_COLLECTION, OP_COLLECTION, BOARD_COLLECTION, TRUST_COLLECTION } from './tid.js';
-import type { Task, Op, Board, Trust } from './types.js';
+import { TASK_COLLECTION, OP_COLLECTION, BOARD_COLLECTION, TRUST_COLLECTION, COMMENT_COLLECTION } from './tid.js';
+import type { Task, Op, Board, Trust, Comment } from './types.js';
 
 // Cache resolved PDS endpoints to avoid repeated lookups
 const pdsCache = new Map<string, string>();
@@ -218,6 +218,40 @@ export async function fetchRemoteTrusts(
 	}
 }
 
+export async function fetchRemoteComments(
+	participantDid: string,
+	boardUri: string
+): Promise<void> {
+	const records = await fetchRecordsFromRepo(participantDid, COMMENT_COLLECTION);
+
+	for (const record of records) {
+		const value = record.value;
+		if (value.boardUri !== boardUri) continue;
+
+		const rkey = record.uri.split('/').pop()!;
+		const existing = await db.comments
+			.where('[did+rkey]')
+			.equals([participantDid, rkey])
+			.first();
+
+		const commentData: Omit<Comment, 'id'> = {
+			rkey,
+			did: participantDid,
+			targetTaskUri: (value.targetTaskUri as string) ?? '',
+			boardUri,
+			text: (value.text as string) ?? '',
+			createdAt: (value.createdAt as string) ?? new Date().toISOString(),
+			syncStatus: 'synced'
+		};
+
+		if (existing?.id) {
+			await db.comments.update(existing.id, commentData);
+		} else {
+			await db.comments.add(commentData as Comment);
+		}
+	}
+}
+
 export async function seedParticipantsFromTrusts(boardUri: string): Promise<void> {
 	const trusts = await db.trusts.where('boardUri').equals(boardUri).toArray();
 	for (const trust of trusts) {
@@ -258,7 +292,7 @@ export async function fetchAllKnownParticipants(boardUri: string): Promise<void>
 	for (let i = 0; i < dids.length; i += concurrency) {
 		const batch = dids.slice(i, i + concurrency);
 		await Promise.allSettled(
-			batch.flatMap((did) => [fetchRemoteTasks(did, boardUri), fetchRemoteOps(did, boardUri)])
+			batch.flatMap((did) => [fetchRemoteTasks(did, boardUri), fetchRemoteOps(did, boardUri), fetchRemoteComments(did, boardUri)])
 		);
 	}
 }

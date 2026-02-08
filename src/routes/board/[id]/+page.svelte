@@ -5,7 +5,7 @@
 	import { db } from '$lib/db.js';
 	import { useLiveQuery } from '$lib/db.svelte.js';
 	import { getAuth } from '$lib/auth.svelte.js';
-	import { buildAtUri, BOARD_COLLECTION, TASK_COLLECTION, OP_COLLECTION, TRUST_COLLECTION } from '$lib/tid.js';
+	import { buildAtUri, BOARD_COLLECTION, TASK_COLLECTION, OP_COLLECTION, TRUST_COLLECTION, COMMENT_COLLECTION } from '$lib/tid.js';
 	import { materializeTasks } from '$lib/materialize.js';
 	import { getBoardPermissions, hasPermission } from '$lib/permissions.js';
 	import {
@@ -14,7 +14,7 @@
 		processJetstreamEvent
 	} from '$lib/jetstream.js';
 	import { fetchAllKnownParticipants, addKnownParticipant } from '$lib/remote-sync.js';
-	import type { Board, Task, Op, Trust, MaterializedTask } from '$lib/types.js';
+	import type { Board, Task, Op, Trust, Comment, MaterializedTask } from '$lib/types.js';
 	import Column from '$lib/components/Column.svelte';
 	import BoardSettingsModal from '$lib/components/BoardSettingsModal.svelte';
 	import PermissionsModal from '$lib/components/PermissionsModal.svelte';
@@ -59,11 +59,26 @@
 			.toArray();
 	});
 
+	// All comments for this board
+	const allComments = useLiveQuery<Comment[]>(() => {
+		if (!boardUri) return [];
+		return db.comments.where('boardUri').equals(boardUri).toArray();
+	});
+
 	const ownerTrustedDids = $derived(
 		new Set((ownerTrusts.current ?? []).map((t) => t.trustedDid))
 	);
 
 	const permissions = $derived(board.current ? getBoardPermissions(board.current) : getBoardPermissions({ permissions: undefined } as any));
+
+	// Comment counts grouped by targetTaskUri
+	const commentCountsByTask = $derived.by(() => {
+		const map = new Map<string, number>();
+		for (const comment of allComments.current ?? []) {
+			map.set(comment.targetTaskUri, (map.get(comment.targetTaskUri) ?? 0) + 1);
+		}
+		return map;
+	});
 
 	// Materialized view with LWW merge
 	const materializedTasks = $derived.by(() => {
@@ -162,7 +177,7 @@
 			}
 
 			jetstreamClient = new JetstreamClient({
-				wantedCollections: [TASK_COLLECTION, OP_COLLECTION, TRUST_COLLECTION],
+				wantedCollections: [TASK_COLLECTION, OP_COLLECTION, TRUST_COLLECTION, COMMENT_COLLECTION],
 				cursor,
 				onEvent: async (event) => {
 					// Don't process our own events
@@ -225,6 +240,7 @@
 
 		await db.tasks.where('boardUri').equals(uri).delete();
 		await db.ops.where('boardUri').equals(uri).delete();
+		await db.comments.where('boardUri').equals(uri).delete();
 		await db.boards.delete(boardId);
 
 		goto('/');
@@ -279,6 +295,7 @@
 					boardOwnerDid={board.current.did}
 					{permissions}
 					{ownerTrustedDids}
+					commentCounts={commentCountsByTask}
 					onedit={openTaskEditor}
 				/>
 			{/each}
@@ -317,6 +334,8 @@
 			boardOwnerDid={board.current.did}
 			{permissions}
 			{ownerTrustedDids}
+			comments={allComments.current ?? []}
+			{boardUri}
 			onclose={() => (editingTask = null)}
 		/>
 	{/if}

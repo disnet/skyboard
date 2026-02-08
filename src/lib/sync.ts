@@ -1,9 +1,10 @@
 import type { Agent } from '@atproto/api';
 import { db } from './db.js';
-import { BOARD_COLLECTION, TASK_COLLECTION, OP_COLLECTION, TRUST_COLLECTION, buildAtUri } from './tid.js';
-import type { Board, Task, Op, Trust, BoardRecord, TaskRecord } from './types.js';
+import { BOARD_COLLECTION, TASK_COLLECTION, OP_COLLECTION, TRUST_COLLECTION, COMMENT_COLLECTION, buildAtUri } from './tid.js';
+import type { Board, Task, Op, Trust, Comment, BoardRecord, TaskRecord } from './types.js';
 import { opToRecord } from './ops.js';
 import { trustToRecord } from './trust.js';
+import { commentToRecord } from './comments.js';
 
 let syncInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -143,6 +144,33 @@ export async function syncPendingToPDS(agent: Agent, did: string): Promise<void>
 			console.error('Failed to sync trust to PDS:', err);
 			if (trust.id && !isNetworkError(err)) {
 				await db.trusts.update(trust.id, { syncStatus: 'error' });
+			}
+		}
+	}
+
+	// Sync pending comments
+	const pendingComments = await db.comments
+		.where('syncStatus')
+		.equals('pending')
+		.filter((c) => c.did === did)
+		.toArray();
+
+	for (const comment of pendingComments) {
+		try {
+			await agent.com.atproto.repo.putRecord({
+				repo: did,
+				collection: COMMENT_COLLECTION,
+				rkey: comment.rkey,
+				record: commentToRecord(comment),
+				validate: false
+			});
+			if (comment.id) {
+				await db.comments.update(comment.id, { syncStatus: 'synced' });
+			}
+		} catch (err) {
+			console.error('Failed to sync comment to PDS:', err);
+			if (comment.id && !isNetworkError(err)) {
+				await db.comments.update(comment.id, { syncStatus: 'error' });
 			}
 		}
 	}
@@ -314,6 +342,45 @@ export async function pullFromPDS(agent: Agent, did: string): Promise<void> {
 
 		cursor = res.data.cursor;
 	} while (cursor);
+
+	// Pull comments
+	cursor = undefined;
+	do {
+		const res = await agent.com.atproto.repo.listRecords({
+			repo: did,
+			collection: COMMENT_COLLECTION,
+			limit: 100,
+			cursor
+		});
+
+		for (const record of res.data.records) {
+			const rkey = record.uri.split('/').pop()!;
+			const value = record.value as Record<string, unknown>;
+
+			const existing = await db.comments.where('[did+rkey]').equals([did, rkey]).first();
+			if (existing && existing.syncStatus === 'pending') {
+				continue;
+			}
+
+			const commentData: Omit<Comment, 'id'> = {
+				rkey,
+				did,
+				targetTaskUri: (value.targetTaskUri as string) ?? '',
+				boardUri: (value.boardUri as string) ?? '',
+				text: (value.text as string) ?? '',
+				createdAt: (value.createdAt as string) ?? new Date().toISOString(),
+				syncStatus: 'synced'
+			};
+
+			if (existing?.id) {
+				await db.comments.update(existing.id, commentData);
+			} else {
+				await db.comments.add(commentData as Comment);
+			}
+		}
+
+		cursor = res.data.cursor;
+	} while (cursor);
 }
 
 export async function deleteBoardFromPDS(
@@ -339,6 +406,23 @@ export async function deleteBoardFromPDS(
 		}
 	}
 
+	// Delete comments from PDS
+	const comments = await db.comments.where('boardUri').equals(boardUri).filter((c) => c.did === did).toArray();
+
+	for (const comment of comments) {
+		if (comment.syncStatus === 'synced') {
+			try {
+				await agent.com.atproto.repo.deleteRecord({
+					repo: did,
+					collection: COMMENT_COLLECTION,
+					rkey: comment.rkey
+				});
+			} catch (err) {
+				console.error('Failed to delete comment from PDS:', err);
+			}
+		}
+	}
+
 	// Delete board from PDS
 	if (board.syncStatus === 'synced') {
 		try {
@@ -349,6 +433,24 @@ export async function deleteBoardFromPDS(
 			});
 		} catch (err) {
 			console.error('Failed to delete board from PDS:', err);
+		}
+	}
+}
+
+export async function deleteCommentFromPDS(
+	agent: Agent,
+	did: string,
+	comment: Comment
+): Promise<void> {
+	if (comment.syncStatus === 'synced') {
+		try {
+			await agent.com.atproto.repo.deleteRecord({
+				repo: did,
+				collection: COMMENT_COLLECTION,
+				rkey: comment.rkey
+			});
+		} catch (err) {
+			console.error('Failed to delete comment from PDS:', err);
 		}
 	}
 }
@@ -372,12 +474,12 @@ export async function deleteTaskFromPDS(
 }
 
 async function resetErrorsToPending(did: string): Promise<void> {
-	const tables = [db.boards, db.tasks, db.ops, db.trusts] as const;
+	const tables = [db.boards, db.tasks, db.ops, db.trusts, db.comments];
 	for (const table of tables) {
-		const errored = await table
+		const errored = await (table as any)
 			.where('syncStatus')
 			.equals('error')
-			.filter((r) => (r as { did: string }).did === did)
+			.filter((r: { did: string }) => r.did === did)
 			.toArray();
 		for (const record of errored) {
 			const id = (record as { id?: number }).id;

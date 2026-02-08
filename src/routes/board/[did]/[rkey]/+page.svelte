@@ -5,7 +5,7 @@
 	import { db } from '$lib/db.js';
 	import { useLiveQuery } from '$lib/db.svelte.js';
 	import { getAuth } from '$lib/auth.svelte.js';
-	import { buildAtUri, BOARD_COLLECTION, TASK_COLLECTION, OP_COLLECTION, TRUST_COLLECTION } from '$lib/tid.js';
+	import { buildAtUri, BOARD_COLLECTION, TASK_COLLECTION, OP_COLLECTION, TRUST_COLLECTION, COMMENT_COLLECTION } from '$lib/tid.js';
 	import { materializeTasks } from '$lib/materialize.js';
 	import { getBoardPermissions, hasPermission } from '$lib/permissions.js';
 	import {
@@ -18,11 +18,12 @@
 		fetchRemoteTasks,
 		fetchRemoteOps,
 		fetchRemoteTrusts,
+		fetchRemoteComments,
 		seedParticipantsFromTrusts,
 		fetchAllKnownParticipants,
 		addKnownParticipant
 	} from '$lib/remote-sync.js';
-	import type { Board, Task, Op, Trust, MaterializedTask } from '$lib/types.js';
+	import type { Board, Task, Op, Trust, Comment, MaterializedTask } from '$lib/types.js';
 	import Column from '$lib/components/Column.svelte';
 	import TaskEditModal from '$lib/components/TaskEditModal.svelte';
 
@@ -78,10 +79,11 @@
 				await fetchRemoteTrusts(ownerDid, boardUri);
 				await seedParticipantsFromTrusts(boardUri);
 
-				// Fetch owner's tasks and ops
+				// Fetch owner's tasks, ops, and comments
 				await Promise.all([
 					fetchRemoteTasks(ownerDid, boardUri),
-					fetchRemoteOps(ownerDid, boardUri)
+					fetchRemoteOps(ownerDid, boardUri),
+					fetchRemoteComments(ownerDid, boardUri)
 				]);
 
 				// Fetch all known participants' data
@@ -121,6 +123,11 @@
 			.toArray();
 	});
 
+	const allComments = useLiveQuery<Comment[]>(() => {
+		if (!boardUri) return [];
+		return db.comments.where('boardUri').equals(boardUri).toArray();
+	});
+
 	const ownerTrustedDids = $derived(
 		new Set((ownerTrusts.current ?? []).map((t) => t.trustedDid))
 	);
@@ -128,6 +135,14 @@
 	const permissions = $derived(
 		board.current ? getBoardPermissions(board.current) : getBoardPermissions({ permissions: undefined } as any)
 	);
+
+	const commentCountsByTask = $derived.by(() => {
+		const map = new Map<string, number>();
+		for (const comment of allComments.current ?? []) {
+			map.set(comment.targetTaskUri, (map.get(comment.targetTaskUri) ?? 0) + 1);
+		}
+		return map;
+	});
 
 	// Materialized view — pass '' as currentUserDid since viewer is not logged in
 	const materializedTasks = $derived.by(() => {
@@ -188,7 +203,7 @@
 			}
 
 			jetstreamClient = new JetstreamClient({
-				wantedCollections: [TASK_COLLECTION, OP_COLLECTION, TRUST_COLLECTION],
+				wantedCollections: [TASK_COLLECTION, OP_COLLECTION, TRUST_COLLECTION, COMMENT_COLLECTION],
 				cursor,
 				onEvent: async (event) => {
 					const result = await processJetstreamEvent(event);
@@ -280,6 +295,7 @@
 					boardOwnerDid={board.current.did}
 					{permissions}
 					{ownerTrustedDids}
+					commentCounts={commentCountsByTask}
 					onedit={openTaskViewer}
 					readonly={true}
 				/>
@@ -294,6 +310,8 @@
 			boardOwnerDid={board.current.did}
 			{permissions}
 			{ownerTrustedDids}
+			comments={allComments.current ?? []}
+			{boardUri}
 			onclose={() => (viewingTask = null)}
 			readonly={true}
 		/>

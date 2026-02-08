@@ -6,7 +6,8 @@ const DEFAULT_PERMISSIONS: BoardPermissions = {
 		{ operation: 'edit_title', scope: 'trusted' },
 		{ operation: 'edit_description', scope: 'trusted' },
 		{ operation: 'move_task', scope: 'trusted' },
-		{ operation: 'reorder', scope: 'trusted' }
+		{ operation: 'reorder', scope: 'trusted' },
+		{ operation: 'comment', scope: 'trusted' }
 	]
 };
 

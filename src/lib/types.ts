@@ -4,7 +4,7 @@ export type SyncStatus = 'synced' | 'pending' | 'error';
 
 export type PermissionScope = 'author_only' | 'trusted' | 'anyone';
 
-export type OperationType = 'create_task' | 'edit_title' | 'edit_description' | 'move_task' | 'reorder';
+export type OperationType = 'create_task' | 'edit_title' | 'edit_description' | 'move_task' | 'reorder' | 'comment';
 
 export interface PermissionRule {
 	operation: OperationType;
@@ -115,6 +115,27 @@ export interface TrustRecord {
 	$type: 'dev.skyboard.trust';
 	trustedDid: string;
 	boardUri: string;
+	createdAt: string;
+}
+
+// --- Comment types ---
+
+export interface Comment {
+	id?: number;
+	rkey: string;
+	did: string;
+	targetTaskUri: string;
+	boardUri: string;
+	text: string;
+	createdAt: string;
+	syncStatus: SyncStatus;
+}
+
+export interface CommentRecord {
+	$type: 'dev.skyboard.comment';
+	targetTaskUri: string;
+	boardUri: string;
+	text: string;
 	createdAt: string;
 }
 

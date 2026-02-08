@@ -17,6 +17,7 @@
 		boardOwnerDid,
 		permissions,
 		ownerTrustedDids,
+		commentCounts = new Map(),
 		onedit,
 		readonly = false
 	}: {
@@ -27,6 +28,7 @@
 		boardOwnerDid: string;
 		permissions: BoardPermissions;
 		ownerTrustedDids: Set<string>;
+		commentCounts?: Map<string, number>;
 		onedit: (task: MaterializedTask) => void;
 		readonly?: boolean;
 	} = $props();
@@ -194,7 +196,7 @@
 	<div class="task-list" bind:this={taskListEl}>
 		{#each sortedTasks as task, i (task.rkey + task.did)}
 			<div class="card-slot" class:drop-above={dropIndex === i}>
-				<TaskCard {task} currentUserDid={did} pending={isTaskPending(task)} {onedit} {readonly} />
+				<TaskCard {task} currentUserDid={did} pending={isTaskPending(task)} commentCount={commentCounts.get(`at://${task.ownerDid}/dev.skyboard.task/${task.rkey}`) ?? 0} {onedit} {readonly} />
 			</div>
 		{/each}
 		{#if dropIndex !== null && dropIndex >= sortedTasks.length}

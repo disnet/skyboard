@@ -1,5 +1,5 @@
 import { db } from './db.js';
-import { TASK_COLLECTION, OP_COLLECTION, TRUST_COLLECTION } from './tid.js';
+import { TASK_COLLECTION, OP_COLLECTION, TRUST_COLLECTION, COMMENT_COLLECTION } from './tid.js';
 
 const JETSTREAM_URL = 'wss://jetstream2.us-east.bsky.network/subscribe';
 
@@ -228,6 +228,13 @@ export async function processJetstreamEvent(
 				await db.trusts.delete(existing.id);
 				return { did, boardUri };
 			}
+		} else if (commit.collection === COMMENT_COLLECTION) {
+			const existing = await db.comments.where('[did+rkey]').equals([did, commit.rkey]).first();
+			if (existing?.id) {
+				const boardUri = existing.boardUri;
+				await db.comments.delete(existing.id);
+				return { did, boardUri };
+			}
 		}
 		return null;
 	}
@@ -304,6 +311,27 @@ export async function processJetstreamEvent(
 			await db.trusts.update(existing.id, trustData);
 		} else {
 			await db.trusts.add(trustData);
+		}
+		return { did, boardUri };
+	}
+
+	if (commit.collection === COMMENT_COLLECTION) {
+		const existing = await db.comments.where('[did+rkey]').equals([did, commit.rkey]).first();
+
+		const commentData = {
+			rkey: commit.rkey,
+			did,
+			targetTaskUri: (record.targetTaskUri as string) ?? '',
+			boardUri,
+			text: (record.text as string) ?? '',
+			createdAt: (record.createdAt as string) ?? new Date().toISOString(),
+			syncStatus: 'synced' as const
+		};
+
+		if (existing?.id) {
+			await db.comments.update(existing.id, commentData);
+		} else {
+			await db.comments.add(commentData);
 		}
 		return { did, boardUri };
 	}

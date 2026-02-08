@@ -1,0 +1,37 @@
+{
+  "lexicon": 1,
+  "id": "dev.skyboard.comment",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "A comment on a task within a board",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": ["targetTaskUri", "boardUri", "text", "createdAt"],
+        "properties": {
+          "targetTaskUri": {
+            "type": "string",
+            "format": "at-uri",
+            "description": "AT URI of the task this comment is on"
+          },
+          "boardUri": {
+            "type": "string",
+            "format": "at-uri",
+            "description": "AT URI of the board this comment belongs to"
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 10240,
+            "description": "The comment text"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "When the comment was created"
+          }
+        }
+      }
+    }
+  }
+}

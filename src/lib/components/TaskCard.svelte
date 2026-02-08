@@ -17,12 +17,14 @@
 		task,
 		currentUserDid,
 		pending = false,
+		commentCount = 0,
 		onedit,
 		readonly = false
 	}: {
 		task: MaterializedTask;
 		currentUserDid: string;
 		pending?: boolean;
+		commentCount?: number;
 		onedit: (task: MaterializedTask) => void;
 		readonly?: boolean;
 	} = $props();
@@ -97,6 +99,11 @@
 	{/if}
 	<div class="task-meta">
 		<AuthorBadge did={task.ownerDid} isCurrentUser={isOwned} />
+		{#if commentCount > 0}
+			<span class="comment-badge" title="{commentCount} comment{commentCount === 1 ? '' : 's'}">
+				{commentCount}
+			</span>
+		{/if}
 		{#if task.pendingOps.length > 0}
 			<span class="pending-badge" title="Has pending proposals">
 				{task.pendingOps.length}
@@ -255,6 +262,15 @@
 		align-items: center;
 		gap: 0.375rem;
 		margin-top: 0.375rem;
+	}
+
+	.comment-badge {
+		font-size: 0.625rem;
+		background: var(--color-border);
+		color: var(--color-text-secondary);
+		padding: 0 0.3125rem;
+		border-radius: var(--radius-sm);
+		font-weight: 600;
 	}
 
 	.pending-badge {

@@ -1,8 +1,9 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { db } from '$lib/db.js';
-	import type { MaterializedTask, BoardPermissions } from '$lib/types.js';
+	import type { MaterializedTask, BoardPermissions, Comment } from '$lib/types.js';
 	import { createOp } from '$lib/ops.js';
+	import { createComment, deleteComment } from '$lib/comments.js';
 	import { getPermissionStatus } from '$lib/permissions.js';
 	import type { PermissionStatus } from '$lib/permissions.js';
 	import AuthorBadge from './AuthorBadge.svelte';
@@ -23,6 +24,8 @@
 		boardOwnerDid,
 		permissions,
 		ownerTrustedDids,
+		comments = [],
+		boardUri = '',
 		onclose,
 		readonly = false
 	}: {
@@ -31,6 +34,8 @@
 		boardOwnerDid: string;
 		permissions: BoardPermissions;
 		ownerTrustedDids: Set<string>;
+		comments?: Comment[];
+		boardUri?: string;
 		onclose: () => void;
 		readonly?: boolean;
 	} = $props();
@@ -75,6 +80,48 @@
 		if (titleStatus === 'pending' || descriptionStatus === 'pending') return 'pending';
 		return 'denied';
 	});
+
+	// Comment-related derivations
+	const taskUri = $derived(
+		`at://${task.ownerDid}/dev.skyboard.task/${task.rkey}`
+	);
+
+	const taskComments = $derived(
+		comments
+			.filter((c) => c.targetTaskUri === taskUri)
+			.sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+	);
+
+	const commentStatus: PermissionStatus = $derived(
+		currentUserDid
+			? getPermissionStatus(
+					currentUserDid,
+					boardOwnerDid,
+					ownerTrustedDids,
+					permissions,
+					'comment'
+				)
+			: 'denied'
+	);
+
+	let commentText = $state('');
+	let submittingComment = $state(false);
+
+	async function submitComment() {
+		const text = commentText.trim();
+		if (!text || !currentUserDid || !boardUri) return;
+		submittingComment = true;
+		try {
+			await createComment(currentUserDid, taskUri, boardUri, text);
+			commentText = '';
+		} finally {
+			submittingComment = false;
+		}
+	}
+
+	async function handleDeleteComment(comment: Comment) {
+		await deleteComment(comment);
+	}
 
 	// We intentionally capture initial values for editing a copy
 	/* eslint-disable svelte/state-referenced-locally */
@@ -218,6 +265,52 @@
 					<span class="char-count" class:over-limit={editDescription.length > 10240}>
 						{editDescription.length.toLocaleString()} / 10,240
 					</span>
+				</div>
+			{/if}
+
+			{#if taskComments.length > 0 || (!readonly && commentStatus !== 'denied')}
+				<div class="comments-section">
+					<div class="comments-header">
+						<label>Comments ({taskComments.length})</label>
+					</div>
+					{#if taskComments.length > 0}
+						<div class="comments-list">
+							{#each taskComments as comment (comment.id)}
+								<div class="comment">
+									<div class="comment-header">
+										<AuthorBadge did={comment.did} isCurrentUser={comment.did === currentUserDid} />
+										<span class="comment-time">{new Date(comment.createdAt).toLocaleString()}</span>
+										{#if comment.syncStatus === 'pending'}
+											<span class="comment-sync-dot pending" title="Pending sync"></span>
+										{:else if comment.syncStatus === 'error'}
+											<span class="comment-sync-dot error" title="Sync error"></span>
+										{/if}
+										{#if comment.did === currentUserDid}
+											<button class="comment-delete-btn" onclick={() => handleDeleteComment(comment)} title="Delete comment">&times;</button>
+										{/if}
+									</div>
+									<div class="comment-text">{comment.text}</div>
+								</div>
+							{/each}
+						</div>
+					{/if}
+					{#if !readonly && commentStatus !== 'denied'}
+						<form class="comment-form" onsubmit={(e) => { e.preventDefault(); submitComment(); }}>
+							<textarea
+								class="comment-input"
+								bind:value={commentText}
+								placeholder={commentStatus === 'pending' ? 'Add a comment (pending approval)...' : 'Add a comment...'}
+								rows="2"
+								maxlength="10240"
+								disabled={submittingComment}
+							></textarea>
+							{#if commentText.trim()}
+								<button class="comment-submit-btn" type="submit" disabled={submittingComment}>
+									Comment
+								</button>
+							{/if}
+						</form>
+					{/if}
 				</div>
 			{/if}
 		</div>
@@ -550,5 +643,123 @@
 		font-size: 0.875rem;
 		color: var(--color-text-secondary);
 		font-style: italic;
+	}
+
+	.comments-section {
+		margin-top: 1.25rem;
+		border-top: 1px solid var(--color-border-light);
+		padding-top: 1rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+	}
+
+	.comments-header label {
+		font-size: 0.8125rem;
+		font-weight: 500;
+		color: var(--color-text-secondary);
+	}
+
+	.comments-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.625rem;
+	}
+
+	.comment {
+		background: var(--color-bg);
+		border-radius: var(--radius-md);
+		padding: 0.625rem 0.75rem;
+	}
+
+	.comment-header {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		margin-bottom: 0.25rem;
+	}
+
+	.comment-time {
+		font-size: 0.6875rem;
+		color: var(--color-text-secondary);
+	}
+
+	.comment-sync-dot {
+		width: 6px;
+		height: 6px;
+		border-radius: 50%;
+		flex-shrink: 0;
+	}
+
+	.comment-sync-dot.pending {
+		background: var(--color-warning);
+	}
+
+	.comment-sync-dot.error {
+		background: var(--color-error);
+	}
+
+	.comment-delete-btn {
+		margin-left: auto;
+		background: none;
+		border: none;
+		font-size: 1rem;
+		color: var(--color-text-secondary);
+		cursor: pointer;
+		padding: 0 0.25rem;
+		line-height: 1;
+	}
+
+	.comment-delete-btn:hover {
+		color: var(--color-error);
+	}
+
+	.comment-text {
+		font-size: 0.8125rem;
+		line-height: 1.5;
+		color: var(--color-text);
+		white-space: pre-wrap;
+		word-break: break-word;
+	}
+
+	.comment-form {
+		display: flex;
+		flex-direction: column;
+		gap: 0.375rem;
+	}
+
+	.comment-input {
+		width: 100%;
+		padding: 0.5rem 0.625rem;
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-md);
+		font-size: 0.8125rem;
+		font-family: inherit;
+		color: var(--color-text);
+		background: var(--color-surface);
+		resize: vertical;
+		min-height: 2.5rem;
+	}
+
+	.comment-input:focus {
+		outline: none;
+		border-color: var(--color-primary);
+	}
+
+	.comment-submit-btn {
+		align-self: flex-end;
+		padding: 0.375rem 0.75rem;
+		background: var(--color-primary);
+		color: white;
+		border: none;
+		border-radius: var(--radius-md);
+		font-size: 0.8125rem;
+		font-weight: 500;
+		cursor: pointer;
+	}
+
+	.comment-submit-btn:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
 	}
 </style>

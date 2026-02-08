@@ -16,7 +16,8 @@
 		{ key: 'edit_title', label: 'Edit title', showColumns: false },
 		{ key: 'edit_description', label: 'Edit description', showColumns: false },
 		{ key: 'move_task', label: 'Move between columns', showColumns: false },
-		{ key: 'reorder', label: 'Reorder within column', showColumns: false }
+		{ key: 'reorder', label: 'Reorder within column', showColumns: false },
+		{ key: 'comment', label: 'Comment on tasks', showColumns: false }
 	];
 
 	const SCOPES: { key: PermissionScope; label: string }[] = [

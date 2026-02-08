@@ -21,7 +21,8 @@
 		const tasks = await db.tasks.where('syncStatus').anyOf('pending', 'error').count();
 		const ops = await db.ops.where('syncStatus').anyOf('pending', 'error').count();
 		const trusts = await db.trusts.where('syncStatus').anyOf('pending', 'error').count();
-		return boards + tasks + ops + trusts;
+		const comments = await db.comments.where('syncStatus').anyOf('pending', 'error').count();
+		return boards + tasks + ops + trusts + comments;
 	});
 
 	const errorCount = useLiveQuery<number>(async () => {
@@ -29,7 +30,8 @@
 		const tasks = await db.tasks.where('syncStatus').equals('error').count();
 		const ops = await db.ops.where('syncStatus').equals('error').count();
 		const trusts = await db.trusts.where('syncStatus').equals('error').count();
-		return boards + tasks + ops + trusts;
+		const comments = await db.comments.where('syncStatus').equals('error').count();
+		return boards + tasks + ops + trusts + comments;
 	});
 
 	const unsynced = $derived(unsyncedCount.current ?? 0);
