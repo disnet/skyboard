@@ -102,7 +102,7 @@ export function materializeTasks(
 			}
 			fieldStates[field] = {
 				value,
-				timestamp: task.updatedAt || task.createdAt,
+				timestamp: task.createdAt,
 				author: task.did
 			};
 		}

@@ -129,20 +129,11 @@
 
 		const description = editDescription.trim() || undefined;
 
-		if (isOwned && task.sourceTask.id) {
-			await db.tasks.update(task.sourceTask.id, {
-				title,
-				description,
-				updatedAt: new Date().toISOString(),
-				syncStatus: 'pending'
-			});
-		} else {
-			const fields: Record<string, unknown> = {};
-			if (title !== task.effectiveTitle) fields.title = title;
-			if (description !== task.effectiveDescription) fields.description = description;
-			if (Object.keys(fields).length > 0) {
-				await createOp(currentUserDid, task.sourceTask, task.boardUri, fields);
-			}
+		const fields: Record<string, unknown> = {};
+		if (title !== task.effectiveTitle) fields.title = title;
+		if (description !== task.effectiveDescription) fields.description = description;
+		if (Object.keys(fields).length > 0) {
+			await createOp(currentUserDid, task.sourceTask, task.boardUri, fields);
 		}
 		onclose();
 	}
