@@ -1,0 +1,22 @@
+{
+	"name": "Skyboard",
+	"short_name": "Skyboard",
+	"description": "Kanban boards you actually own — built on AT Protocol",
+	"start_url": "/",
+	"scope": "/",
+	"display": "standalone",
+	"theme_color": "#0066cc",
+	"background_color": "#f5f5f7",
+	"icons": [
+		{
+			"src": "/icon-192.png",
+			"sizes": "192x192",
+			"type": "image/png"
+		},
+		{
+			"src": "/icon-512.png",
+			"sizes": "512x512",
+			"type": "image/png"
+		}
+	]
+}

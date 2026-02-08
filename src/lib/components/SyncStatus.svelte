@@ -1,12 +1,26 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { db } from '$lib/db.js';
 	import { useLiveQuery } from '$lib/db.svelte.js';
 
-	const pendingCount = useLiveQuery<number>(async () => {
-		const boards = await db.boards.where('syncStatus').equals('pending').count();
-		const tasks = await db.tasks.where('syncStatus').equals('pending').count();
-		const ops = await db.ops.where('syncStatus').equals('pending').count();
-		const trusts = await db.trusts.where('syncStatus').equals('pending').count();
+	let online = $state(navigator.onLine);
+
+	onMount(() => {
+		const setOnline = () => (online = true);
+		const setOffline = () => (online = false);
+		window.addEventListener('online', setOnline);
+		window.addEventListener('offline', setOffline);
+		return () => {
+			window.removeEventListener('online', setOnline);
+			window.removeEventListener('offline', setOffline);
+		};
+	});
+
+	const unsyncedCount = useLiveQuery<number>(async () => {
+		const boards = await db.boards.where('syncStatus').anyOf('pending', 'error').count();
+		const tasks = await db.tasks.where('syncStatus').anyOf('pending', 'error').count();
+		const ops = await db.ops.where('syncStatus').anyOf('pending', 'error').count();
+		const trusts = await db.trusts.where('syncStatus').anyOf('pending', 'error').count();
 		return boards + tasks + ops + trusts;
 	});
 
@@ -17,15 +31,24 @@
 		const trusts = await db.trusts.where('syncStatus').equals('error').count();
 		return boards + tasks + ops + trusts;
 	});
+
+	const unsynced = $derived(unsyncedCount.current ?? 0);
+	const errors = $derived(errorCount.current ?? 0);
 </script>
 
 <span class="sync-status">
-	{#if (errorCount.current ?? 0) > 0}
-		<span class="dot error"></span>
-		<span class="text error">Error ({errorCount.current})</span>
-	{:else if (pendingCount.current ?? 0) > 0}
+	{#if !online && unsynced > 0}
 		<span class="dot pending"></span>
-		<span class="text">Syncing ({pendingCount.current})...</span>
+		<span class="text">Offline ({unsynced} pending)</span>
+	{:else if !online}
+		<span class="dot offline"></span>
+		<span class="text">Offline</span>
+	{:else if errors > 0}
+		<span class="dot error"></span>
+		<span class="text error">Error ({errors})</span>
+	{:else if unsynced > 0}
+		<span class="dot pending"></span>
+		<span class="text">Syncing ({unsynced})...</span>
 	{:else}
 		<span class="dot synced"></span>
 		<span class="text">Synced</span>
@@ -55,6 +78,10 @@
 	.dot.pending {
 		background: var(--color-warning);
 		animation: pulse 1.5s ease-in-out infinite;
+	}
+
+	.dot.offline {
+		background: var(--color-text-secondary);
 	}
 
 	.dot.error {

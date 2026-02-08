@@ -12,6 +12,7 @@ const pdsCache = new Map<string, string>();
 async function resolvePDS(did: string): Promise<string | null> {
 	const cached = pdsCache.get(did);
 	if (cached) return cached;
+	if (!navigator.onLine) return null;
 
 	try {
 		let didDoc: Record<string, unknown>;

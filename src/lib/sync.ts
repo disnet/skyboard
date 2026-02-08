@@ -33,6 +33,8 @@ function taskToRecord(task: Task): TaskRecord {
 }
 
 export async function syncPendingToPDS(agent: Agent, did: string): Promise<void> {
+	if (!navigator.onLine) return;
+
 	const pendingBoards = await db.boards
 		.where('syncStatus')
 		.equals('pending')
@@ -141,6 +143,8 @@ export async function syncPendingToPDS(agent: Agent, did: string): Promise<void>
 }
 
 export async function pullFromPDS(agent: Agent, did: string): Promise<void> {
+	if (!navigator.onLine) return;
+
 	// Pull boards
 	let cursor: string | undefined;
 	do {
@@ -361,6 +365,25 @@ export async function deleteTaskFromPDS(
 	}
 }
 
+async function resetErrorsToPending(did: string): Promise<void> {
+	const tables = [db.boards, db.tasks, db.ops, db.trusts] as const;
+	for (const table of tables) {
+		const errored = await table
+			.where('syncStatus')
+			.equals('error')
+			.filter((r) => (r as { did: string }).did === did)
+			.toArray();
+		for (const record of errored) {
+			const id = (record as { id?: number }).id;
+			if (id) {
+				await table.update(id, { syncStatus: 'pending' });
+			}
+		}
+	}
+}
+
+let onlineHandler: (() => void) | null = null;
+
 export function startBackgroundSync(agent: Agent, did: string): void {
 	stopBackgroundSync();
 	syncInterval = setInterval(() => {
@@ -368,11 +391,23 @@ export function startBackgroundSync(agent: Agent, did: string): void {
 	}, 5_000);
 	// Also run immediately
 	syncPendingToPDS(agent, did).catch(console.error);
+
+	// When coming back online, reset errors and sync immediately
+	onlineHandler = () => {
+		resetErrorsToPending(did).then(() => {
+			syncPendingToPDS(agent, did).catch(console.error);
+		});
+	};
+	window.addEventListener('online', onlineHandler);
 }
 
 export function stopBackgroundSync(): void {
 	if (syncInterval) {
 		clearInterval(syncInterval);
 		syncInterval = null;
+	}
+	if (onlineHandler) {
+		window.removeEventListener('online', onlineHandler);
+		onlineHandler = null;
 	}
 }
