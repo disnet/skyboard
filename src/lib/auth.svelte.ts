@@ -84,15 +84,14 @@ export async function login(handle: string): Promise<void> {
 }
 
 export async function logout(): Promise<void> {
+	const sub = did;
 	agent = null;
 	did = null;
-	// Clear any stored sessions by re-initializing
-	if (oauthClient) {
+	if (oauthClient && sub) {
 		try {
-			// The BrowserOAuthClient doesn't have a direct logout method on the client,
-			// but clearing the state is sufficient for the UI
+			await oauthClient.revoke(sub);
 		} catch {
-			// Ignore cleanup errors
+			// Ignore revocation errors — state is already cleared
 		}
 	}
 }
