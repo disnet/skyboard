@@ -160,6 +160,10 @@
 		}
 		insertIdx = Math.max(0, Math.min(insertIdx, filtered.length));
 
+		// Skip no-op: card dropped back at its original position in the same column
+		// currentDropIndex is null when handleDragOver detected same-position hover
+		if (draggedIndex !== -1 && (currentDropIndex === null || insertIdx === draggedIndex)) return;
+
 		// Generate a position between the neighbors
 		const before = filtered[insertIdx - 1]?.effectivePosition ?? null;
 		const after = filtered[insertIdx]?.effectivePosition ?? null;
