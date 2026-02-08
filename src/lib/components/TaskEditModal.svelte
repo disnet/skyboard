@@ -12,6 +12,10 @@
 	import { languages } from '@codemirror/language-data';
 	import { indentWithTab } from '@codemirror/commands';
 	import { keymap, placeholder } from '@codemirror/view';
+	import { Marked } from 'marked';
+	import DOMPurify from 'dompurify';
+
+	const markedInstance = new Marked();
 
 	let {
 		task,
@@ -19,7 +23,8 @@
 		boardOwnerDid,
 		permissions,
 		ownerTrustedDids,
-		onclose
+		onclose,
+		readonly = false
 	}: {
 		task: MaterializedTask;
 		currentUserDid: string;
@@ -27,7 +32,14 @@
 		permissions: BoardPermissions;
 		ownerTrustedDids: Set<string>;
 		onclose: () => void;
+		readonly?: boolean;
 	} = $props();
+
+	const renderedDescription = $derived(
+		task.effectiveDescription
+			? DOMPurify.sanitize(markedInstance.parse(task.effectiveDescription) as string)
+			: ''
+	);
 
 	const isOwned = $derived(task.ownerDid === currentUserDid);
 
@@ -164,60 +176,72 @@
 
 <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
 <div class="modal-backdrop" onclick={handleBackdropClick}>
-	<div class="modal" role="dialog" aria-label="Edit Task">
+	<div class="modal" role="dialog" aria-label={readonly ? 'View Task' : 'Edit Task'}>
 		<div class="modal-header">
-			<input
-				class="edit-title"
-				type="text"
-				bind:value={editTitle}
-				placeholder="Task title"
-				disabled={titleStatus === 'denied'}
-			/>
-			{#if titleStatus === 'denied'}
-				<span class="field-status denied">Author only</span>
+			{#if readonly}
+				<span class="view-title">{task.effectiveTitle}</span>
+			{:else}
+				<input
+					class="edit-title"
+					type="text"
+					bind:value={editTitle}
+					placeholder="Task title"
+					disabled={titleStatus === 'denied'}
+				/>
+				{#if titleStatus === 'denied'}
+					<span class="field-status denied">Author only</span>
+				{/if}
 			{/if}
 			<button class="close-btn" onclick={onclose}>&times;</button>
 		</div>
 
 		<div class="modal-body">
-			<div class="field">
-				<div class="field-header">
-					<label>Description</label>
-					{#if descriptionStatus === 'denied'}
-						<span class="field-status denied">Author only</span>
-					{/if}
+			{#if readonly}
+				{#if renderedDescription}
+					<div class="rendered-description">{@html renderedDescription}</div>
+				{:else}
+					<p class="no-description">No description</p>
+				{/if}
+			{:else}
+				<div class="field">
+					<div class="field-header">
+						<label>Description</label>
+						{#if descriptionStatus === 'denied'}
+							<span class="field-status denied">Author only</span>
+						{/if}
+					</div>
+					<div
+						class="editor-wrapper"
+						class:disabled={descriptionStatus === 'denied'}
+						bind:this={editorContainer}
+					></div>
+					<span class="char-count" class:over-limit={editDescription.length > 10240}>
+						{editDescription.length.toLocaleString()} / 10,240
+					</span>
 				</div>
-				<div
-					class="editor-wrapper"
-					class:disabled={descriptionStatus === 'denied'}
-					bind:this={editorContainer}
-				></div>
-				<span class="char-count" class:over-limit={editDescription.length > 10240}>
-					{editDescription.length.toLocaleString()} / 10,240
-				</span>
-			</div>
+			{/if}
 		</div>
 
 		<div class="modal-footer">
 			<div class="footer-left">
 				<AuthorBadge did={task.ownerDid} isCurrentUser={isOwned} />
-				{#if !isOwned && editStatus === 'allowed'}
+				{#if !readonly && !isOwned && editStatus === 'allowed'}
 					<span class="op-notice">Changes will be proposed</span>
-				{:else if !isOwned && editStatus === 'pending'}
+				{:else if !readonly && !isOwned && editStatus === 'pending'}
 					<span class="op-notice pending-notice">
 						<span class="info-icon">i</span>
 						Changes pending board creator approval
 					</span>
-				{:else if !isOwned && editStatus === 'denied'}
+				{:else if !readonly && !isOwned && editStatus === 'denied'}
 					<span class="op-notice denied">Author only</span>
 				{/if}
 			</div>
 			<div class="footer-right">
-				{#if isOwned}
+				{#if !readonly && isOwned}
 					<button class="delete-btn" onclick={deleteTask}>Delete</button>
 				{/if}
-				<button class="cancel-btn" onclick={onclose}>Cancel</button>
-				{#if editStatus !== 'denied'}
+				<button class="cancel-btn" onclick={onclose}>{readonly ? 'Close' : 'Cancel'}</button>
+				{#if !readonly && editStatus !== 'denied'}
 					<button
 						class="save-btn"
 						onclick={save}
@@ -270,6 +294,14 @@
 		font-weight: 600;
 		color: var(--color-text);
 		background: transparent;
+		padding: 0.25rem 0;
+	}
+
+	.view-title {
+		flex: 1;
+		font-size: 1.125rem;
+		font-weight: 600;
+		color: var(--color-text);
 		padding: 0.25rem 0;
 	}
 
@@ -454,5 +486,69 @@
 
 	.delete-btn:hover {
 		border-color: var(--color-error);
+	}
+
+	.rendered-description {
+		font-size: 0.875rem;
+		line-height: 1.6;
+		color: var(--color-text);
+		word-break: break-word;
+	}
+
+	.rendered-description :global(p) {
+		margin: 0 0 0.75em;
+	}
+
+	.rendered-description :global(h1),
+	.rendered-description :global(h2),
+	.rendered-description :global(h3),
+	.rendered-description :global(h4),
+	.rendered-description :global(h5),
+	.rendered-description :global(h6) {
+		margin: 0 0 0.5em;
+		font-weight: 600;
+	}
+
+	.rendered-description :global(ul),
+	.rendered-description :global(ol) {
+		margin: 0 0 0.75em;
+		padding-left: 1.5em;
+	}
+
+	.rendered-description :global(code) {
+		font-size: 0.8125rem;
+		background: var(--color-border-light);
+		padding: 0.15em 0.35em;
+		border-radius: var(--radius-sm);
+	}
+
+	.rendered-description :global(pre) {
+		margin: 0.5em 0;
+		padding: 0.75em 1em;
+		background: var(--color-border-light);
+		border-radius: var(--radius-md);
+		overflow-x: auto;
+	}
+
+	.rendered-description :global(pre code) {
+		background: none;
+		padding: 0;
+	}
+
+	.rendered-description :global(blockquote) {
+		margin: 0.5em 0;
+		padding-left: 0.75em;
+		border-left: 3px solid var(--color-border);
+		color: var(--color-text-secondary);
+	}
+
+	.rendered-description :global(:last-child) {
+		margin-bottom: 0;
+	}
+
+	.no-description {
+		font-size: 0.875rem;
+		color: var(--color-text-secondary);
+		font-style: italic;
 	}
 </style>

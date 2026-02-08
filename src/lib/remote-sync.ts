@@ -1,6 +1,6 @@
 import { db } from './db.js';
-import { TASK_COLLECTION, OP_COLLECTION, BOARD_COLLECTION } from './tid.js';
-import type { Task, Op, Board } from './types.js';
+import { TASK_COLLECTION, OP_COLLECTION, BOARD_COLLECTION, TRUST_COLLECTION } from './tid.js';
+import type { Task, Op, Board, Trust } from './types.js';
 
 // Cache resolved PDS endpoints to avoid repeated lookups
 const pdsCache = new Map<string, string>();
@@ -180,6 +180,48 @@ export async function fetchRemoteBoard(
 		};
 	} catch {
 		return null;
+	}
+}
+
+export async function fetchRemoteTrusts(
+	ownerDid: string,
+	boardUri: string
+): Promise<void> {
+	const records = await fetchRecordsFromRepo(ownerDid, TRUST_COLLECTION);
+
+	for (const record of records) {
+		const value = record.value;
+		if (value.boardUri !== boardUri) continue;
+
+		const rkey = record.uri.split('/').pop()!;
+		const trustedDid = (value.trustedDid as string) ?? '';
+		const existing = await db.trusts
+			.where('[did+boardUri+trustedDid]')
+			.equals([ownerDid, boardUri, trustedDid])
+			.first();
+
+		const trustData: Omit<Trust, 'id'> = {
+			rkey,
+			did: ownerDid,
+			trustedDid,
+			boardUri,
+			createdAt: (value.createdAt as string) ?? new Date().toISOString(),
+			syncStatus: 'synced'
+		};
+
+		if (existing?.id) {
+			await db.trusts.update(existing.id, trustData);
+		} else {
+			await db.trusts.add(trustData as Trust);
+		}
+	}
+}
+
+export async function seedParticipantsFromTrusts(boardUri: string): Promise<void> {
+	const trusts = await db.trusts.where('boardUri').equals(boardUri).toArray();
+	for (const trust of trusts) {
+		await addKnownParticipant(trust.trustedDid, boardUri);
+		await addKnownParticipant(trust.did, boardUri);
 	}
 }
 

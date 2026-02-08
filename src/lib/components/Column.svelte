@@ -17,7 +17,8 @@
 		boardOwnerDid,
 		permissions,
 		ownerTrustedDids,
-		onedit
+		onedit,
+		readonly = false
 	}: {
 		column: Column;
 		tasks: MaterializedTask[];
@@ -27,6 +28,7 @@
 		permissions: BoardPermissions;
 		ownerTrustedDids: Set<string>;
 		onedit: (task: MaterializedTask) => void;
+		readonly?: boolean;
 	} = $props();
 
 	const createStatus: PermissionStatus = $derived(
@@ -77,7 +79,7 @@
 	}
 
 	function handleDragOver(e: DragEvent) {
-		if (moveStatus === 'denied') return;
+		if (readonly || moveStatus === 'denied') return;
 		e.preventDefault();
 		if (e.dataTransfer) {
 			e.dataTransfer.dropEffect = 'move';
@@ -121,6 +123,7 @@
 	}
 
 	function handleDragLeave(e: DragEvent) {
+		if (readonly) return;
 		const relatedTarget = e.relatedTarget as Node | null;
 		const currentTarget = e.currentTarget as HTMLElement;
 		if (relatedTarget && currentTarget.contains(relatedTarget)) return;
@@ -128,6 +131,7 @@
 	}
 
 	async function handleDrop(e: DragEvent) {
+		if (readonly) return;
 		e.preventDefault();
 		const currentDropIndex = dropIndex;
 		dropIndex = null;
@@ -186,7 +190,7 @@
 	<div class="task-list" bind:this={taskListEl}>
 		{#each sortedTasks as task, i (task.rkey + task.did)}
 			<div class="card-slot" class:drop-above={dropIndex === i}>
-				<TaskCard {task} currentUserDid={did} pending={isTaskPending(task)} {onedit} />
+				<TaskCard {task} currentUserDid={did} pending={isTaskPending(task)} {onedit} {readonly} />
 			</div>
 		{/each}
 		{#if dropIndex !== null && dropIndex >= sortedTasks.length}
@@ -194,22 +198,24 @@
 		{/if}
 	</div>
 
-	{#if createStatus !== 'denied'}
-		<form class="add-task-form" onsubmit={addTask}>
-			<input
-				type="text"
-				bind:value={newTaskTitle}
-				placeholder={createStatus === 'pending' ? 'Add a task (pending approval)...' : 'Add a task...'}
-				disabled={adding}
-			/>
-			{#if newTaskTitle.trim()}
-				<button type="submit" disabled={adding}>Add</button>
-			{/if}
-		</form>
-	{:else}
-		<div class="permission-notice denied">
-			<span>Author only</span>
-		</div>
+	{#if !readonly}
+		{#if createStatus !== 'denied'}
+			<form class="add-task-form" onsubmit={addTask}>
+				<input
+					type="text"
+					bind:value={newTaskTitle}
+					placeholder={createStatus === 'pending' ? 'Add a task (pending approval)...' : 'Add a task...'}
+					disabled={adding}
+				/>
+				{#if newTaskTitle.trim()}
+					<button type="submit" disabled={adding}>Add</button>
+				{/if}
+			</form>
+		{:else}
+			<div class="permission-notice denied">
+				<span>Author only</span>
+			</div>
+		{/if}
 	{/if}
 </div>
 

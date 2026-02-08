@@ -17,12 +17,14 @@
 		task,
 		currentUserDid,
 		pending = false,
-		onedit
+		onedit,
+		readonly = false
 	}: {
 		task: MaterializedTask;
 		currentUserDid: string;
 		pending?: boolean;
 		onedit: (task: MaterializedTask) => void;
+		readonly?: boolean;
 	} = $props();
 
 	const renderedDescription = $derived(
@@ -41,7 +43,7 @@
 	let wasDragged = false;
 
 	function handleDragStart(e: DragEvent) {
-		if (!e.dataTransfer || !task.sourceTask.id) return;
+		if (readonly || !e.dataTransfer || !task.sourceTask.id) return;
 		wasDragged = true;
 		e.dataTransfer.setData(
 			'application/x-skyboard-task',
@@ -77,7 +79,8 @@
 	class="task-card"
 	class:task-pending={pending}
 	class:dragging={isDragging}
-	draggable="true"
+	class:task-readonly={readonly}
+	draggable={readonly ? 'false' : 'true'}
 	ondragstart={handleDragStart}
 	ondragend={handleDragEnd}
 	onclick={handleClick}
@@ -100,10 +103,12 @@
 			</span>
 		{/if}
 	</div>
-	{#if task.sourceTask.syncStatus === 'pending'}
-		<span class="sync-dot pending" title="Pending sync"></span>
-	{:else if task.sourceTask.syncStatus === 'error'}
-		<span class="sync-dot error" title="Sync error"></span>
+	{#if !readonly}
+		{#if task.sourceTask.syncStatus === 'pending'}
+			<span class="sync-dot pending" title="Pending sync"></span>
+		{:else if task.sourceTask.syncStatus === 'error'}
+			<span class="sync-dot error" title="Sync error"></span>
+		{/if}
 	{/if}
 </div>
 
@@ -120,7 +125,11 @@
 			border-color 0.15s;
 	}
 
-	.task-card:active {
+	.task-card.task-readonly {
+		cursor: pointer;
+	}
+
+	.task-card:active:not(.task-readonly) {
 		cursor: grabbing;
 	}
 
