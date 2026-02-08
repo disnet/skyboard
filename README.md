@@ -59,6 +59,58 @@ Each user runs the full stack in their browser. There is no central server — d
      (same stack as above)
 ```
 
+### Multi-user coordination
+
+When multiple users collaborate on a board, each writes only to their own PDS. The board owner's PDS is the source of truth for board configuration and trust grants. Ops in any PDS can reference tasks in any other PDS via AT URI.
+
+```
+ ┌─ Alice's PDS ─────────────┐  ┌─ Bob's PDS ────────────┐  ┌─ Carol's PDS ──────────┐
+ │  (board owner)            │  │  (trusted collaborator)│  │  (untrusted)           │
+ │                           │  │                        │  │                        │
+ │  ┌───────────────────┐    │  │                        │  │                        │
+ │  │ Board             │    │  │                        │  │                        │
+ │  │ columns, perms    │    │  │                        │  │                        │
+ │  └───────────────────┘    │  │                        │  │                        │
+ │                           │  │                        │  │                        │
+ │  ┌────────┐ ┌────────┐    │  │  ┌────────┐ ┌────────┐ │  │  ┌────────┐ ┌────────┐ │
+ │  │ Tasks  │ │  Ops   │    │  │  │ Tasks  │ │  Ops   │ │  │  │ Tasks  │ │  Ops   │ │
+ │  └───┬────┘ └────────┘    │  │  └────────┘ └───┬────┘ │  │  └────────┘ └───┬────┘ │
+ │      │                    │  │                 │      │  │                 │      │
+ │  ┌───┴────────────────┐   │  │            ┌────┘      │  │            ┌────┘      │
+ │  │ Trust              │   │  │            │           │  │            │           │
+ │  │ └ Bob ✓            │   │  │            │           │  │            │           │
+ │  └────────────────────┘   │  │            │           │  │            │           │
+ └───────────────────────────┘  └────────────┼───────────┘  └────────────┼───────────┘
+          │                                  │                           │
+          │     ┌────────────────────────────┘                           │
+          │     │  Ops target tasks in ANY repo via AT URI               │
+          │     │  at://did:plc:alice/dev.skyboard.task/rkey             │
+          │     │                       ┌────────────────────────────────┘
+          │     │                       │
+          └─────┴───────────────────────┘
+                        │
+                  commit events
+                        │
+                        ▼
+              ┌───────────────────┐
+              │     Jetstream     │
+              │  (WebSocket relay)│
+              └─────────┬─────────┘
+                        │
+                  real-time events
+                        │
+                        ▼
+ ┌─────────────────────────────────────────────────────────────────────────────┐
+ │                           Each User's Browser                               │
+ │                                                                             │
+ │  Fetch all        Filter by          Merge via           Render             │
+ │  participants ──▶ trust + ────────▶ per-field ────────▶ board               │
+ │  records          permissions        LWW                 view               │
+ │                                                                             │
+ │  Bob's ops → applied ✓         Carol's ops → pending proposals              │
+ └─────────────────────────────────────────────────────────────────────────────┘
+```
+
 ## Data model
 
 There are four record types, each stored as AT Protocol records in the user's repo:
