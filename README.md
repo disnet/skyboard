@@ -8,6 +8,57 @@ Users sign in with their Bluesky account and create boards. Each board gets an A
 
 All data is stored locally in IndexedDB (via Dexie) and synced to each user's PDS in the background. The app works offline and catches up when reconnected.
 
+## Architecture
+
+Each user runs the full stack in their browser. There is no central server — data syncs through AT Protocol personal data servers, with real-time updates relayed via Jetstream.
+
+```
+ ┌─ Browser (per user) ────────────────────────────────────────────┐
+ │                                                                 │
+ │   ┌──────────────────────────────────────────────────────────┐  │
+ │   │                     Svelte 5 UI                          │  │
+ │   │              Board  →  Columns  →  Cards                 │  │
+ │   └───────┬──────────────────────────────────▲───────────────┘  │
+ │           │ user action                      │ render           │
+ │           ▼                                  │                  │
+ │   ┌───────────────────┐          ┌───────────┴──────────────┐   │
+ │   │  Dexie (IndexedDB)│─────────▶│   materializeTasks()     │   │
+ │   │                   │ liveQuery│                          │   │
+ │   │  boards           │          │  group ops by task       │   │
+ │   │  tasks            │          │  filter by trust +       │   │
+ │   │  ops              │          │    permissions           │   │
+ │   │  trust            │          │  per-field LWW merge     │   │
+ │   │                   │          │  → MaterializedTask[]    │   │
+ │   │  (syncStatus:     │          └──────────────────────────┘   │
+ │   │   pending/synced) │                                         │
+ │   └─────────┬─────────┘                                         │
+ │             │                            ▲ Jetstream events     │
+ └─────────────┼────────────────────────────┼──────────────────────┘
+               │ background sync            │
+               │ putRecord / deleteRecord   │
+               ▼                            │
+ ┌──────────────────────────────┐           │
+ │        User's PDS            │           │
+ │   (Personal Data Server)     │           │
+ │                              │           │
+ │   at://did:plc:xxx/          │           │
+ │     dev.skyboard.board/*     │           │
+ │     dev.skyboard.task/*      │           │
+ │     dev.skyboard.op/*        │           │
+ │     dev.skyboard.trust/*     │           │
+ └──────────────┬───────────────┘           │
+                │ commit events             │
+                ▼                           │
+ ┌──────────────────────────────┐           │
+ │          Jetstream           │───────────┘
+ │    (WebSocket event relay)   │  real-time events
+ └──────────────┬───────────────┘  to subscribed browsers
+                │
+                ▼
+     Other users' browsers
+     (same stack as above)
+```
+
 ## Data model
 
 There are four record types, each stored as AT Protocol records in the user's repo:
