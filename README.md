@@ -13,13 +13,15 @@ All data is stored locally in IndexedDB (via Dexie) and synced to each user's PD
 There are four record types, each stored as AT Protocol records in the user's repo:
 
 - **Board** (`blue.kanban.board`) — name, description, column configuration, and permission rules. Owned by whoever created it.
-- **Task** (`blue.kanban.task`) — a card on the board with title, description, column, and fractional index position. Owned by whoever created it.
-- **Op** (`blue.kanban.op`) — an edit to someone else's task. Contains partial field updates (title, description, columnId, position) and targets a task by AT URI.
+- **Task** (`blue.kanban.task`) — a card on the board with title, description, column, and fractional index position. Owned by whoever created it. Write-once: the record captures the initial state at creation and is never updated directly.
+- **Op** (`blue.kanban.op`) — an edit to any task, including your own. Contains partial field updates (title, description, columnId, position) and targets a task by AT URI.
 - **Trust** (`blue.kanban.trust`) — a per-board grant allowing another user's ops to take effect on your view of the board.
 
 ### Why ops?
 
 You can only write to your own AT Protocol repo. If you want to move or edit someone else's card, you publish an Op record to your repo proposing the change. The board owner (and other participants who trust you) will see your edit applied; those who don't trust you will see it as a pending proposal.
+
+All task edits go through ops — even edits to your own tasks. This ensures per-field LWW timestamps are always correct. A single `updatedAt` on the task record can't distinguish which fields actually changed, so a direct write to one field (e.g. title) would poison the timestamp for all fields, silently reverting concurrent ops on other fields (e.g. a collaborator's column move). By routing all edits through ops, each field change carries its own timestamp and LWW resolves correctly.
 
 ## Conflict resolution
 
@@ -74,9 +76,15 @@ When a user performs an action they don't have full permission for (e.g. scope i
 ## Sync architecture
 
 ```
-User action (create/edit/move task)
-  → Local IndexedDB update (syncStatus: 'pending')
-  → Background sync every 30s pushes to user's PDS
+Task creation
+  → db.tasks.add() in IndexedDB (syncStatus: 'pending')
+  → Background sync pushes task record to user's PDS
+
+Task edit (own or others')
+  → db.ops.add() in IndexedDB (syncStatus: 'pending')
+  → materializeTasks merges base task + ops via per-field LWW
+  → UI updates immediately from local state
+  → Background sync pushes op record to user's PDS
   → PDS commit broadcast via Jetstream WebSocket
   → Other clients receive event and upsert into their local DB
   → Live queries re-execute, materializeTasks runs, UI updates
