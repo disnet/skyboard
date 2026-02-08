@@ -1,6 +1,6 @@
 {
   "lexicon": 1,
-  "id": "blue.kanban.board",
+  "id": "dev.skyboard.board",
   "defs": {
     "main": {
       "type": "record",

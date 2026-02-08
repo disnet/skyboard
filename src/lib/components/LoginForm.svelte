@@ -16,7 +16,7 @@
 
 <div class="login-container">
 	<div class="login-card">
-		<h1>AT Kanban</h1>
+		<h1>Skyboard</h1>
 		<p class="subtitle">Sign in with your AT Protocol identity</p>
 
 		<form onsubmit={handleSubmit}>

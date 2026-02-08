@@ -129,7 +129,7 @@
 		<input
 			type="text"
 			bind:value={joinUri}
-			placeholder="Join board by AT URI (at://did/blue.kanban.board/...)"
+			placeholder="Join board by AT URI (at://did/dev.skyboard.board/...)"
 			disabled={joining}
 		/>
 		<button type="submit" disabled={joining || !joinUri.trim()}>

@@ -1,7 +1,7 @@
 import Dexie, { type EntityTable } from 'dexie';
 import type { Board, Task, Op, Trust, KnownParticipant } from './types.js';
 
-const db = new Dexie('at-kanban') as Dexie & {
+const db = new Dexie('skyboard') as Dexie & {
 	boards: EntityTable<Board, 'id'>;
 	tasks: EntityTable<Task, 'id'>;
 	ops: EntityTable<Op, 'id'>;

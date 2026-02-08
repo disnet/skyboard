@@ -1,6 +1,6 @@
 {
   "lexicon": 1,
-  "id": "blue.kanban.task",
+  "id": "dev.skyboard.task",
   "defs": {
     "main": {
       "type": "record",

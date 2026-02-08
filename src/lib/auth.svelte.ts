@@ -2,7 +2,7 @@ import { Agent } from '@atproto/api';
 import { BrowserOAuthClient, buildAtprotoLoopbackClientMetadata } from '@atproto/oauth-client-browser';
 
 const OAUTH_SCOPE =
-	'atproto repo:blue.kanban.board repo:blue.kanban.task repo:blue.kanban.op repo:blue.kanban.trust';
+	'atproto repo:dev.skyboard.board repo:dev.skyboard.task repo:dev.skyboard.op repo:dev.skyboard.trust';
 
 let agent = $state<Agent | null>(null);
 let did = $state<string | null>(null);
@@ -37,7 +37,7 @@ export async function initAuth(): Promise<void> {
 			oauthClient = new BrowserOAuthClient({
 				clientMetadata: {
 					client_id: `${window.location.origin}/client-metadata.json`,
-					client_name: 'AT Kanban',
+					client_name: 'Skyboard',
 					client_uri: window.location.origin,
 					redirect_uris: [`${window.location.origin}/`],
 					scope: OAUTH_SCOPE,
