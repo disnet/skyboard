@@ -473,6 +473,24 @@ export async function deleteTaskFromPDS(
 	}
 }
 
+export async function deleteTrustFromPDS(
+	agent: Agent,
+	did: string,
+	trust: Trust
+): Promise<void> {
+	if (trust.syncStatus === 'synced') {
+		try {
+			await agent.com.atproto.repo.deleteRecord({
+				repo: did,
+				collection: TRUST_COLLECTION,
+				rkey: trust.rkey
+			});
+		} catch (err) {
+			console.error('Failed to delete trust from PDS:', err);
+		}
+	}
+}
+
 async function resetErrorsToPending(did: string): Promise<void> {
 	const tables = [db.boards, db.tasks, db.ops, db.trusts, db.comments];
 	for (const table of tables) {

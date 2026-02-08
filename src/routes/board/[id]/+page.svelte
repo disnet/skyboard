@@ -20,6 +20,7 @@
 	import PermissionsModal from '$lib/components/PermissionsModal.svelte';
 	import ProposalPanel from '$lib/components/ProposalPanel.svelte';
 	import OpsPanel from '$lib/components/OpsPanel.svelte';
+	import TrustedUsersPanel from '$lib/components/TrustedUsersPanel.svelte';
 	import TaskEditModal from '$lib/components/TaskEditModal.svelte';
 
 	const auth = getAuth();
@@ -176,6 +177,7 @@
 	let showPermissions = $state(false);
 	let showProposals = $state(false);
 	let showOpsPanel = $state(false);
+	let showTrustedUsers = $state(false);
 	let editingTask = $state<MaterializedTask | null>(null);
 
 	function openTaskEditor(task: MaterializedTask) {
@@ -297,6 +299,12 @@
 					{shareCopied ? 'Copied!' : 'Share'}
 				</button>
 				{#if isBoardOwner}
+					<button class="trusted-btn" onclick={() => (showTrustedUsers = true)}>
+						Trusted
+						{#if (ownerTrusts.current ?? []).length > 0}
+							<span class="trusted-badge">{(ownerTrusts.current ?? []).length}</span>
+						{/if}
+					</button>
 					<button class="settings-btn" onclick={() => (showPermissions = true)}>
 						Permissions
 					</button>
@@ -340,6 +348,14 @@
 			{untrustedComments}
 			{boardUri}
 			onclose={() => (showProposals = false)}
+		/>
+	{/if}
+
+	{#if showTrustedUsers && isBoardOwner}
+		<TrustedUsersPanel
+			trusts={ownerTrusts.current ?? []}
+			{boardUri}
+			onclose={() => (showTrustedUsers = false)}
 		/>
 	{/if}
 
@@ -491,6 +507,38 @@
 	.badge {
 		font-size: 0.6875rem;
 		background: var(--color-warning);
+		color: white;
+		padding: 0 0.375rem;
+		border-radius: var(--radius-sm);
+		font-weight: 600;
+		min-width: 1rem;
+		text-align: center;
+	}
+
+	.trusted-btn {
+		padding: 0.375rem 0.75rem;
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-md);
+		font-size: 0.8125rem;
+		cursor: pointer;
+		background: var(--color-surface);
+		color: var(--color-text-secondary);
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		transition:
+			background 0.15s,
+			color 0.15s;
+	}
+
+	.trusted-btn:hover {
+		background: var(--color-bg);
+		color: var(--color-text);
+	}
+
+	.trusted-badge {
+		font-size: 0.6875rem;
+		background: var(--color-primary);
 		color: white;
 		padding: 0 0.375rem;
 		border-radius: var(--radius-sm);

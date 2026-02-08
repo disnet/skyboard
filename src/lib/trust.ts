@@ -1,5 +1,7 @@
 import { db } from './db.js';
 import { generateTID } from './tid.js';
+import { deleteTrustFromPDS } from './sync.js';
+import { getAuth } from './auth.svelte.js';
 import type { Trust, TrustRecord } from './types.js';
 
 export async function grantTrust(
@@ -34,13 +36,15 @@ export async function revokeTrust(
 		.first();
 	if (!trust || !trust.id) return;
 
-	// Mark for deletion from PDS if it was synced
+	// Delete from PDS if it was synced
 	if (trust.syncStatus === 'synced') {
-		// We'll handle PDS deletion in sync.ts
-		await db.trusts.delete(trust.id);
-	} else {
-		await db.trusts.delete(trust.id);
+		const auth = getAuth();
+		if (auth.agent) {
+			await deleteTrustFromPDS(auth.agent, did, trust);
+		}
 	}
+
+	await db.trusts.delete(trust.id);
 }
 
 export async function getTrustedDids(did: string, boardUri: string): Promise<string[]> {
