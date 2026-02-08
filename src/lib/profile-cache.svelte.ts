@@ -24,6 +24,7 @@ const inflight = new Map<string, Promise<void>>();
 
 async function fetchProfile(did: string): Promise<void> {
 	if (inflight.has(did)) return;
+	if (!navigator.onLine) return;
 
 	const promise = (async () => {
 		try {
