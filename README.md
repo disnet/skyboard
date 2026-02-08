@@ -68,6 +68,56 @@ There are four record types, each stored as AT Protocol records in the user's re
 - **Op** (`dev.skyboard.op`) — an edit to any task, including your own. Contains partial field updates (title, description, columnId, position) and targets a task by AT URI.
 - **Trust** (`dev.skyboard.trust`) — a per-board grant allowing another user's ops to take effect on your view of the board.
 
+Here's how two users coordinate on a single board. Each user can only write records to their own PDS — cross-user edits work by writing Ops that reference another user's Task by AT URI.
+
+```
+  Alice's PDS (did:plc:alice)              Bob's PDS (did:plc:bob)
+  ───────────────────────────              ───────────────────────────
+
+  Board                                    (Alice owns the board)
+  ├ name: "Sprint Board"
+  ├ columns: [Todo, Doing, Done]
+  └ permissions: [{move_task: trusted}]
+
+  Task                                     Task
+  ├ title: "Fix login bug"                 ├ title: "Add dark mode"
+  ├ columnId: todo                         ├ columnId: todo
+  └ position: "a0"                         └ position: "a1"
+       ▲                                        ▲
+       │ target                                 │ target
+       │                                        │
+  Op   │  (Alice moves her task)           Op   │  (Bob edits his own task)
+  ├ target: at://alice/task/...            ├ target: at://bob/task/...
+  ├ columnId: doing                        ├ description: "Support light/dark"
+  └ updatedAt: T1                          └ updatedAt: T3
+
+                                           Op      (Bob edits Alice's task)
+                                           ├ target: at://alice/task/...  ◄─ cross-repo
+                                           ├ title: "Fix auth bug"
+                                           └ updatedAt: T2
+
+  Trust  (Alice grants Bob access)
+  ├ board: at://alice/board/...
+  └ subject: did:plc:bob
+
+
+  Materialization (runs in each browser)
+  ═══════════════════════════════════════════════════════════════
+
+  For Alice's task ("Fix login bug"):
+
+    base     title: "Fix login bug"   columnId: todo   position: "a0"
+               │                        │
+    + op T1    │                        └──▶ doing     (Alice, owner)
+    + op T2    └──▶ "Fix auth bug"                     (Bob, trusted)
+               ─────────────────────    ────────────   ─────────────
+    result     title: "Fix auth bug"   col: doing      position: "a0"
+
+               Per-field LWW: each field resolved independently by timestamp.
+               Bob's op applied because Alice published a Trust record for him.
+               Without trust, it would appear in the Proposals panel instead.
+```
+
 ### Why ops?
 
 You can only write to your own AT Protocol repo. If you want to move or edit someone else's card, you publish an Op record to your repo proposing the change. The board owner (and other participants who trust you) will see your edit applied; those who don't trust you will see it as a pending proposal.
