@@ -3,7 +3,7 @@
 	import { db } from '$lib/db.js';
 	import { useLiveQuery } from '$lib/db.svelte.js';
 	import { getAuth } from '$lib/auth.svelte.js';
-	import { generateTID, BOARD_COLLECTION } from '$lib/tid.js';
+	import { generateTID, BOARD_COLLECTION, buildAtUri } from '$lib/tid.js';
 	import type { Board, Column } from '$lib/types.js';
 	import { fetchRemoteBoard, addKnownParticipant } from '$lib/remote-sync.js';
 	import { grantTrust } from '$lib/trust.js';
@@ -52,6 +52,24 @@
 		}
 	}
 
+	function parseBoardInput(input: string): { ownerDid: string; rkey: string } | null {
+		// Try AT URI: at://did/collection/rkey
+		const atMatch = input.match(/^at:\/\/([^/]+)\/([^/]+)\/([^/]+)$/);
+		if (atMatch) {
+			const [, did, collection, rkey] = atMatch;
+			if (collection !== BOARD_COLLECTION) return null;
+			return { ownerDid: did, rkey };
+		}
+
+		// Try web URL: https://host/board/did/rkey
+		const urlMatch = input.match(/\/board\/(did:[^/]+)\/([^/]+)\/?$/);
+		if (urlMatch) {
+			return { ownerDid: urlMatch[1], rkey: urlMatch[2] };
+		}
+
+		return null;
+	}
+
 	async function joinBoard(e: Event) {
 		e.preventDefault();
 		const uri = joinUri.trim();
@@ -61,18 +79,14 @@
 		joining = true;
 
 		try {
-			// Parse AT URI: at://did/collection/rkey
-			const match = uri.match(/^at:\/\/([^/]+)\/([^/]+)\/([^/]+)$/);
-			if (!match) {
-				joinError = 'Invalid AT URI format. Expected: at://did/collection/rkey';
+			const parsed = parseBoardInput(uri);
+			if (!parsed) {
+				joinError = 'Invalid format. Paste a board link or AT URI.';
 				return;
 			}
 
-			const [, ownerDid, collection, rkey] = match;
-			if (collection !== BOARD_COLLECTION) {
-				joinError = `Expected collection ${BOARD_COLLECTION}`;
-				return;
-			}
+			const { ownerDid, rkey } = parsed;
+			const collection = BOARD_COLLECTION;
 
 			// Check if we already have this board
 			const existing = await db.boards.where('rkey').equals(rkey).first();
@@ -89,11 +103,12 @@
 			}
 
 			await db.boards.add(boardData as Board);
-			await addKnownParticipant(ownerDid, uri);
+			const boardAtUri = buildAtUri(ownerDid, collection, rkey);
+			await addKnownParticipant(ownerDid, boardAtUri);
 
 			// Auto-trust the board owner
 			if (auth.did && ownerDid !== auth.did) {
-				await grantTrust(auth.did, ownerDid, uri);
+				await grantTrust(auth.did, ownerDid, boardAtUri);
 			}
 
 			joinUri = '';
@@ -129,7 +144,7 @@
 		<input
 			type="text"
 			bind:value={joinUri}
-			placeholder="Join board by AT URI (at://did/dev.skyboard.board/...)"
+			placeholder="Paste a board link or AT URI to join..."
 			disabled={joining}
 		/>
 		<button type="submit" disabled={joining || !joinUri.trim()}>
@@ -146,7 +161,7 @@
 				<BoardCard {board} />
 			{/each}
 		{:else if boards.current}
-			<p class="empty">No boards yet. Create one above or join one with an AT URI.</p>
+			<p class="empty">No boards yet. Create one above or paste a board link to join.</p>
 		{/if}
 	</div>
 </div>

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { page } from '$app/stores';
 	import { initAuth, getAuth, logout } from '$lib/auth.svelte.js';
 	import { pullFromPDS, startBackgroundSync, stopBackgroundSync } from '$lib/sync.js';
 	import { getProfile, ensureProfile } from '$lib/profile-cache.svelte.js';
@@ -10,6 +11,7 @@
 	const auth = getAuth();
 	let { children } = $props();
 	const currentProfile = $derived(auth.did ? getProfile(auth.did) : null);
+	const isPublicRoute = $derived(/^\/board\/did:[^/]+\/[^/]+$/.test($page.url.pathname));
 
 	$effect(() => {
 		if (auth.did) ensureProfile(auth.did);
@@ -41,8 +43,22 @@
 		<div class="spinner"></div>
 		<p>Loading...</p>
 	</div>
-{:else if !auth.isLoggedIn}
+{:else if !auth.isLoggedIn && !isPublicRoute}
 	<LoginForm />
+{:else if !auth.isLoggedIn && isPublicRoute}
+	<div class="app">
+		<header class="app-header">
+			<div class="header-left">
+				<a href="/" class="logo">Skyboard</a>
+			</div>
+			<div class="header-right">
+				<a href="/" class="sign-in-link">Sign in</a>
+			</div>
+		</header>
+		<main class="app-main">
+			{@render children()}
+		</main>
+	</div>
 {:else}
 	<div class="app">
 		<header class="app-header">
@@ -169,6 +185,22 @@
 	.sign-out-btn:hover {
 		background: var(--color-bg);
 		color: var(--color-text);
+	}
+
+	.sign-in-link {
+		padding: 0.375rem 0.75rem;
+		background: var(--color-primary);
+		color: white;
+		border-radius: var(--radius-md);
+		font-size: 0.8125rem;
+		font-weight: 500;
+		text-decoration: none;
+		transition: opacity 0.15s;
+	}
+
+	.sign-in-link:hover {
+		opacity: 0.85;
+		text-decoration: none;
 	}
 
 	.app-main {

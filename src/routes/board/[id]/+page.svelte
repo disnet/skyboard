@@ -204,13 +204,15 @@
 
 	let shareCopied = $state(false);
 	async function shareBoardUri() {
+		const shareUrl = board.current
+			? `${window.location.origin}/board/${board.current.did}/${board.current.rkey}`
+			: boardUri;
 		try {
-			await navigator.clipboard.writeText(boardUri);
+			await navigator.clipboard.writeText(shareUrl);
 			shareCopied = true;
 			setTimeout(() => (shareCopied = false), 2000);
 		} catch {
-			// Fallback: prompt with the URI
-			window.prompt('Copy this board URI to share:', boardUri);
+			window.prompt('Copy this link to share:', shareUrl);
 		}
 	}
 
