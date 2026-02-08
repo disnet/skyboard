@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { Op, Task } from '$lib/types.js';
+	import type { Op, Task, Comment } from '$lib/types.js';
 	import { grantTrust } from '$lib/trust.js';
 	import { getAuth } from '$lib/auth.svelte.js';
 	import AuthorBadge from './AuthorBadge.svelte';
@@ -7,11 +7,13 @@
 	let {
 		proposals,
 		untrustedTasks,
+		untrustedComments = [],
 		boardUri,
 		onclose
 	}: {
 		proposals: Op[];
 		untrustedTasks: Task[];
+		untrustedComments?: Comment[];
 		boardUri: string;
 		onclose: () => void;
 	} = $props();
@@ -20,18 +22,24 @@
 
 	// Group everything by author DID
 	const groupedByAuthor = $derived.by(() => {
-		const map = new Map<string, { ops: Op[]; tasks: Task[] }>();
+		const map = new Map<string, { ops: Op[]; tasks: Task[]; comments: Comment[] }>();
 
 		for (const task of untrustedTasks) {
-			const entry = map.get(task.did) || { ops: [], tasks: [] };
+			const entry = map.get(task.did) || { ops: [], tasks: [], comments: [] };
 			entry.tasks.push(task);
 			map.set(task.did, entry);
 		}
 
 		for (const op of proposals) {
-			const entry = map.get(op.did) || { ops: [], tasks: [] };
+			const entry = map.get(op.did) || { ops: [], tasks: [], comments: [] };
 			entry.ops.push(op);
 			map.set(op.did, entry);
+		}
+
+		for (const comment of untrustedComments) {
+			const entry = map.get(comment.did) || { ops: [], tasks: [], comments: [] };
+			entry.comments.push(comment);
+			map.set(comment.did, entry);
 		}
 
 		return map;
@@ -63,7 +71,7 @@
 		{#if groupedByAuthor.size === 0}
 			<p class="empty">No pending proposals.</p>
 		{:else}
-			{#each [...groupedByAuthor.entries()] as [authorDid, { ops, tasks }]}
+			{#each [...groupedByAuthor.entries()] as [authorDid, { ops, tasks, comments }]}
 				<div class="author-section">
 					<div class="author-header">
 						<AuthorBadge did={authorDid} />
@@ -84,6 +92,14 @@
 						<ul class="item-list">
 							{#each ops as op}
 								<li class="item">{describeOp(op)}</li>
+							{/each}
+						</ul>
+					{/if}
+					{#if comments.length > 0}
+						<div class="subsection-label">Comments ({comments.length})</div>
+						<ul class="item-list">
+							{#each comments as comment}
+								<li class="item comment-item">{comment.text.length > 80 ? comment.text.slice(0, 80) + '...' : comment.text}</li>
 							{/each}
 						</ul>
 					{/if}

@@ -86,11 +86,30 @@
 		`at://${task.ownerDid}/dev.skyboard.task/${task.rkey}`
 	);
 
-	const taskComments = $derived(
+	const allTaskComments = $derived(
 		comments
 			.filter((c) => c.targetTaskUri === taskUri)
 			.sort((a, b) => a.createdAt.localeCompare(b.createdAt))
 	);
+
+	// Only show comments from permitted users (board owner, trusted, current user, or anyone if scope allows)
+	const taskComments = $derived.by(() => {
+		return allTaskComments.filter((c) => {
+			// Always show own comments
+			if (c.did === currentUserDid) return true;
+			// Always show board owner's comments
+			if (c.did === boardOwnerDid) return true;
+			// Check permission for the commenter
+			const status = getPermissionStatus(
+				c.did,
+				boardOwnerDid,
+				ownerTrustedDids,
+				permissions,
+				'comment'
+			);
+			return status === 'allowed';
+		});
+	});
 
 	const commentStatus: PermissionStatus = $derived(
 		currentUserDid

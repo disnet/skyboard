@@ -138,8 +138,15 @@
 
 	const commentCountsByTask = $derived.by(() => {
 		const map = new Map<string, number>();
+		if (!board.current) return map;
 		for (const comment of allComments.current ?? []) {
-			map.set(comment.targetTaskUri, (map.get(comment.targetTaskUri) ?? 0) + 1);
+			if (comment.did === board.current.did) {
+				map.set(comment.targetTaskUri, (map.get(comment.targetTaskUri) ?? 0) + 1);
+				continue;
+			}
+			if (hasPermission(comment.did, board.current.did, ownerTrustedDids, permissions, 'comment')) {
+				map.set(comment.targetTaskUri, (map.get(comment.targetTaskUri) ?? 0) + 1);
+			}
 		}
 		return map;
 	});

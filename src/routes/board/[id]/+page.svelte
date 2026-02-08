@@ -71,11 +71,18 @@
 
 	const permissions = $derived(board.current ? getBoardPermissions(board.current) : getBoardPermissions({ permissions: undefined } as any));
 
-	// Comment counts grouped by targetTaskUri
+	// Comment counts grouped by targetTaskUri — only count permitted comments
 	const commentCountsByTask = $derived.by(() => {
 		const map = new Map<string, number>();
+		if (!board.current) return map;
 		for (const comment of allComments.current ?? []) {
-			map.set(comment.targetTaskUri, (map.get(comment.targetTaskUri) ?? 0) + 1);
+			if (comment.did === auth.did || comment.did === board.current.did) {
+				map.set(comment.targetTaskUri, (map.get(comment.targetTaskUri) ?? 0) + 1);
+				continue;
+			}
+			if (hasPermission(comment.did, board.current.did, ownerTrustedDids, permissions, 'comment')) {
+				map.set(comment.targetTaskUri, (map.get(comment.targetTaskUri) ?? 0) + 1);
+			}
 		}
 		return map;
 	});
@@ -109,6 +116,22 @@
 				permissions,
 				'create_task',
 				t.columnId
+			);
+		});
+	});
+
+	// Comments from untrusted users (shown in Proposals panel)
+	const untrustedComments = $derived.by(() => {
+		if (!board.current) return [];
+		return (allComments.current ?? []).filter((c) => {
+			if (c.did === auth.did) return false;
+			if (c.did === board.current!.did) return false;
+			return !hasPermission(
+				c.did,
+				board.current!.did,
+				ownerTrustedDids,
+				permissions,
+				'comment'
 			);
 		});
 	});
@@ -262,11 +285,11 @@
 				<button class="activity-btn" onclick={() => (showOpsPanel = true)}>
 					Activity
 				</button>
-				{#if pendingProposals.length > 0 || untrustedTasks.length > 0}
+				{#if pendingProposals.length > 0 || untrustedTasks.length > 0 || untrustedComments.length > 0}
 					<button class="proposals-btn" onclick={() => (showProposals = true)}>
 						Proposals
 						<span class="badge">
-							{pendingProposals.length + untrustedTasks.length}
+							{pendingProposals.length + untrustedTasks.length + untrustedComments.length}
 						</span>
 					</button>
 				{/if}
@@ -314,6 +337,7 @@
 		<ProposalPanel
 			proposals={pendingProposals}
 			{untrustedTasks}
+			{untrustedComments}
 			{boardUri}
 			onclose={() => (showProposals = false)}
 		/>
