@@ -32,6 +32,12 @@ function taskToRecord(task: Task): TaskRecord {
 	};
 }
 
+function isNetworkError(err: unknown): boolean {
+	if (err instanceof TypeError && err.message === 'Failed to fetch') return true;
+	const name = (err as { name?: string })?.name;
+	return name === 'FetchRequestError' || name === '_FetchRequestError';
+}
+
 export async function syncPendingToPDS(agent: Agent, did: string): Promise<void> {
 	if (!navigator.onLine) return;
 
@@ -55,7 +61,7 @@ export async function syncPendingToPDS(agent: Agent, did: string): Promise<void>
 			}
 		} catch (err) {
 			console.error('Failed to sync board to PDS:', err);
-			if (board.id) {
+			if (board.id && !isNetworkError(err)) {
 				await db.boards.update(board.id, { syncStatus: 'error' });
 			}
 		}
@@ -81,7 +87,7 @@ export async function syncPendingToPDS(agent: Agent, did: string): Promise<void>
 			}
 		} catch (err) {
 			console.error('Failed to sync task to PDS:', err);
-			if (task.id) {
+			if (task.id && !isNetworkError(err)) {
 				await db.tasks.update(task.id, { syncStatus: 'error' });
 			}
 		}
@@ -108,7 +114,7 @@ export async function syncPendingToPDS(agent: Agent, did: string): Promise<void>
 			}
 		} catch (err) {
 			console.error('Failed to sync op to PDS:', err);
-			if (op.id) {
+			if (op.id && !isNetworkError(err)) {
 				await db.ops.update(op.id, { syncStatus: 'error' });
 			}
 		}
@@ -135,7 +141,7 @@ export async function syncPendingToPDS(agent: Agent, did: string): Promise<void>
 			}
 		} catch (err) {
 			console.error('Failed to sync trust to PDS:', err);
-			if (trust.id) {
+			if (trust.id && !isNetworkError(err)) {
 				await db.trusts.update(trust.id, { syncStatus: 'error' });
 			}
 		}
@@ -387,16 +393,21 @@ let onlineHandler: (() => void) | null = null;
 export function startBackgroundSync(agent: Agent, did: string): void {
 	stopBackgroundSync();
 	syncInterval = setInterval(() => {
-		syncPendingToPDS(agent, did).catch(console.error);
+		resetErrorsToPending(did).then(() => {
+			syncPendingToPDS(agent, did).catch(console.error);
+		});
 	}, 5_000);
 	// Also run immediately
 	syncPendingToPDS(agent, did).catch(console.error);
 
-	// When coming back online, reset errors and sync immediately
+	// When coming back online, reset errors and sync after a brief delay
+	// to let the network stabilize (online event can fire before routes are ready)
 	onlineHandler = () => {
-		resetErrorsToPending(did).then(() => {
-			syncPendingToPDS(agent, did).catch(console.error);
-		});
+		setTimeout(() => {
+			resetErrorsToPending(did).then(() => {
+				syncPendingToPDS(agent, did).catch(console.error);
+			});
+		}, 1000);
 	};
 	window.addEventListener('online', onlineHandler);
 }
