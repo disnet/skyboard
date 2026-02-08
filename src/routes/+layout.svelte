@@ -4,7 +4,7 @@
 	import { initAuth, getAuth, logout } from '$lib/auth.svelte.js';
 	import { pullFromPDS, startBackgroundSync, stopBackgroundSync } from '$lib/sync.js';
 	import { getProfile, ensureProfile } from '$lib/profile-cache.svelte.js';
-	import LoginForm from '$lib/components/LoginForm.svelte';
+	import LandingPage from '$lib/components/LandingPage.svelte';
 	import SyncStatus from '$lib/components/SyncStatus.svelte';
 	import '../app.css';
 
@@ -44,7 +44,7 @@
 		<p>Loading...</p>
 	</div>
 {:else if !auth.isLoggedIn && !isPublicRoute}
-	<LoginForm />
+	<LandingPage />
 {:else if !auth.isLoggedIn && isPublicRoute}
 	<div class="app">
 		<header class="app-header">

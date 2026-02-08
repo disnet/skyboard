@@ -14,41 +14,31 @@
 	}
 </script>
 
-<div class="login-container">
-	<div class="login-card">
-		<h1>Skyboard</h1>
-		<p class="subtitle">Sign in with your AT Protocol identity</p>
+<div class="login-card">
+	<h1>Skyboard</h1>
+	<p class="subtitle">Sign in with your AT Protocol identity</p>
 
-		<form onsubmit={handleSubmit}>
-			<label for="handle">Handle</label>
-			<input
-				id="handle"
-				type="text"
-				bind:value={handle}
-				placeholder="e.g. alice.bsky.social"
-				disabled={submitting}
-				required
-			/>
-			<button type="submit" disabled={submitting || !handle.trim()}>
-				{submitting ? 'Signing in...' : 'Sign In'}
-			</button>
-		</form>
+	<form onsubmit={handleSubmit}>
+		<label for="handle">Handle</label>
+		<input
+			id="handle"
+			type="text"
+			bind:value={handle}
+			placeholder="e.g. alice.bsky.social"
+			disabled={submitting}
+			required
+		/>
+		<button type="submit" disabled={submitting || !handle.trim()}>
+			{submitting ? 'Signing in...' : 'Sign In'}
+		</button>
+	</form>
 
-		{#if auth.error}
-			<p class="error">{auth.error}</p>
-		{/if}
-	</div>
+	{#if auth.error}
+		<p class="error">{auth.error}</p>
+	{/if}
 </div>
 
 <style>
-	.login-container {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		min-height: 100vh;
-		padding: 1rem;
-	}
-
 	.login-card {
 		background: var(--color-surface);
 		border: 1px solid var(--color-border);
