@@ -160,25 +160,12 @@
 		const before = filtered[insertIdx - 1]?.effectivePosition ?? null;
 		const after = filtered[insertIdx]?.effectivePosition ?? null;
 		const newPosition = generateKeyBetween(before, after);
-		const now = new Date().toISOString();
-
-		if (data.did === did) {
-			// We own this task — direct update
-			await db.tasks.update(data.id, {
+		const task = await db.tasks.get(data.id);
+		if (task) {
+			await createOp(did, task, boardUri, {
 				columnId: column.id,
-				position: newPosition,
-				updatedAt: now,
-				syncStatus: 'pending'
+				position: newPosition
 			});
-		} else {
-			// Not our task — create an op
-			const task = await db.tasks.get(data.id);
-			if (task) {
-				await createOp(did, task, boardUri, {
-					columnId: column.id,
-					position: newPosition
-				});
-			}
 		}
 	}
 </script>

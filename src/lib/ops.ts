@@ -2,10 +2,6 @@ import { db } from './db.js';
 import { generateTID, buildAtUri, TASK_COLLECTION } from './tid.js';
 import type { Op, OpFields, OpRecord, Task } from './types.js';
 
-export function shouldCreateOp(currentUserDid: string, task: Task): boolean {
-	return task.did !== currentUserDid;
-}
-
 export async function createOp(
 	authorDid: string,
 	targetTask: Task,
