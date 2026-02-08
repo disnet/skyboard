@@ -44,7 +44,7 @@
 		if (!e.dataTransfer || !task.sourceTask.id) return;
 		wasDragged = true;
 		e.dataTransfer.setData(
-			'application/x-kanban-task',
+			'application/x-skyboard-task',
 			JSON.stringify({ id: task.sourceTask.id, did: task.ownerDid })
 		);
 		e.dataTransfer.effectAllowed = 'move';

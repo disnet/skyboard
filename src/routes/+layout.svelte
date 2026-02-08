@@ -47,7 +47,7 @@
 	<div class="app">
 		<header class="app-header">
 			<div class="header-left">
-				<a href="/" class="logo">AT Kanban</a>
+				<a href="/" class="logo">Skyboard</a>
 			</div>
 			<div class="header-right">
 				<SyncStatus />

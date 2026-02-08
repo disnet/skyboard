@@ -133,7 +133,7 @@
 		dropIndex = null;
 
 		if (!e.dataTransfer) return;
-		const raw = e.dataTransfer.getData('application/x-kanban-task');
+		const raw = e.dataTransfer.getData('application/x-skyboard-task');
 		if (!raw) return;
 
 		let data: { id: number; did: string };

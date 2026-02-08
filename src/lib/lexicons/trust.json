@@ -1,6 +1,6 @@
 {
   "lexicon": 1,
-  "id": "blue.kanban.trust",
+  "id": "dev.skyboard.trust",
   "defs": {
     "main": {
       "type": "record",

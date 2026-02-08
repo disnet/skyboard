@@ -23,7 +23,7 @@ export async function createOp(
 
 export function opToRecord(op: Op): OpRecord {
 	return {
-		$type: 'blue.kanban.op',
+		$type: 'dev.skyboard.op',
 		targetTaskUri: op.targetTaskUri,
 		boardUri: op.boardUri,
 		fields: op.fields,

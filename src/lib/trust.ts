@@ -54,7 +54,7 @@ export async function getTrustedDids(did: string, boardUri: string): Promise<str
 
 export function trustToRecord(trust: Trust): TrustRecord {
 	return {
-		$type: 'blue.kanban.trust',
+		$type: 'dev.skyboard.trust',
 		trustedDid: trust.trustedDid,
 		boardUri: trust.boardUri,
 		createdAt: trust.createdAt

@@ -9,7 +9,7 @@ let syncInterval: ReturnType<typeof setInterval> | null = null;
 
 function boardToRecord(board: Board): BoardRecord {
 	return {
-		$type: 'blue.kanban.board',
+		$type: 'dev.skyboard.board',
 		name: board.name,
 		...(board.description ? { description: board.description } : {}),
 		columns: board.columns,
@@ -20,7 +20,7 @@ function boardToRecord(board: Board): BoardRecord {
 
 function taskToRecord(task: Task): TaskRecord {
 	return {
-		$type: 'blue.kanban.task',
+		$type: 'dev.skyboard.task',
 		title: task.title,
 		...(task.description ? { description: task.description } : {}),
 		columnId: task.columnId,

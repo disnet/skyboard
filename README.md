@@ -1,10 +1,10 @@
-# AT Kanban
+# Skyboard
 
 A collaborative kanban board built on [AT Protocol](https://atproto.com/) (Bluesky's decentralized data layer). No central server — each user's data lives in their own AT Protocol repository, synced in real time via Jetstream.
 
 ## How it works
 
-Users sign in with their Bluesky account and create boards. Each board gets an AT URI (e.g. `at://did:plc:abc.../blue.kanban.board/3k...`) that can be shared with collaborators. Joining a board fetches it from the owner's PDS (Personal Data Server) and subscribes to real-time updates through [Jetstream](https://docs.bsky.app/blog/jetstream), Bluesky's WebSocket event stream.
+Users sign in with their Bluesky account and create boards. Each board gets an AT URI (e.g. `at://did:plc:abc.../dev.skyboard.board/3k...`) that can be shared with collaborators. Joining a board fetches it from the owner's PDS (Personal Data Server) and subscribes to real-time updates through [Jetstream](https://docs.bsky.app/blog/jetstream), Bluesky's WebSocket event stream.
 
 All data is stored locally in IndexedDB (via Dexie) and synced to each user's PDS in the background. The app works offline and catches up when reconnected.
 
@@ -12,10 +12,10 @@ All data is stored locally in IndexedDB (via Dexie) and synced to each user's PD
 
 There are four record types, each stored as AT Protocol records in the user's repo:
 
-- **Board** (`blue.kanban.board`) — name, description, column configuration, and permission rules. Owned by whoever created it.
-- **Task** (`blue.kanban.task`) — a card on the board with title, description, column, and fractional index position. Owned by whoever created it. Write-once: the record captures the initial state at creation and is never updated directly.
-- **Op** (`blue.kanban.op`) — an edit to any task, including your own. Contains partial field updates (title, description, columnId, position) and targets a task by AT URI.
-- **Trust** (`blue.kanban.trust`) — a per-board grant allowing another user's ops to take effect on your view of the board.
+- **Board** (`dev.skyboard.board`) — name, description, column configuration, and permission rules. Owned by whoever created it.
+- **Task** (`dev.skyboard.task`) — a card on the board with title, description, column, and fractional index position. Owned by whoever created it. Write-once: the record captures the initial state at creation and is never updated directly.
+- **Op** (`dev.skyboard.op`) — an edit to any task, including your own. Contains partial field updates (title, description, columnId, position) and targets a task by AT URI.
+- **Trust** (`dev.skyboard.trust`) — a per-board grant allowing another user's ops to take effect on your view of the board.
 
 ### Why ops?
 

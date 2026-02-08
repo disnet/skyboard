@@ -50,7 +50,7 @@ export interface Task {
 }
 
 export interface BoardRecord {
-	$type: 'blue.kanban.board';
+	$type: 'dev.skyboard.board';
 	name: string;
 	description?: string;
 	columns: Column[];
@@ -59,7 +59,7 @@ export interface BoardRecord {
 }
 
 export interface TaskRecord {
-	$type: 'blue.kanban.task';
+	$type: 'dev.skyboard.task';
 	title: string;
 	description?: string;
 	columnId: string;
@@ -92,7 +92,7 @@ export interface Op {
 }
 
 export interface OpRecord {
-	$type: 'blue.kanban.op';
+	$type: 'dev.skyboard.op';
 	targetTaskUri: string;
 	boardUri: string;
 	fields: OpFields;
@@ -112,7 +112,7 @@ export interface Trust {
 }
 
 export interface TrustRecord {
-	$type: 'blue.kanban.trust';
+	$type: 'dev.skyboard.trust';
 	trustedDid: string;
 	boardUri: string;
 	createdAt: string;
