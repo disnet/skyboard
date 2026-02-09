@@ -1,175 +1,181 @@
-export type SyncStatus = 'synced' | 'pending' | 'error';
+export type SyncStatus = "synced" | "pending" | "error";
 
 // --- Permission types ---
 
-export type PermissionScope = 'author_only' | 'trusted' | 'anyone';
+export type PermissionScope = "author_only" | "trusted" | "anyone";
 
-export type OperationType = 'create_task' | 'edit_title' | 'edit_description' | 'move_task' | 'reorder' | 'comment';
+export type OperationType =
+  | "create_task"
+  | "edit_title"
+  | "edit_description"
+  | "move_task"
+  | "reorder"
+  | "comment";
 
 export interface PermissionRule {
-	operation: OperationType;
-	scope: PermissionScope;
-	columnIds?: string[]; // For create_task: restrict to specific columns
+  operation: OperationType;
+  scope: PermissionScope;
+  columnIds?: string[]; // For create_task: restrict to specific columns
 }
 
 export interface BoardPermissions {
-	rules: PermissionRule[];
+  rules: PermissionRule[];
 }
 
 export interface Column {
-	id: string;
-	name: string;
-	order: number;
+  id: string;
+  name: string;
+  order: number;
 }
 
 export interface Board {
-	id?: number; // Dexie auto-increment
-	rkey: string;
-	did: string;
-	name: string;
-	description?: string;
-	columns: Column[];
-	permissions?: BoardPermissions;
-	createdAt: string;
-	syncStatus: SyncStatus;
+  id?: number; // Dexie auto-increment
+  rkey: string;
+  did: string;
+  name: string;
+  description?: string;
+  columns: Column[];
+  permissions?: BoardPermissions;
+  createdAt: string;
+  syncStatus: SyncStatus;
 }
 
 export interface Task {
-	id?: number; // Dexie auto-increment
-	rkey: string;
-	did: string;
-	title: string;
-	description?: string;
-	columnId: string;
-	boardUri: string;
-	position?: string;
-	order?: number; // Deprecated: use position
-	createdAt: string;
-	updatedAt?: string;
-	syncStatus: SyncStatus;
+  id?: number; // Dexie auto-increment
+  rkey: string;
+  did: string;
+  title: string;
+  description?: string;
+  columnId: string;
+  boardUri: string;
+  position?: string;
+  order?: number; // Deprecated: use position
+  createdAt: string;
+  updatedAt?: string;
+  syncStatus: SyncStatus;
 }
 
 export interface BoardRecord {
-	$type: 'dev.skyboard.board';
-	name: string;
-	description?: string;
-	columns: Column[];
-	permissions?: BoardPermissions;
-	createdAt: string;
+  $type: "dev.skyboard.board";
+  name: string;
+  description?: string;
+  columns: Column[];
+  permissions?: BoardPermissions;
+  createdAt: string;
 }
 
 export interface TaskRecord {
-	$type: 'dev.skyboard.task';
-	title: string;
-	description?: string;
-	columnId: string;
-	boardUri: string;
-	position?: string;
-	order?: number; // Deprecated: use position
-	createdAt: string;
-	updatedAt?: string;
+  $type: "dev.skyboard.task";
+  title: string;
+  description?: string;
+  columnId: string;
+  boardUri: string;
+  position?: string;
+  order?: number; // Deprecated: use position
+  createdAt: string;
+  updatedAt?: string;
 }
 
 // --- Op types ---
 
 export interface OpFields {
-	title?: string;
-	description?: string;
-	columnId?: string;
-	position?: string;
-	order?: number; // Deprecated: use position
+  title?: string;
+  description?: string;
+  columnId?: string;
+  position?: string;
+  order?: number; // Deprecated: use position
 }
 
 export interface Op {
-	id?: number;
-	rkey: string;
-	did: string; // DID of the op author
-	targetTaskUri: string;
-	boardUri: string;
-	fields: OpFields;
-	createdAt: string;
-	syncStatus: SyncStatus;
+  id?: number;
+  rkey: string;
+  did: string; // DID of the op author
+  targetTaskUri: string;
+  boardUri: string;
+  fields: OpFields;
+  createdAt: string;
+  syncStatus: SyncStatus;
 }
 
 export interface OpRecord {
-	$type: 'dev.skyboard.op';
-	targetTaskUri: string;
-	boardUri: string;
-	fields: OpFields;
-	createdAt: string;
+  $type: "dev.skyboard.op";
+  targetTaskUri: string;
+  boardUri: string;
+  fields: OpFields;
+  createdAt: string;
 }
 
 // --- Trust types ---
 
 export interface Trust {
-	id?: number;
-	rkey: string;
-	did: string; // DID of the user who granted trust
-	trustedDid: string;
-	boardUri: string;
-	createdAt: string;
-	syncStatus: SyncStatus;
+  id?: number;
+  rkey: string;
+  did: string; // DID of the user who granted trust
+  trustedDid: string;
+  boardUri: string;
+  createdAt: string;
+  syncStatus: SyncStatus;
 }
 
 export interface TrustRecord {
-	$type: 'dev.skyboard.trust';
-	trustedDid: string;
-	boardUri: string;
-	createdAt: string;
+  $type: "dev.skyboard.trust";
+  trustedDid: string;
+  boardUri: string;
+  createdAt: string;
 }
 
 // --- Comment types ---
 
 export interface Comment {
-	id?: number;
-	rkey: string;
-	did: string;
-	targetTaskUri: string;
-	boardUri: string;
-	text: string;
-	createdAt: string;
-	syncStatus: SyncStatus;
+  id?: number;
+  rkey: string;
+  did: string;
+  targetTaskUri: string;
+  boardUri: string;
+  text: string;
+  createdAt: string;
+  syncStatus: SyncStatus;
 }
 
 export interface CommentRecord {
-	$type: 'dev.skyboard.comment';
-	targetTaskUri: string;
-	boardUri: string;
-	text: string;
-	createdAt: string;
+  $type: "dev.skyboard.comment";
+  targetTaskUri: string;
+  boardUri: string;
+  text: string;
+  createdAt: string;
 }
 
 // --- Known participants ---
 
 export interface KnownParticipant {
-	id?: number;
-	did: string;
-	boardUri: string;
-	discoveredAt: string;
-	lastFetchedAt?: string;
+  id?: number;
+  did: string;
+  boardUri: string;
+  discoveredAt: string;
+  lastFetchedAt?: string;
 }
 
 // --- Materialized collaborative task view ---
 
 export interface MaterializedTask {
-	rkey: string;
-	did: string;
-	title: string;
-	description?: string;
-	columnId: string;
-	boardUri: string;
-	position?: string;
-	order?: number;
-	createdAt: string;
-	updatedAt?: string;
-	sourceTask: Task;
-	appliedOps: Op[];
-	pendingOps: Op[];
-	effectiveTitle: string;
-	effectiveDescription?: string;
-	effectiveColumnId: string;
-	effectivePosition: string;
-	ownerDid: string;
-	lastModifiedBy: string;
-	lastModifiedAt: string;
+  rkey: string;
+  did: string;
+  title: string;
+  description?: string;
+  columnId: string;
+  boardUri: string;
+  position?: string;
+  order?: number;
+  createdAt: string;
+  updatedAt?: string;
+  sourceTask: Task;
+  appliedOps: Op[];
+  pendingOps: Op[];
+  effectiveTitle: string;
+  effectiveDescription?: string;
+  effectiveColumnId: string;
+  effectivePosition: string;
+  ownerDid: string;
+  lastModifiedBy: string;
+  lastModifiedAt: string;
 }

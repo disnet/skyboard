@@ -1,195 +1,203 @@
-import { db } from './db.js';
-import { TASK_COLLECTION, OP_COLLECTION, TRUST_COLLECTION, COMMENT_COLLECTION } from './tid.js';
+import { db } from "./db.js";
+import {
+  TASK_COLLECTION,
+  OP_COLLECTION,
+  TRUST_COLLECTION,
+  COMMENT_COLLECTION,
+} from "./tid.js";
 
-const JETSTREAM_URL = 'wss://jetstream2.us-east.bsky.network/subscribe';
+const JETSTREAM_URL = "wss://jetstream2.us-east.bsky.network/subscribe";
 
 // 48 hours in microseconds — well within Jetstream's ~72h retention window
 const CURSOR_MAX_AGE_US = 48 * 60 * 60 * 1_000_000;
 
 export interface JetstreamCommitEvent {
-	did: string;
-	time_us: number;
-	kind: 'commit';
-	commit: {
-		rev: string;
-		operation: 'create' | 'update' | 'delete';
-		collection: string;
-		rkey: string;
-		record?: Record<string, unknown>;
-	};
+  did: string;
+  time_us: number;
+  kind: "commit";
+  commit: {
+    rev: string;
+    operation: "create" | "update" | "delete";
+    collection: string;
+    rkey: string;
+    record?: Record<string, unknown>;
+  };
 }
 
 export interface JetstreamOptions {
-	wantedCollections: string[];
-	cursor?: number;
-	onEvent: (event: JetstreamCommitEvent) => void;
-	onError?: (error: Event) => void;
-	onConnect?: () => void;
-	onReconnect?: () => void;
+  wantedCollections: string[];
+  cursor?: number;
+  onEvent: (event: JetstreamCommitEvent) => void;
+  onError?: (error: Event) => void;
+  onConnect?: () => void;
+  onReconnect?: () => void;
 }
 
-const CURSOR_KEY = 'jetstream-cursor';
+const CURSOR_KEY = "jetstream-cursor";
 const CURSOR_SAVE_INTERVAL = 5000;
 
 export class JetstreamClient {
-	private ws: WebSocket | null = null;
-	private options: JetstreamOptions;
-	private reconnectDelay = 1000;
-	private maxReconnectDelay = 30000;
-	private shouldReconnect = true;
-	private lastCursor: number | null = null;
-	private cursorSaveTimer: ReturnType<typeof setInterval> | null = null;
-	private hasConnectedBefore = false;
-	private onlineListener: (() => void) | null = null;
+  private ws: WebSocket | null = null;
+  private options: JetstreamOptions;
+  private reconnectDelay = 1000;
+  private maxReconnectDelay = 30000;
+  private shouldReconnect = true;
+  private lastCursor: number | null = null;
+  private cursorSaveTimer: ReturnType<typeof setInterval> | null = null;
+  private hasConnectedBefore = false;
+  private onlineListener: (() => void) | null = null;
 
-	constructor(options: JetstreamOptions) {
-		this.options = options;
-		if (options.cursor) {
-			this.lastCursor = options.cursor;
-		}
-	}
+  constructor(options: JetstreamOptions) {
+    this.options = options;
+    if (options.cursor) {
+      this.lastCursor = options.cursor;
+    }
+  }
 
-	connect(): void {
-		if (!navigator.onLine) {
-			this.onlineListener = () => {
-				this.onlineListener = null;
-				if (this.shouldReconnect) {
-					this.connect();
-				}
-			};
-			window.addEventListener('online', this.onlineListener, { once: true });
-			return;
-		}
+  connect(): void {
+    if (!navigator.onLine) {
+      this.onlineListener = () => {
+        this.onlineListener = null;
+        if (this.shouldReconnect) {
+          this.connect();
+        }
+      };
+      window.addEventListener("online", this.onlineListener, { once: true });
+      return;
+    }
 
-		const params = new URLSearchParams();
-		for (const collection of this.options.wantedCollections) {
-			params.append('wantedCollections', collection);
-		}
-		if (this.lastCursor) {
-			params.append('cursor', String(this.lastCursor));
-		}
+    const params = new URLSearchParams();
+    for (const collection of this.options.wantedCollections) {
+      params.append("wantedCollections", collection);
+    }
+    if (this.lastCursor) {
+      params.append("cursor", String(this.lastCursor));
+    }
 
-		const url = `${JETSTREAM_URL}?${params.toString()}`;
-		this.ws = new WebSocket(url);
+    const url = `${JETSTREAM_URL}?${params.toString()}`;
+    this.ws = new WebSocket(url);
 
-		this.ws.onopen = () => {
-			this.reconnectDelay = 1000;
-			if (this.hasConnectedBefore) {
-				this.options.onReconnect?.();
-			}
-			this.hasConnectedBefore = true;
-			this.options.onConnect?.();
-			this.startCursorSaving();
-		};
+    this.ws.onopen = () => {
+      this.reconnectDelay = 1000;
+      if (this.hasConnectedBefore) {
+        this.options.onReconnect?.();
+      }
+      this.hasConnectedBefore = true;
+      this.options.onConnect?.();
+      this.startCursorSaving();
+    };
 
-		this.ws.onmessage = (event: MessageEvent) => {
-			this.handleMessage(event);
-		};
+    this.ws.onmessage = (event: MessageEvent) => {
+      this.handleMessage(event);
+    };
 
-		this.ws.onerror = (event: Event) => {
-			this.options.onError?.(event);
-		};
+    this.ws.onerror = (event: Event) => {
+      this.options.onError?.(event);
+    };
 
-		this.ws.onclose = () => {
-			this.stopCursorSaving();
-			this.handleClose();
-		};
-	}
+    this.ws.onclose = () => {
+      this.stopCursorSaving();
+      this.handleClose();
+    };
+  }
 
-	private handleMessage(event: MessageEvent): void {
-		try {
-			const data = JSON.parse(event.data as string) as JetstreamCommitEvent;
-			if (data.kind === 'commit' && data.time_us) {
-				this.lastCursor = data.time_us;
-				this.options.onEvent(data);
-			}
-		} catch {
-			// Ignore malformed messages
-		}
-	}
+  private handleMessage(event: MessageEvent): void {
+    try {
+      const data = JSON.parse(event.data as string) as JetstreamCommitEvent;
+      if (data.kind === "commit" && data.time_us) {
+        this.lastCursor = data.time_us;
+        this.options.onEvent(data);
+      }
+    } catch {
+      // Ignore malformed messages
+    }
+  }
 
-	private handleClose(): void {
-		if (!this.shouldReconnect) return;
+  private handleClose(): void {
+    if (!this.shouldReconnect) return;
 
-		if (!navigator.onLine) {
-			// Wait for connectivity instead of retrying into the void
-			this.onlineListener = () => {
-				this.onlineListener = null;
-				if (this.shouldReconnect) {
-					this.reconnectDelay = 1000;
-					this.connect();
-				}
-			};
-			window.addEventListener('online', this.onlineListener, { once: true });
-			return;
-		}
+    if (!navigator.onLine) {
+      // Wait for connectivity instead of retrying into the void
+      this.onlineListener = () => {
+        this.onlineListener = null;
+        if (this.shouldReconnect) {
+          this.reconnectDelay = 1000;
+          this.connect();
+        }
+      };
+      window.addEventListener("online", this.onlineListener, { once: true });
+      return;
+    }
 
-		setTimeout(() => {
-			if (this.shouldReconnect) {
-				this.reconnectDelay = Math.min(this.reconnectDelay * 2, this.maxReconnectDelay);
-				this.connect();
-			}
-		}, this.reconnectDelay);
-	}
+    setTimeout(() => {
+      if (this.shouldReconnect) {
+        this.reconnectDelay = Math.min(
+          this.reconnectDelay * 2,
+          this.maxReconnectDelay,
+        );
+        this.connect();
+      }
+    }, this.reconnectDelay);
+  }
 
-	private startCursorSaving(): void {
-		this.cursorSaveTimer = setInterval(() => {
-			if (this.lastCursor) {
-				saveJetstreamCursor(this.lastCursor).catch(console.error);
-			}
-		}, CURSOR_SAVE_INTERVAL);
-	}
+  private startCursorSaving(): void {
+    this.cursorSaveTimer = setInterval(() => {
+      if (this.lastCursor) {
+        saveJetstreamCursor(this.lastCursor).catch(console.error);
+      }
+    }, CURSOR_SAVE_INTERVAL);
+  }
 
-	private stopCursorSaving(): void {
-		if (this.cursorSaveTimer) {
-			clearInterval(this.cursorSaveTimer);
-			this.cursorSaveTimer = null;
-		}
-		// Save final cursor
-		if (this.lastCursor) {
-			saveJetstreamCursor(this.lastCursor).catch(console.error);
-		}
-	}
+  private stopCursorSaving(): void {
+    if (this.cursorSaveTimer) {
+      clearInterval(this.cursorSaveTimer);
+      this.cursorSaveTimer = null;
+    }
+    // Save final cursor
+    if (this.lastCursor) {
+      saveJetstreamCursor(this.lastCursor).catch(console.error);
+    }
+  }
 
-	disconnect(): void {
-		this.shouldReconnect = false;
-		if (this.onlineListener) {
-			window.removeEventListener('online', this.onlineListener);
-			this.onlineListener = null;
-		}
-		this.stopCursorSaving();
-		this.ws?.close();
-		this.ws = null;
-	}
+  disconnect(): void {
+    this.shouldReconnect = false;
+    if (this.onlineListener) {
+      window.removeEventListener("online", this.onlineListener);
+      this.onlineListener = null;
+    }
+    this.stopCursorSaving();
+    this.ws?.close();
+    this.ws = null;
+  }
 }
 
 export function isCursorStale(cursor: number): boolean {
-	const nowUs = Date.now() * 1000;
-	return nowUs - cursor > CURSOR_MAX_AGE_US;
+  const nowUs = Date.now() * 1000;
+  return nowUs - cursor > CURSOR_MAX_AGE_US;
 }
 
 export async function loadJetstreamCursor(): Promise<number | undefined> {
-	try {
-		const value = localStorage.getItem(CURSOR_KEY);
-		if (!value) return undefined;
-		const cursor = Number(value);
-		// Discard cursors older than the retention window
-		if (isCursorStale(cursor)) {
-			localStorage.removeItem(CURSOR_KEY);
-			return undefined;
-		}
-		return cursor;
-	} catch {
-		return undefined;
-	}
+  try {
+    const value = localStorage.getItem(CURSOR_KEY);
+    if (!value) return undefined;
+    const cursor = Number(value);
+    // Discard cursors older than the retention window
+    if (isCursorStale(cursor)) {
+      localStorage.removeItem(CURSOR_KEY);
+      return undefined;
+    }
+    return cursor;
+  } catch {
+    return undefined;
+  }
 }
 
 async function saveJetstreamCursor(cursor: number): Promise<void> {
-	try {
-		localStorage.setItem(CURSOR_KEY, String(cursor));
-	} catch {
-		// Ignore storage errors
-	}
+  try {
+    localStorage.setItem(CURSOR_KEY, String(cursor));
+  } catch {
+    // Ignore storage errors
+  }
 }
 
 /**
@@ -202,139 +210,160 @@ async function saveJetstreamCursor(cursor: number): Promise<void> {
  * (for known participant tracking).
  */
 export async function processJetstreamEvent(
-	event: JetstreamCommitEvent
+  event: JetstreamCommitEvent,
 ): Promise<{ did: string; boardUri: string } | null> {
-	const { did, commit } = event;
+  const { did, commit } = event;
 
-	if (commit.operation === 'delete') {
-		if (commit.collection === TASK_COLLECTION) {
-			const existing = await db.tasks.where('[did+rkey]').equals([did, commit.rkey]).first();
-			if (existing?.id) {
-				const boardUri = existing.boardUri;
-				await db.tasks.delete(existing.id);
-				return { did, boardUri };
-			}
-		} else if (commit.collection === OP_COLLECTION) {
-			const existing = await db.ops.where('[did+rkey]').equals([did, commit.rkey]).first();
-			if (existing?.id) {
-				const boardUri = existing.boardUri;
-				await db.ops.delete(existing.id);
-				return { did, boardUri };
-			}
-		} else if (commit.collection === TRUST_COLLECTION) {
-			const existing = await db.trusts.where('[did+rkey]').equals([did, commit.rkey]).first();
-			if (existing?.id) {
-				const boardUri = existing.boardUri;
-				await db.trusts.delete(existing.id);
-				return { did, boardUri };
-			}
-		} else if (commit.collection === COMMENT_COLLECTION) {
-			const existing = await db.comments.where('[did+rkey]').equals([did, commit.rkey]).first();
-			if (existing?.id) {
-				const boardUri = existing.boardUri;
-				await db.comments.delete(existing.id);
-				return { did, boardUri };
-			}
-		}
-		return null;
-	}
+  if (commit.operation === "delete") {
+    if (commit.collection === TASK_COLLECTION) {
+      const existing = await db.tasks
+        .where("[did+rkey]")
+        .equals([did, commit.rkey])
+        .first();
+      if (existing?.id) {
+        const boardUri = existing.boardUri;
+        await db.tasks.delete(existing.id);
+        return { did, boardUri };
+      }
+    } else if (commit.collection === OP_COLLECTION) {
+      const existing = await db.ops
+        .where("[did+rkey]")
+        .equals([did, commit.rkey])
+        .first();
+      if (existing?.id) {
+        const boardUri = existing.boardUri;
+        await db.ops.delete(existing.id);
+        return { did, boardUri };
+      }
+    } else if (commit.collection === TRUST_COLLECTION) {
+      const existing = await db.trusts
+        .where("[did+rkey]")
+        .equals([did, commit.rkey])
+        .first();
+      if (existing?.id) {
+        const boardUri = existing.boardUri;
+        await db.trusts.delete(existing.id);
+        return { did, boardUri };
+      }
+    } else if (commit.collection === COMMENT_COLLECTION) {
+      const existing = await db.comments
+        .where("[did+rkey]")
+        .equals([did, commit.rkey])
+        .first();
+      if (existing?.id) {
+        const boardUri = existing.boardUri;
+        await db.comments.delete(existing.id);
+        return { did, boardUri };
+      }
+    }
+    return null;
+  }
 
-	if (!commit.record) return null;
+  if (!commit.record) return null;
 
-	const record = commit.record;
-	const boardUri = record.boardUri as string | undefined;
+  const record = commit.record;
+  const boardUri = record.boardUri as string | undefined;
 
-	if (!boardUri) return null;
+  if (!boardUri) return null;
 
-	if (commit.collection === TASK_COLLECTION) {
-		const existing = await db.tasks.where('[did+rkey]').equals([did, commit.rkey]).first();
+  if (commit.collection === TASK_COLLECTION) {
+    const existing = await db.tasks
+      .where("[did+rkey]")
+      .equals([did, commit.rkey])
+      .first();
 
-		const taskData = {
-			rkey: commit.rkey,
-			did,
-			title: (record.title as string) ?? '',
-			description: record.description as string | undefined,
-			columnId: (record.columnId as string) ?? '',
-			boardUri,
-			position: record.position as string | undefined,
-			order: (record.order as number) ?? 0,
-			createdAt: (record.createdAt as string) ?? new Date().toISOString(),
-			updatedAt: record.updatedAt as string | undefined,
-			syncStatus: 'synced' as const
-		};
+    const taskData = {
+      rkey: commit.rkey,
+      did,
+      title: (record.title as string) ?? "",
+      description: record.description as string | undefined,
+      columnId: (record.columnId as string) ?? "",
+      boardUri,
+      position: record.position as string | undefined,
+      order: (record.order as number) ?? 0,
+      createdAt: (record.createdAt as string) ?? new Date().toISOString(),
+      updatedAt: record.updatedAt as string | undefined,
+      syncStatus: "synced" as const,
+    };
 
-		if (existing?.id) {
-			await db.tasks.update(existing.id, taskData);
-		} else {
-			await db.tasks.add(taskData);
-		}
-		return { did, boardUri };
-	}
+    if (existing?.id) {
+      await db.tasks.update(existing.id, taskData);
+    } else {
+      await db.tasks.add(taskData);
+    }
+    return { did, boardUri };
+  }
 
-	if (commit.collection === OP_COLLECTION) {
-		const existing = await db.ops.where('[did+rkey]').equals([did, commit.rkey]).first();
+  if (commit.collection === OP_COLLECTION) {
+    const existing = await db.ops
+      .where("[did+rkey]")
+      .equals([did, commit.rkey])
+      .first();
 
-		const opData = {
-			rkey: commit.rkey,
-			did,
-			targetTaskUri: (record.targetTaskUri as string) ?? '',
-			boardUri,
-			fields: (record.fields as Record<string, unknown>) ?? {},
-			createdAt: (record.createdAt as string) ?? new Date().toISOString(),
-			syncStatus: 'synced' as const
-		};
+    const opData = {
+      rkey: commit.rkey,
+      did,
+      targetTaskUri: (record.targetTaskUri as string) ?? "",
+      boardUri,
+      fields: (record.fields as Record<string, unknown>) ?? {},
+      createdAt: (record.createdAt as string) ?? new Date().toISOString(),
+      syncStatus: "synced" as const,
+    };
 
-		if (existing?.id) {
-			await db.ops.update(existing.id, opData);
-		} else {
-			await db.ops.add(opData);
-		}
-		return { did, boardUri };
-	}
+    if (existing?.id) {
+      await db.ops.update(existing.id, opData);
+    } else {
+      await db.ops.add(opData);
+    }
+    return { did, boardUri };
+  }
 
-	if (commit.collection === TRUST_COLLECTION) {
-		const existing = await db.trusts
-			.where('[did+boardUri+trustedDid]')
-			.equals([did, boardUri, (record.trustedDid as string) ?? ''])
-			.first();
+  if (commit.collection === TRUST_COLLECTION) {
+    const existing = await db.trusts
+      .where("[did+boardUri+trustedDid]")
+      .equals([did, boardUri, (record.trustedDid as string) ?? ""])
+      .first();
 
-		const trustData = {
-			rkey: commit.rkey,
-			did,
-			trustedDid: (record.trustedDid as string) ?? '',
-			boardUri,
-			createdAt: (record.createdAt as string) ?? new Date().toISOString(),
-			syncStatus: 'synced' as const
-		};
+    const trustData = {
+      rkey: commit.rkey,
+      did,
+      trustedDid: (record.trustedDid as string) ?? "",
+      boardUri,
+      createdAt: (record.createdAt as string) ?? new Date().toISOString(),
+      syncStatus: "synced" as const,
+    };
 
-		if (existing?.id) {
-			await db.trusts.update(existing.id, trustData);
-		} else {
-			await db.trusts.add(trustData);
-		}
-		return { did, boardUri };
-	}
+    if (existing?.id) {
+      await db.trusts.update(existing.id, trustData);
+    } else {
+      await db.trusts.add(trustData);
+    }
+    return { did, boardUri };
+  }
 
-	if (commit.collection === COMMENT_COLLECTION) {
-		const existing = await db.comments.where('[did+rkey]').equals([did, commit.rkey]).first();
+  if (commit.collection === COMMENT_COLLECTION) {
+    const existing = await db.comments
+      .where("[did+rkey]")
+      .equals([did, commit.rkey])
+      .first();
 
-		const commentData = {
-			rkey: commit.rkey,
-			did,
-			targetTaskUri: (record.targetTaskUri as string) ?? '',
-			boardUri,
-			text: (record.text as string) ?? '',
-			createdAt: (record.createdAt as string) ?? new Date().toISOString(),
-			syncStatus: 'synced' as const
-		};
+    const commentData = {
+      rkey: commit.rkey,
+      did,
+      targetTaskUri: (record.targetTaskUri as string) ?? "",
+      boardUri,
+      text: (record.text as string) ?? "",
+      createdAt: (record.createdAt as string) ?? new Date().toISOString(),
+      syncStatus: "synced" as const,
+    };
 
-		if (existing?.id) {
-			await db.comments.update(existing.id, commentData);
-		} else {
-			await db.comments.add(commentData);
-		}
-		return { did, boardUri };
-	}
+    if (existing?.id) {
+      await db.comments.update(existing.id, commentData);
+    } else {
+      await db.comments.add(commentData);
+    }
+    return { did, boardUri };
+  }
 
-	return null;
+  return null;
 }
