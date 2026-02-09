@@ -15,6 +15,22 @@ let error = $state<string | null>(null);
 
 let oauthClient: BrowserOAuthClient | null = null;
 
+/**
+ * Resolve an AT Protocol handle to a DID via the .well-known/atproto-did endpoint.
+ * This is the standard resolution path that works for any PDS, not just Bluesky.
+ */
+async function resolveHandleViaWellKnown(handle: string): Promise<string | null> {
+  try {
+    const res = await fetch(`https://${handle}/.well-known/atproto-did`);
+    if (!res.ok) return null;
+    const text = (await res.text()).trim();
+    if (text.startsWith("did:")) return text;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 function isLoopback(): boolean {
   const hostname = window.location.hostname;
   return (
@@ -89,6 +105,20 @@ export async function login(handle: string): Promise<void> {
       signal: new AbortController().signal,
     });
   } catch (e) {
+    // Bluesky's handle resolver failed — try AT Protocol .well-known resolution
+    if (!handle.startsWith("did:") && handle.includes(".")) {
+      const resolved = await resolveHandleViaWellKnown(handle);
+      if (resolved) {
+        try {
+          await oauthClient.signIn(resolved, {
+            signal: new AbortController().signal,
+          });
+          return;
+        } catch {
+          // DID resolved but OAuth failed — fall through to report original error
+        }
+      }
+    }
     console.error("Login error:", e);
     error = e instanceof Error ? e.message : "Failed to sign in";
   }

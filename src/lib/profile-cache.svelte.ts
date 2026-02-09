@@ -26,6 +26,44 @@ let profiles = $state<Record<string, ProfileState>>({});
 // In-flight request deduplication
 const inflight = new Map<string, Promise<void>>();
 
+function didDocUrl(did: string): string | null {
+  if (did.startsWith("did:web:")) {
+    const host = did.slice("did:web:".length);
+    return `https://${host}/.well-known/did.json`;
+  }
+  if (did.startsWith("did:plc:")) {
+    return `https://plc.directory/${did}`;
+  }
+  return null;
+}
+
+function extractHandle(didDoc: { alsoKnownAs?: string[] }): string | undefined {
+  for (const aka of didDoc.alsoKnownAs ?? []) {
+    if (aka.startsWith("at://")) {
+      return aka.slice("at://".length);
+    }
+  }
+  return undefined;
+}
+
+async function fetchProfileFromDidDoc(did: string): Promise<ProfileData | null> {
+  const url = didDocUrl(did);
+  if (!url) return null;
+
+  const res = await fetch(url);
+  if (!res.ok) return null;
+  const doc = await res.json();
+  const handle = extractHandle(doc);
+  if (!handle) return null;
+
+  return {
+    handle,
+    displayName: undefined,
+    avatar: undefined,
+    fetchedAt: Date.now(),
+  };
+}
+
 async function fetchProfile(did: string): Promise<void> {
   if (inflight.has(did)) return;
   if (!navigator.onLine) return;
@@ -47,11 +85,13 @@ async function fetchProfile(did: string): Promise<void> {
         },
       };
     } catch {
-      profiles[did] = {
-        loading: false,
-        error: true,
-        data: null,
-      };
+      // Bluesky API failed — try resolving the DID document directly
+      const fallback = await fetchProfileFromDidDoc(did);
+      if (fallback) {
+        profiles[did] = { loading: false, error: false, data: fallback };
+      } else {
+        profiles[did] = { loading: false, error: true, data: null };
+      }
     } finally {
       inflight.delete(did);
     }

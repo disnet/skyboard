@@ -44,7 +44,7 @@
     const query = handle.trim();
     clearTimeout(debounceTimer);
 
-    if (query.length < 2) {
+    if (query.length < 2 || query.startsWith("did:")) {
       suggestions = [];
       showDropdown = false;
       activeIndex = -1;
@@ -124,7 +124,7 @@
         id="handle"
         type="text"
         bind:value={handle}
-        placeholder="e.g. alice.bsky.social"
+        placeholder="e.g. alice.bsky.social or your-pds.example.com"
         disabled={submitting}
         required
         autocomplete="off"
