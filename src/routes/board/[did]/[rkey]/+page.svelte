@@ -1,6 +1,5 @@
 <script lang="ts">
   import { page } from "$app/stores";
-  import { goto } from "$app/navigation";
   import { onDestroy } from "svelte";
   import { db } from "$lib/db.js";
   import { useLiveQuery } from "$lib/db.svelte.js";
@@ -39,7 +38,13 @@
     MaterializedTask,
   } from "$lib/types.js";
   import Column from "$lib/components/Column.svelte";
+  import BoardSettingsModal from "$lib/components/BoardSettingsModal.svelte";
+  import PermissionsModal from "$lib/components/PermissionsModal.svelte";
+  import ProposalPanel from "$lib/components/ProposalPanel.svelte";
+  import OpsPanel from "$lib/components/OpsPanel.svelte";
+  import TrustedUsersPanel from "$lib/components/TrustedUsersPanel.svelte";
   import TaskEditModal from "$lib/components/TaskEditModal.svelte";
+  import { goto } from "$app/navigation";
 
   const auth = getAuth();
 
@@ -52,14 +57,7 @@
   let loading = $state(true);
   let error = $state<string | null>(null);
 
-  // Redirect logged-in users to the interactive board page
-  $effect(() => {
-    if (auth.isLoggedIn && !auth.isLoading && board.current) {
-      goto(`/board/${rkey}`, { replaceState: true });
-    }
-  });
-
-  // Fetch board data from PDS on load
+  // Fetch board data from PDS on load (for share links / first visit)
   $effect(() => {
     if (!ownerDid || !rkey) return;
 
@@ -158,11 +156,19 @@
       : getBoardPermissions({ permissions: undefined } as any),
   );
 
+  const isBoardOwner = $derived(
+    auth.isLoggedIn && board.current?.did === auth.did,
+  );
+
+  // Comment counts grouped by targetTaskUri — only count permitted comments
   const commentCountsByTask = $derived.by(() => {
     const map = new Map<string, number>();
     if (!board.current) return map;
     for (const comment of allComments.current ?? []) {
-      if (comment.did === board.current.did) {
+      if (
+        comment.did === auth.did ||
+        comment.did === board.current.did
+      ) {
         map.set(
           comment.targetTaskUri,
           (map.get(comment.targetTaskUri) ?? 0) + 1,
@@ -187,20 +193,58 @@
     return map;
   });
 
-  // Materialized view — pass '' as currentUserDid since viewer is not logged in
+  // Materialized view with LWW merge
   const materializedTasks = $derived.by(() => {
     if (!allTasks.current || !allOps.current || !board.current) return [];
     return materializeTasks(
       allTasks.current,
       allOps.current,
       ownerTrustedDids,
-      "",
+      auth.did ?? "",
       board.current.did,
       permissions,
     );
   });
 
-  // Group tasks by column — show board owner tasks + permitted tasks
+  // Pending proposals from untrusted users (logged-in only)
+  const pendingProposals = $derived(
+    materializedTasks.flatMap((t) => t.pendingOps),
+  );
+
+  // Tasks that don't pass create_task permission (shown in Proposals panel)
+  const untrustedTasks = $derived.by(() => {
+    if (!board.current || !auth.isLoggedIn) return [];
+    return (allTasks.current ?? []).filter((t) => {
+      if (t.did === auth.did) return false;
+      if (t.did === board.current!.did) return false;
+      return !hasPermission(
+        t.did,
+        board.current!.did,
+        ownerTrustedDids,
+        permissions,
+        "create_task",
+        t.columnId,
+      );
+    });
+  });
+
+  // Comments from untrusted users (shown in Proposals panel)
+  const untrustedComments = $derived.by(() => {
+    if (!board.current || !auth.isLoggedIn) return [];
+    return (allComments.current ?? []).filter((c) => {
+      if (c.did === auth.did) return false;
+      if (c.did === board.current!.did) return false;
+      return !hasPermission(
+        c.did,
+        board.current!.did,
+        ownerTrustedDids,
+        permissions,
+        "comment",
+      );
+    });
+  });
+
+  // Group materialized tasks by effective column
   const tasksByColumn = $derived.by(() => {
     const map = new Map<string, MaterializedTask[]>();
     if (!board.current) return map;
@@ -208,11 +252,16 @@
       map.set(col.id, []);
     }
     for (const task of materializedTasks) {
-      if (task.ownerDid === board.current.did) {
+      // Board owner and current user tasks always show
+      if (
+        task.ownerDid === board.current.did ||
+        task.ownerDid === auth.did
+      ) {
         const list = map.get(task.effectiveColumnId);
         if (list) list.push(task);
         continue;
       }
+      // Check create_task permission for the task's original column
       if (
         hasPermission(
           task.ownerDid,
@@ -236,11 +285,42 @@
       : [],
   );
 
+  let showSettings = $state(false);
+  let showPermissions = $state(false);
+  let showProposals = $state(false);
+  let showOpsPanel = $state(false);
+  let showTrustedUsers = $state(false);
+  let editingTask = $state<MaterializedTask | null>(null);
+
+  function openTaskEditor(task: MaterializedTask) {
+    editingTask = task;
+    history.replaceState(null, "", `#task-${task.rkey}`);
+  }
+
+  function closeTaskEditor() {
+    editingTask = null;
+    history.replaceState(null, "", window.location.pathname);
+  }
+
+  // Open task from URL hash on load or when tasks become available
+  $effect(() => {
+    const hash = window.location.hash;
+    if (!hash.startsWith("#task-") || editingTask) return;
+    const taskRkey = hash.slice(6);
+    const task = materializedTasks.find((t) => t.rkey === taskRkey);
+    if (task) {
+      editingTask = task;
+    }
+  });
+
   // --- Jetstream lifecycle ---
   let jetstreamClient: JetstreamClient | null = null;
 
   $effect(() => {
     if (!boardUri) return;
+
+    // Cold start: fetch from known participants
+    fetchAllKnownParticipants(boardUri).catch(console.error);
 
     loadJetstreamCursor().then((cursor) => {
       if (!cursor) {
@@ -256,6 +336,7 @@
         ],
         cursor,
         onEvent: async (event) => {
+          if (event.did === auth.did) return;
           const result = await processJetstreamEvent(event);
           if (result) {
             addKnownParticipant(result.did, result.boardUri).catch(
@@ -264,10 +345,10 @@
           }
         },
         onConnect: () => {
-          console.log("Jetstream connected (public view)");
+          console.log("Jetstream connected");
         },
         onReconnect: () => {
-          console.log("Jetstream reconnected, backfilling");
+          console.log("Jetstream reconnected, backfilling from PDS");
           fetchAllKnownParticipants(boardUri).catch(console.error);
         },
         onError: (err) => {
@@ -289,31 +370,39 @@
     };
   });
 
-  let viewingTask = $state<MaterializedTask | null>(null);
-
-  function openTaskViewer(task: MaterializedTask) {
-    viewingTask = task;
-  }
-
   let shareCopied = $state(false);
-  async function shareUrl() {
-    const url = `${window.location.origin}/board/${ownerDid}/${rkey}`;
+  async function shareBoardUri() {
     try {
-      await navigator.clipboard.writeText(url);
+      await navigator.clipboard.writeText(window.location.href);
       shareCopied = true;
       setTimeout(() => (shareCopied = false), 2000);
     } catch {
-      window.prompt("Copy this link to share:", url);
+      window.prompt("Copy this link to share:", window.location.href);
     }
+  }
+
+  async function deleteBoard() {
+    if (!board.current?.id || !isBoardOwner) return;
+    if (!confirm("Delete this board and all its tasks?")) return;
+
+    const boardId = board.current.id;
+    const uri = boardUri;
+
+    await db.tasks.where("boardUri").equals(uri).delete();
+    await db.ops.where("boardUri").equals(uri).delete();
+    await db.comments.where("boardUri").equals(uri).delete();
+    await db.boards.delete(boardId);
+
+    goto("/");
   }
 </script>
 
-{#if loading}
+{#if loading && !board.current}
   <div class="loading-state">
     <div class="spinner"></div>
     <p>Loading board...</p>
   </div>
-{:else if error}
+{:else if error && !board.current}
   <div class="error-state">
     <p>{error}</p>
     <a href="/">Go to Skyboard</a>
@@ -322,19 +411,68 @@
   <div class="board-page">
     <div class="board-header">
       <div class="board-header-left">
+        <a href="/" class="back-link">Boards</a>
+        <span class="separator">/</span>
         <h2>{board.current.name}</h2>
-        <span class="readonly-badge">Read-only</span>
+        {#if !auth.isLoggedIn}
+          <span class="readonly-badge">Read-only</span>
+        {:else if !isBoardOwner}
+          <span class="shared-badge">Shared</span>
+        {/if}
       </div>
       <div class="board-header-right">
-        <button class="share-btn" onclick={shareUrl}>
+        {#if auth.isLoggedIn}
+          <button class="activity-btn" onclick={() => (showOpsPanel = true)}>
+            Activity
+          </button>
+          {#if pendingProposals.length > 0 || untrustedTasks.length > 0 || untrustedComments.length > 0}
+            <button
+              class="proposals-btn"
+              onclick={() => (showProposals = true)}
+            >
+              Proposals
+              <span class="badge">
+                {pendingProposals.length +
+                  untrustedTasks.length +
+                  untrustedComments.length}
+              </span>
+            </button>
+          {/if}
+        {/if}
+        <button class="share-btn" onclick={shareBoardUri}>
           {shareCopied ? "Copied!" : "Share"}
         </button>
+        {#if isBoardOwner}
+          <button
+            class="trusted-btn"
+            onclick={() => (showTrustedUsers = true)}
+          >
+            Trusted
+            {#if (ownerTrusts.current ?? []).length > 0}
+              <span class="trusted-badge"
+                >{(ownerTrusts.current ?? []).length}</span
+              >
+            {/if}
+          </button>
+          <button
+            class="settings-btn"
+            onclick={() => (showPermissions = true)}
+          >
+            Permissions
+          </button>
+          <button class="settings-btn" onclick={() => (showSettings = true)}>
+            Settings
+          </button>
+          <button class="delete-btn" onclick={deleteBoard}>Delete</button>
+        {/if}
       </div>
     </div>
 
-    <div class="readonly-banner">
-      Viewing in read-only mode. <a href="/">Sign in</a> to collaborate.
-    </div>
+    {#if !auth.isLoggedIn}
+      <div class="readonly-banner">
+        Viewing in read-only mode. <a href="/">Sign in</a> to collaborate.
+      </div>
+    {/if}
 
     <div class="columns-container">
       {#each sortedColumns as column (column.id)}
@@ -342,29 +480,69 @@
           {column}
           tasks={tasksByColumn.get(column.id) ?? []}
           {boardUri}
-          did={""}
+          did={auth.did ?? ""}
           boardOwnerDid={board.current.did}
           {permissions}
           {ownerTrustedDids}
           commentCounts={commentCountsByTask}
-          onedit={openTaskViewer}
-          readonly={true}
+          onedit={openTaskEditor}
+          readonly={!auth.isLoggedIn}
         />
       {/each}
     </div>
   </div>
 
-  {#if viewingTask}
+  {#if showSettings && isBoardOwner}
+    <BoardSettingsModal
+      board={board.current}
+      onclose={() => (showSettings = false)}
+    />
+  {/if}
+
+  {#if showPermissions && isBoardOwner}
+    <PermissionsModal
+      board={board.current}
+      onclose={() => (showPermissions = false)}
+    />
+  {/if}
+
+  {#if showProposals}
+    <ProposalPanel
+      proposals={pendingProposals}
+      {untrustedTasks}
+      {untrustedComments}
+      {boardUri}
+      onclose={() => (showProposals = false)}
+    />
+  {/if}
+
+  {#if showTrustedUsers && isBoardOwner}
+    <TrustedUsersPanel
+      trusts={ownerTrusts.current ?? []}
+      {boardUri}
+      onclose={() => (showTrustedUsers = false)}
+    />
+  {/if}
+
+  {#if showOpsPanel}
+    <OpsPanel
+      ops={allOps.current ?? []}
+      tasks={allTasks.current ?? []}
+      onclose={() => (showOpsPanel = false)}
+    />
+  {/if}
+
+  {#if editingTask}
     <TaskEditModal
-      task={viewingTask}
-      currentUserDid={""}
+      task={editingTask}
+      currentUserDid={auth.did ?? ""}
       boardOwnerDid={board.current.did}
       {permissions}
       {ownerTrustedDids}
       comments={allComments.current ?? []}
       {boardUri}
-      onclose={() => (viewingTask = null)}
-      readonly={true}
+      onclose={closeTaskEditor}
+      readonly={!auth.isLoggedIn}
     />
   {/if}
 {:else}
@@ -426,10 +604,28 @@
     gap: 0.5rem;
   }
 
+  .back-link {
+    font-size: 0.875rem;
+    color: var(--color-text-secondary);
+  }
+
+  .separator {
+    color: var(--color-border);
+  }
+
   .board-header h2 {
     margin: 0;
     font-size: 1.125rem;
     font-weight: 600;
+  }
+
+  .shared-badge {
+    font-size: 0.6875rem;
+    background: var(--color-primary-alpha, rgba(0, 102, 204, 0.1));
+    color: var(--color-primary);
+    padding: 0.125rem 0.5rem;
+    border-radius: var(--radius-sm);
+    font-weight: 500;
   }
 
   .readonly-badge {
@@ -446,6 +642,8 @@
     gap: 0.5rem;
   }
 
+  .settings-btn,
+  .delete-btn,
   .share-btn {
     padding: 0.375rem 0.75rem;
     border: 1px solid var(--color-border);
@@ -459,9 +657,99 @@
       color 0.15s;
   }
 
+  .settings-btn:hover,
   .share-btn:hover {
     background: var(--color-bg);
     color: var(--color-text);
+  }
+
+  .delete-btn:hover {
+    background: var(--color-error-bg);
+    color: var(--color-error);
+    border-color: var(--color-error);
+  }
+
+  .activity-btn {
+    padding: 0.375rem 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    font-size: 0.8125rem;
+    cursor: pointer;
+    background: var(--color-surface);
+    color: var(--color-text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    transition:
+      background 0.15s,
+      color 0.15s;
+  }
+
+  .activity-btn:hover {
+    background: var(--color-bg);
+    color: var(--color-text);
+  }
+
+  .proposals-btn {
+    padding: 0.375rem 0.75rem;
+    border: 1px solid var(--color-warning);
+    border-radius: var(--radius-md);
+    font-size: 0.8125rem;
+    cursor: pointer;
+    background: var(--color-surface);
+    color: var(--color-warning);
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    transition: background 0.15s;
+  }
+
+  .proposals-btn:hover {
+    background: var(--color-bg);
+  }
+
+  .badge {
+    font-size: 0.6875rem;
+    background: var(--color-warning);
+    color: white;
+    padding: 0 0.375rem;
+    border-radius: var(--radius-sm);
+    font-weight: 600;
+    min-width: 1rem;
+    text-align: center;
+  }
+
+  .trusted-btn {
+    padding: 0.375rem 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    font-size: 0.8125rem;
+    cursor: pointer;
+    background: var(--color-surface);
+    color: var(--color-text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    transition:
+      background 0.15s,
+      color 0.15s;
+  }
+
+  .trusted-btn:hover {
+    background: var(--color-bg);
+    color: var(--color-text);
+  }
+
+  .trusted-badge {
+    font-size: 0.6875rem;
+    background: var(--color-primary);
+    color: white;
+    padding: 0 0.375rem;
+    border-radius: var(--radius-sm);
+    font-weight: 600;
+    min-width: 1rem;
+    text-align: center;
   }
 
   .readonly-banner {
@@ -486,4 +774,5 @@
     overflow-x: auto;
     align-items: flex-start;
   }
+
 </style>

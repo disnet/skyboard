@@ -93,7 +93,7 @@
       // Check if we already have this board
       const existing = await db.boards.where("rkey").equals(rkey).first();
       if (existing) {
-        goto(`/board/${rkey}`);
+        goto(`/board/${ownerDid}/${rkey}`);
         return;
       }
 
@@ -114,7 +114,7 @@
       }
 
       joinUri = "";
-      goto(`/board/${rkey}`);
+      goto(`/board/${ownerDid}/${rkey}`);
     } catch (err) {
       console.error("Failed to join board:", err);
       joinError = "Failed to join board.";

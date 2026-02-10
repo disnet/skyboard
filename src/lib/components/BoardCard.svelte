@@ -4,7 +4,7 @@
   let { board }: { board: Board } = $props();
 </script>
 
-<a href="/board/{board.rkey}" class="board-card">
+<a href="/board/{board.did}/{board.rkey}" class="board-card">
   <h3 class="board-name">{board.name}</h3>
   {#if board.description}
     <p class="board-desc">{board.description}</p>
