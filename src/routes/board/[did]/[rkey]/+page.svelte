@@ -11,9 +11,10 @@
     OP_COLLECTION,
     TRUST_COLLECTION,
     COMMENT_COLLECTION,
+    APPROVAL_COLLECTION,
   } from "$lib/tid.js";
   import { materializeTasks } from "$lib/materialize.js";
-  import { getBoardPermissions, hasPermission } from "$lib/permissions.js";
+  import { isTrusted, isContentVisible } from "$lib/permissions.js";
   import {
     JetstreamClient,
     loadJetstreamCursor,
@@ -25,6 +26,7 @@
     fetchRemoteOps,
     fetchRemoteTrusts,
     fetchRemoteComments,
+    fetchRemoteApprovals,
     seedParticipantsFromTrusts,
     fetchAllKnownParticipants,
     addKnownParticipant,
@@ -35,6 +37,8 @@
     Op,
     Trust,
     Comment,
+    Approval,
+    Block,
     MaterializedTask,
   } from "$lib/types.js";
   import Column from "$lib/components/Column.svelte";
@@ -42,9 +46,9 @@
   import PermissionsModal from "$lib/components/PermissionsModal.svelte";
   import ProposalPanel from "$lib/components/ProposalPanel.svelte";
   import OpsPanel from "$lib/components/OpsPanel.svelte";
-  import TrustedUsersPanel from "$lib/components/TrustedUsersPanel.svelte";
   import TaskEditModal from "$lib/components/TaskEditModal.svelte";
   import { goto } from "$app/navigation";
+  import { logout } from "$lib/auth.svelte.js";
 
   const auth = getAuth();
 
@@ -85,7 +89,7 @@
             name: boardData.name,
             description: boardData.description,
             columns: boardData.columns,
-            permissions: boardData.permissions,
+            open: boardData.open,
             createdAt: boardData.createdAt,
             syncStatus: boardData.syncStatus,
           });
@@ -97,11 +101,12 @@
         await fetchRemoteTrusts(ownerDid, boardUri);
         await seedParticipantsFromTrusts(boardUri);
 
-        // Fetch owner's tasks, ops, and comments
+        // Fetch owner's tasks, ops, comments, and approvals
         await Promise.all([
           fetchRemoteTasks(ownerDid, boardUri),
           fetchRemoteOps(ownerDid, boardUri),
           fetchRemoteComments(ownerDid, boardUri),
+          fetchRemoteApprovals(ownerDid, boardUri),
         ]);
 
         // Fetch all known participants' data
@@ -146,42 +151,58 @@
     return db.comments.where("boardUri").equals(boardUri).toArray();
   });
 
+  const allApprovals = useLiveQuery<Approval[]>(() => {
+    if (!boardUri) return [];
+    return db.approvals.where("boardUri").equals(boardUri).toArray();
+  });
+
+  const allBlocks = useLiveQuery<Block[]>(() => {
+    if (!boardUri || !auth.did) return [];
+    return db.blocks
+      .where("did")
+      .equals(auth.did)
+      .filter((b) => b.boardUri === boardUri)
+      .toArray();
+  });
+
+  const blockedDids = $derived(
+    new Set((allBlocks.current ?? []).map((b) => b.blockedDid)),
+  );
+
   const ownerTrustedDids = $derived(
     new Set((ownerTrusts.current ?? []).map((t) => t.trustedDid)),
   );
 
-  const permissions = $derived(
-    board.current
-      ? getBoardPermissions(board.current)
-      : getBoardPermissions({ permissions: undefined } as any),
+  const boardOpen = $derived(board.current?.open ?? false);
+
+  const approvedUris = $derived(
+    new Set((allApprovals.current ?? []).map((a) => a.targetUri)),
   );
 
   const isBoardOwner = $derived(
     auth.isLoggedIn && board.current?.did === auth.did,
   );
 
-  // Comment counts grouped by targetTaskUri — only count permitted comments
+  // Detect if approvals are failing to sync (likely a scope/auth issue requiring re-login)
+  const hasApprovalSyncErrors = $derived(
+    (allApprovals.current ?? []).some((a) => a.syncStatus === "error"),
+  );
+
+  // Comment counts grouped by targetTaskUri — only count visible comments
   const commentCountsByTask = $derived.by(() => {
     const map = new Map<string, number>();
     if (!board.current) return map;
     for (const comment of allComments.current ?? []) {
+      const commentUri = buildAtUri(comment.did, COMMENT_COLLECTION, comment.rkey);
       if (
-        comment.did === auth.did ||
-        comment.did === board.current.did
-      ) {
-        map.set(
-          comment.targetTaskUri,
-          (map.get(comment.targetTaskUri) ?? 0) + 1,
-        );
-        continue;
-      }
-      if (
-        hasPermission(
+        isContentVisible(
           comment.did,
+          auth.did ?? "",
           board.current.did,
           ownerTrustedDids,
-          permissions,
-          "comment",
+          boardOpen,
+          approvedUris,
+          commentUri,
         )
       ) {
         map.set(
@@ -202,49 +223,36 @@
       ownerTrustedDids,
       auth.did ?? "",
       board.current.did,
-      permissions,
     );
   });
 
-  // Pending proposals from untrusted users (logged-in only)
-  const pendingProposals = $derived(
-    materializedTasks.flatMap((t) => t.pendingOps),
-  );
-
-  // Tasks that don't pass create_task permission (shown in Proposals panel)
+  // Untrusted tasks on open boards (not yet approved) — shown in Proposals panel
   const untrustedTasks = $derived.by(() => {
-    if (!board.current || !auth.isLoggedIn) return [];
+    if (!board.current || !isBoardOwner) return [];
     return (allTasks.current ?? []).filter((t) => {
       if (t.did === auth.did) return false;
       if (t.did === board.current!.did) return false;
-      return !hasPermission(
-        t.did,
-        board.current!.did,
-        ownerTrustedDids,
-        permissions,
-        "create_task",
-        t.columnId,
-      );
+      if (blockedDids.has(t.did)) return false;
+      if (isTrusted(t.did, board.current!.did, ownerTrustedDids)) return false;
+      const taskUri = buildAtUri(t.did, TASK_COLLECTION, t.rkey);
+      return !approvedUris.has(taskUri);
     });
   });
 
-  // Comments from untrusted users (shown in Proposals panel)
+  // Untrusted comments on open boards (not yet approved) — shown in Proposals panel
   const untrustedComments = $derived.by(() => {
-    if (!board.current || !auth.isLoggedIn) return [];
+    if (!board.current || !isBoardOwner) return [];
     return (allComments.current ?? []).filter((c) => {
       if (c.did === auth.did) return false;
       if (c.did === board.current!.did) return false;
-      return !hasPermission(
-        c.did,
-        board.current!.did,
-        ownerTrustedDids,
-        permissions,
-        "comment",
-      );
+      if (blockedDids.has(c.did)) return false;
+      if (isTrusted(c.did, board.current!.did, ownerTrustedDids)) return false;
+      const commentUri = buildAtUri(c.did, COMMENT_COLLECTION, c.rkey);
+      return !approvedUris.has(commentUri);
     });
   });
 
-  // Group materialized tasks by effective column
+  // Group materialized tasks by effective column — filter by visibility
   const tasksByColumn = $derived.by(() => {
     const map = new Map<string, MaterializedTask[]>();
     if (!board.current) return map;
@@ -252,24 +260,16 @@
       map.set(col.id, []);
     }
     for (const task of materializedTasks) {
-      // Board owner and current user tasks always show
+      const taskUri = buildAtUri(task.did, TASK_COLLECTION, task.rkey);
       if (
-        task.ownerDid === board.current.did ||
-        task.ownerDid === auth.did
-      ) {
-        const list = map.get(task.effectiveColumnId);
-        if (list) list.push(task);
-        continue;
-      }
-      // Check create_task permission for the task's original column
-      if (
-        hasPermission(
+        isContentVisible(
           task.ownerDid,
+          auth.did ?? "",
           board.current.did,
           ownerTrustedDids,
-          permissions,
-          "create_task",
-          task.columnId,
+          boardOpen,
+          approvedUris,
+          taskUri,
         )
       ) {
         const list = map.get(task.effectiveColumnId);
@@ -289,7 +289,6 @@
   let showPermissions = $state(false);
   let showProposals = $state(false);
   let showOpsPanel = $state(false);
-  let showTrustedUsers = $state(false);
   let editingTask = $state<MaterializedTask | null>(null);
 
   function openTaskEditor(task: MaterializedTask) {
@@ -333,6 +332,7 @@
           OP_COLLECTION,
           TRUST_COLLECTION,
           COMMENT_COLLECTION,
+          APPROVAL_COLLECTION,
         ],
         cursor,
         onEvent: async (event) => {
@@ -391,6 +391,7 @@
     await db.tasks.where("boardUri").equals(uri).delete();
     await db.ops.where("boardUri").equals(uri).delete();
     await db.comments.where("boardUri").equals(uri).delete();
+    await db.approvals.where("boardUri").equals(uri).delete();
     await db.boards.delete(boardId);
 
     goto("/");
@@ -419,22 +420,23 @@
         {:else if !isBoardOwner}
           <span class="shared-badge">Shared</span>
         {/if}
+        {#if boardOpen}
+          <span class="open-badge">Open</span>
+        {/if}
       </div>
       <div class="board-header-right">
         {#if auth.isLoggedIn}
           <button class="activity-btn" onclick={() => (showOpsPanel = true)}>
             Activity
           </button>
-          {#if pendingProposals.length > 0 || untrustedTasks.length > 0 || untrustedComments.length > 0}
+          {#if isBoardOwner && (untrustedTasks.length > 0 || untrustedComments.length > 0)}
             <button
               class="proposals-btn"
               onclick={() => (showProposals = true)}
             >
               Proposals
               <span class="badge">
-                {pendingProposals.length +
-                  untrustedTasks.length +
-                  untrustedComments.length}
+                {untrustedTasks.length + untrustedComments.length}
               </span>
             </button>
           {/if}
@@ -444,21 +446,13 @@
         </button>
         {#if isBoardOwner}
           <button
-            class="trusted-btn"
-            onclick={() => (showTrustedUsers = true)}
-          >
-            Trusted
-            {#if (ownerTrusts.current ?? []).length > 0}
-              <span class="trusted-badge"
-                >{(ownerTrusts.current ?? []).length}</span
-              >
-            {/if}
-          </button>
-          <button
             class="settings-btn"
             onclick={() => (showPermissions = true)}
           >
-            Permissions
+            Access
+            {#if (ownerTrusts.current ?? []).length > 0}
+              <span class="access-badge">{(ownerTrusts.current ?? []).length}</span>
+            {/if}
           </button>
           <button class="settings-btn" onclick={() => (showSettings = true)}>
             Settings
@@ -474,6 +468,15 @@
       </div>
     {/if}
 
+    {#if hasApprovalSyncErrors && isBoardOwner}
+      <div class="reauth-banner">
+        Approval sync failed. You may need to sign out and re-login to grant updated permissions.
+        <button class="reauth-btn" onclick={async () => { await logout(); goto("/"); }}>
+          Sign out
+        </button>
+      </div>
+    {/if}
+
     <div class="columns-container">
       {#each sortedColumns as column (column.id)}
         <Column
@@ -482,8 +485,9 @@
           {boardUri}
           did={auth.did ?? ""}
           boardOwnerDid={board.current.did}
-          {permissions}
+          {boardOpen}
           {ownerTrustedDids}
+          {approvedUris}
           commentCounts={commentCountsByTask}
           onedit={openTaskEditor}
           readonly={!auth.isLoggedIn}
@@ -502,27 +506,22 @@
   {#if showPermissions && isBoardOwner}
     <PermissionsModal
       board={board.current}
+      trusts={ownerTrusts.current ?? []}
+      {boardUri}
       onclose={() => (showPermissions = false)}
     />
   {/if}
 
-  {#if showProposals}
+  {#if showProposals && isBoardOwner}
     <ProposalPanel
-      proposals={pendingProposals}
       {untrustedTasks}
       {untrustedComments}
+      allTasks={allTasks.current ?? []}
       {boardUri}
       onclose={() => (showProposals = false)}
     />
   {/if}
 
-  {#if showTrustedUsers && isBoardOwner}
-    <TrustedUsersPanel
-      trusts={ownerTrusts.current ?? []}
-      {boardUri}
-      onclose={() => (showTrustedUsers = false)}
-    />
-  {/if}
 
   {#if showOpsPanel}
     <OpsPanel
@@ -537,8 +536,9 @@
       task={editingTask}
       currentUserDid={auth.did ?? ""}
       boardOwnerDid={board.current.did}
-      {permissions}
+      {boardOpen}
       {ownerTrustedDids}
+      {approvedUris}
       comments={allComments.current ?? []}
       {boardUri}
       onclose={closeTaskEditor}
@@ -637,6 +637,15 @@
     font-weight: 500;
   }
 
+  .open-badge {
+    font-size: 0.6875rem;
+    background: rgba(34, 197, 94, 0.1);
+    color: rgb(22, 163, 74);
+    padding: 0.125rem 0.5rem;
+    border-radius: var(--radius-sm);
+    font-weight: 500;
+  }
+
   .board-header-right {
     display: flex;
     gap: 0.5rem;
@@ -652,6 +661,9 @@
     cursor: pointer;
     background: var(--color-surface);
     color: var(--color-text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
     transition:
       background 0.15s,
       color 0.15s;
@@ -720,28 +732,7 @@
     text-align: center;
   }
 
-  .trusted-btn {
-    padding: 0.375rem 0.75rem;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-md);
-    font-size: 0.8125rem;
-    cursor: pointer;
-    background: var(--color-surface);
-    color: var(--color-text-secondary);
-    display: flex;
-    align-items: center;
-    gap: 0.375rem;
-    transition:
-      background 0.15s,
-      color 0.15s;
-  }
-
-  .trusted-btn:hover {
-    background: var(--color-bg);
-    color: var(--color-text);
-  }
-
-  .trusted-badge {
+  .access-badge {
     font-size: 0.6875rem;
     background: var(--color-primary);
     color: white;
@@ -766,6 +757,30 @@
     font-weight: 500;
   }
 
+  .reauth-banner {
+    padding: 0.5rem 1.5rem;
+    font-size: 0.8125rem;
+    color: var(--color-warning);
+    background: rgba(245, 158, 11, 0.08);
+    border-bottom: 1px solid var(--color-border-light);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .reauth-btn {
+    padding: 0.25rem 0.625rem;
+    background: var(--color-warning);
+    color: white;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
   .columns-container {
     flex: 1;
     display: flex;
@@ -774,5 +789,4 @@
     overflow-x: auto;
     align-items: flex-start;
   }
-
 </style>

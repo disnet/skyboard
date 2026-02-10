@@ -27,6 +27,10 @@
             "items": { "type": "ref", "ref": "#column" },
             "description": "Columns in this board"
           },
+          "open": {
+            "type": "boolean",
+            "description": "Whether the board is open (anyone can propose tasks/comments) or closed (trusted only)"
+          },
           "createdAt": {
             "type": "string",
             "format": "datetime",

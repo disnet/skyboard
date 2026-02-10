@@ -6,6 +6,7 @@ import {
   OP_COLLECTION,
   TRUST_COLLECTION,
   COMMENT_COLLECTION,
+  APPROVAL_COLLECTION,
   buildAtUri,
 } from "./tid.js";
 import type {
@@ -14,14 +15,30 @@ import type {
   Op,
   Trust,
   Comment,
+  Approval,
   BoardRecord,
   TaskRecord,
 } from "./types.js";
 import { opToRecord } from "./ops.js";
 import { trustToRecord } from "./trust.js";
 import { commentToRecord } from "./comments.js";
+import { approvalToRecord } from "./approvals.js";
 
 let syncInterval: ReturnType<typeof setInterval> | null = null;
+
+/**
+ * Infer the `open` flag from a PDS record that may have the old `permissions`
+ * field but no `open` field. If any old rule had scope "anyone", the board
+ * should be open.
+ */
+function inferOpen(value: Record<string, unknown>): boolean | undefined {
+  if (value.open !== undefined) return (value.open as boolean) || undefined;
+  const perms = value.permissions as
+    | { rules?: Array<{ scope?: string }> }
+    | undefined;
+  if (perms?.rules?.some((r) => r.scope === "anyone")) return true;
+  return undefined;
+}
 
 function boardToRecord(board: Board): BoardRecord {
   return {
@@ -29,7 +46,7 @@ function boardToRecord(board: Board): BoardRecord {
     name: board.name,
     ...(board.description ? { description: board.description } : {}),
     columns: board.columns,
-    ...(board.permissions ? { permissions: board.permissions } : {}),
+    ...(board.open ? { open: board.open } : {}),
     createdAt: board.createdAt,
   };
 }
@@ -54,6 +71,7 @@ function isNetworkError(err: unknown): boolean {
   const name = (err as { name?: string })?.name;
   return name === "FetchRequestError" || name === "_FetchRequestError";
 }
+
 
 export async function syncPendingToPDS(
   agent: Agent,
@@ -193,6 +211,33 @@ export async function syncPendingToPDS(
       }
     }
   }
+
+  // Sync pending approvals
+  const pendingApprovals = await db.approvals
+    .where("syncStatus")
+    .equals("pending")
+    .filter((a) => a.did === did)
+    .toArray();
+
+  for (const approval of pendingApprovals) {
+    try {
+      await agent.com.atproto.repo.putRecord({
+        repo: did,
+        collection: APPROVAL_COLLECTION,
+        rkey: approval.rkey,
+        record: approvalToRecord(approval),
+        validate: false,
+      });
+      if (approval.id) {
+        await db.approvals.update(approval.id, { syncStatus: "synced" });
+      }
+    } catch (err) {
+      console.error("Failed to sync approval to PDS:", err);
+      if (approval.id && !isNetworkError(err)) {
+        await db.approvals.update(approval.id, { syncStatus: "error" });
+      }
+    }
+  }
 }
 
 export async function pullFromPDS(agent: Agent, did: string): Promise<void> {
@@ -224,7 +269,7 @@ export async function pullFromPDS(agent: Agent, did: string): Promise<void> {
         name: (value.name as string) ?? "",
         description: value.description as string | undefined,
         columns: (value.columns as Board["columns"]) ?? [],
-        permissions: value.permissions as Board["permissions"],
+        open: inferOpen(value),
         createdAt: (value.createdAt as string) ?? new Date().toISOString(),
         syncStatus: "synced",
       };
@@ -413,6 +458,47 @@ export async function pullFromPDS(agent: Agent, did: string): Promise<void> {
 
     cursor = res.data.cursor;
   } while (cursor);
+
+  // Pull approvals
+  cursor = undefined;
+  do {
+    const res = await agent.com.atproto.repo.listRecords({
+      repo: did,
+      collection: APPROVAL_COLLECTION,
+      limit: 100,
+      cursor,
+    });
+
+    for (const record of res.data.records) {
+      const rkey = record.uri.split("/").pop()!;
+      const value = record.value as Record<string, unknown>;
+
+      const existing = await db.approvals
+        .where("[did+rkey]")
+        .equals([did, rkey])
+        .first();
+      if (existing && existing.syncStatus === "pending") {
+        continue;
+      }
+
+      const approvalData: Omit<Approval, "id"> = {
+        rkey,
+        did,
+        targetUri: (value.targetUri as string) ?? "",
+        boardUri: (value.boardUri as string) ?? "",
+        createdAt: (value.createdAt as string) ?? new Date().toISOString(),
+        syncStatus: "synced",
+      };
+
+      if (existing?.id) {
+        await db.approvals.update(existing.id, approvalData);
+      } else {
+        await db.approvals.add(approvalData as Approval);
+      }
+    }
+
+    cursor = res.data.cursor;
+  } while (cursor);
 }
 
 export async function deleteBoardFromPDS(
@@ -455,6 +541,27 @@ export async function deleteBoardFromPDS(
         });
       } catch (err) {
         console.error("Failed to delete comment from PDS:", err);
+      }
+    }
+  }
+
+  // Delete approvals from PDS
+  const approvals = await db.approvals
+    .where("boardUri")
+    .equals(boardUri)
+    .filter((a) => a.did === did)
+    .toArray();
+
+  for (const approval of approvals) {
+    if (approval.syncStatus === "synced") {
+      try {
+        await agent.com.atproto.repo.deleteRecord({
+          repo: did,
+          collection: APPROVAL_COLLECTION,
+          rkey: approval.rkey,
+        });
+      } catch (err) {
+        console.error("Failed to delete approval from PDS:", err);
       }
     }
   }
@@ -528,7 +635,7 @@ export async function deleteTrustFromPDS(
 }
 
 async function resetErrorsToPending(did: string): Promise<void> {
-  const tables = [db.boards, db.tasks, db.ops, db.trusts, db.comments];
+  const tables = [db.boards, db.tasks, db.ops, db.trusts, db.comments, db.approvals];
   for (const table of tables) {
     const errored = await (table as any)
       .where("syncStatus")

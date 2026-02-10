@@ -1,27 +1,5 @@
 export type SyncStatus = "synced" | "pending" | "error";
 
-// --- Permission types ---
-
-export type PermissionScope = "author_only" | "trusted" | "anyone";
-
-export type OperationType =
-  | "create_task"
-  | "edit_title"
-  | "edit_description"
-  | "move_task"
-  | "reorder"
-  | "comment";
-
-export interface PermissionRule {
-  operation: OperationType;
-  scope: PermissionScope;
-  columnIds?: string[]; // For create_task: restrict to specific columns
-}
-
-export interface BoardPermissions {
-  rules: PermissionRule[];
-}
-
 export interface Column {
   id: string;
   name: string;
@@ -35,7 +13,7 @@ export interface Board {
   name: string;
   description?: string;
   columns: Column[];
-  permissions?: BoardPermissions;
+  open?: boolean;
   createdAt: string;
   syncStatus: SyncStatus;
 }
@@ -60,7 +38,7 @@ export interface BoardRecord {
   name: string;
   description?: string;
   columns: Column[];
-  permissions?: BoardPermissions;
+  open?: boolean;
   createdAt: string;
 }
 
@@ -145,6 +123,16 @@ export interface CommentRecord {
   createdAt: string;
 }
 
+// --- Block types (local-only, not synced to PDS) ---
+
+export interface Block {
+  id?: number;
+  did: string; // DID of the board owner who blocked
+  blockedDid: string;
+  boardUri: string;
+  createdAt: string;
+}
+
 // --- Known participants ---
 
 export interface KnownParticipant {
@@ -178,4 +166,23 @@ export interface MaterializedTask {
   ownerDid: string;
   lastModifiedBy: string;
   lastModifiedAt: string;
+}
+
+// --- Approval types ---
+
+export interface Approval {
+  id?: number;
+  rkey: string;
+  did: string;
+  targetUri: string; // AT URI of approved task or comment
+  boardUri: string;
+  createdAt: string;
+  syncStatus: SyncStatus;
+}
+
+export interface ApprovalRecord {
+  $type: "dev.skyboard.approval";
+  targetUri: string;
+  boardUri: string;
+  createdAt: string;
 }

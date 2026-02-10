@@ -5,8 +5,25 @@ import {
   BOARD_COLLECTION,
   TRUST_COLLECTION,
   COMMENT_COLLECTION,
+  APPROVAL_COLLECTION,
 } from "./tid.js";
-import type { Task, Op, Board, Trust, Comment } from "./types.js";
+import type { Task, Op, Board, Trust, Comment, Approval } from "./types.js";
+
+/**
+ * Infer the `open` flag from a PDS record that may have the old `permissions`
+ * field but no `open` field. If any old rule had scope "anyone", the board
+ * should be open.
+ */
+function inferOpenFromRecord(
+  value: Record<string, unknown>,
+): boolean | undefined {
+  if (value.open !== undefined) return (value.open as boolean) || undefined;
+  const perms = value.permissions as
+    | { rules?: Array<{ scope?: string }> }
+    | undefined;
+  if (perms?.rules?.some((r) => r.scope === "anyone")) return true;
+  return undefined;
+}
 
 // Cache resolved PDS endpoints to avoid repeated lookups
 const pdsCache = new Map<string, string>();
@@ -183,7 +200,7 @@ export async function fetchRemoteBoard(
       name: (value.name as string) ?? "",
       description: value.description as string | undefined,
       columns: (value.columns as Board["columns"]) ?? [],
-      permissions: value.permissions as Board["permissions"],
+      open: inferOpenFromRecord(value),
       createdAt: (value.createdAt as string) ?? new Date().toISOString(),
       syncStatus: "synced",
     };
@@ -259,6 +276,39 @@ export async function fetchRemoteComments(
       await db.comments.update(existing.id, commentData);
     } else {
       await db.comments.add(commentData as Comment);
+    }
+  }
+}
+
+export async function fetchRemoteApprovals(
+  ownerDid: string,
+  boardUri: string,
+): Promise<void> {
+  const records = await fetchRecordsFromRepo(ownerDid, APPROVAL_COLLECTION);
+
+  for (const record of records) {
+    const value = record.value;
+    if (value.boardUri !== boardUri) continue;
+
+    const rkey = record.uri.split("/").pop()!;
+    const existing = await db.approvals
+      .where("[did+rkey]")
+      .equals([ownerDid, rkey])
+      .first();
+
+    const approvalData: Omit<Approval, "id"> = {
+      rkey,
+      did: ownerDid,
+      targetUri: (value.targetUri as string) ?? "",
+      boardUri,
+      createdAt: (value.createdAt as string) ?? new Date().toISOString(),
+      syncStatus: "synced",
+    };
+
+    if (existing?.id) {
+      await db.approvals.update(existing.id, approvalData);
+    } else {
+      await db.approvals.add(approvalData as Approval);
     }
   }
 }

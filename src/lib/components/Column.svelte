@@ -2,14 +2,11 @@
   import { db } from "$lib/db.js";
   import { generateTID } from "$lib/tid.js";
   import { generateKeyBetween } from "fractional-indexing";
-  import type {
-    Column,
-    MaterializedTask,
-    BoardPermissions,
-  } from "$lib/types.js";
+  import type { Column, MaterializedTask } from "$lib/types.js";
   import { createOp } from "$lib/ops.js";
-  import { getPermissionStatus } from "$lib/permissions.js";
+  import { getActionStatus } from "$lib/permissions.js";
   import type { PermissionStatus } from "$lib/permissions.js";
+  import { TASK_COLLECTION, buildAtUri } from "$lib/tid.js";
   import { getDraggedCard } from "$lib/drag-state.svelte.js";
   import TaskCard from "./TaskCard.svelte";
 
@@ -19,8 +16,9 @@
     boardUri,
     did,
     boardOwnerDid,
-    permissions,
+    boardOpen,
     ownerTrustedDids,
+    approvedUris,
     commentCounts = new Map(),
     onedit,
     readonly = false,
@@ -30,33 +28,20 @@
     boardUri: string;
     did: string;
     boardOwnerDid: string;
-    permissions: BoardPermissions;
+    boardOpen: boolean;
     ownerTrustedDids: Set<string>;
+    approvedUris: Set<string>;
     commentCounts?: Map<string, number>;
     onedit: (task: MaterializedTask) => void;
     readonly?: boolean;
   } = $props();
 
   const createStatus: PermissionStatus = $derived(
-    getPermissionStatus(
-      did,
-      boardOwnerDid,
-      ownerTrustedDids,
-      permissions,
-      "create_task",
-      column.id,
-    ),
+    getActionStatus(did, boardOwnerDid, ownerTrustedDids, boardOpen, "create_task"),
   );
 
   const moveStatus: PermissionStatus = $derived(
-    getPermissionStatus(
-      did,
-      boardOwnerDid,
-      ownerTrustedDids,
-      permissions,
-      "move_task",
-      column.id,
-    ),
+    getActionStatus(did, boardOwnerDid, ownerTrustedDids, boardOpen, "move"),
   );
 
   let newTaskTitle = $state("");
@@ -144,16 +129,11 @@
 
   function isTaskPending(task: MaterializedTask): boolean {
     if (task.ownerDid === boardOwnerDid) return false;
-    return (
-      getPermissionStatus(
-        task.ownerDid,
-        boardOwnerDid,
-        ownerTrustedDids,
-        permissions,
-        "create_task",
-        task.columnId,
-      ) === "pending"
-    );
+    if (ownerTrustedDids.has(task.ownerDid)) return false;
+    // On open boards, check if the task has been approved
+    const taskUri = buildAtUri(task.ownerDid, TASK_COLLECTION, task.rkey);
+    if (boardOpen && approvedUris.has(taskUri)) return false;
+    return true;
   }
 
   function handleDragLeave(e: DragEvent) {
@@ -272,7 +252,7 @@
       </form>
     {:else}
       <div class="permission-notice denied">
-        <span>Author only</span>
+        <span>Trusted users only</span>
       </div>
     {/if}
   {/if}

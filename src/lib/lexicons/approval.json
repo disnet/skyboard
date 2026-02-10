@@ -1,0 +1,32 @@
+{
+  "lexicon": 1,
+  "id": "dev.skyboard.approval",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "An approval for a specific task or comment on an open board",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": ["targetUri", "boardUri", "createdAt"],
+        "properties": {
+          "targetUri": {
+            "type": "string",
+            "format": "at-uri",
+            "description": "AT URI of the approved task or comment"
+          },
+          "boardUri": {
+            "type": "string",
+            "format": "at-uri",
+            "description": "AT URI of the board this approval belongs to"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "When the approval was created"
+          }
+        }
+      }
+    }
+  }
+}

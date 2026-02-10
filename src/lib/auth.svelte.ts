@@ -6,7 +6,7 @@ import {
 import { openDb, closeDb } from "./db.js";
 
 const OAUTH_SCOPE =
-  "atproto repo:dev.skyboard.board repo:dev.skyboard.task repo:dev.skyboard.op repo:dev.skyboard.trust repo:dev.skyboard.comment";
+  "atproto repo:dev.skyboard.board repo:dev.skyboard.task repo:dev.skyboard.op repo:dev.skyboard.trust repo:dev.skyboard.comment repo:dev.skyboard.approval";
 
 let agent = $state<Agent | null>(null);
 let did = $state<string | null>(null);
