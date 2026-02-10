@@ -47,8 +47,10 @@
   import ProposalPanel from "$lib/components/ProposalPanel.svelte";
   import OpsPanel from "$lib/components/OpsPanel.svelte";
   import TaskEditModal from "$lib/components/TaskEditModal.svelte";
-  import { goto } from "$app/navigation";
+  import { goto, replaceState } from "$app/navigation";
   import { logout } from "$lib/auth.svelte.js";
+  import { getProfile } from "$lib/profile-cache.svelte.js";
+  import { generateNotificationFromEvent } from "$lib/notifications.js";
 
   const auth = getAuth();
 
@@ -293,23 +295,44 @@
 
   function openTaskEditor(task: MaterializedTask) {
     editingTask = task;
-    history.replaceState(null, "", `#task-${task.rkey}`);
+    replaceState(`${$page.url.pathname}#task-${task.rkey}`, $page.state);
   }
 
   function closeTaskEditor() {
     editingTask = null;
-    history.replaceState(null, "", window.location.pathname);
+    replaceState($page.url.pathname, $page.state);
   }
 
-  // Open task from URL hash on load or when tasks become available
+  // Open task from URL hash on load, navigation, or when tasks become available.
+  // Only depends on urlHash and materializedTasks — not editingTask — so that
+  // closeTaskEditor (which nulls editingTask) doesn't re-trigger this effect
+  // before replaceState has cleared the hash.
+  const urlHash = $derived($page.url.hash);
   $effect(() => {
-    const hash = window.location.hash;
-    if (!hash.startsWith("#task-") || editingTask) return;
-    const taskRkey = hash.slice(6);
+    if (!urlHash.startsWith("#task-")) return;
+    const taskRkey = urlHash.slice(6);
     const task = materializedTasks.find((t) => t.rkey === taskRkey);
     if (task) {
       editingTask = task;
     }
+  });
+
+  // Listen for direct open-task events from the notification panel
+  // (needed because goto with hash-only changes on the same page
+  // doesn't reliably update $page.url in SvelteKit)
+  $effect(() => {
+    const tasks = materializedTasks;
+
+    function handler(e: Event) {
+      const rkey = (e as CustomEvent<string>).detail;
+      const task = tasks.find((t) => t.rkey === rkey);
+      if (task) {
+        openTaskEditor(task);
+      }
+    }
+
+    window.addEventListener("skyboard:open-task", handler);
+    return () => window.removeEventListener("skyboard:open-task", handler);
   });
 
   // --- Jetstream lifecycle ---
@@ -342,6 +365,13 @@
             addKnownParticipant(result.did, result.boardUri).catch(
               console.error,
             );
+            // Generate notification for new tasks and comments
+            if (event.commit.operation === "create" && auth.did) {
+              const handle = getProfile(auth.did)?.data?.handle;
+              generateNotificationFromEvent(event, auth.did, handle).catch(
+                console.error,
+              );
+            }
           }
         },
         onConnect: () => {

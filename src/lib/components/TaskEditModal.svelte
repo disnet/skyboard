@@ -8,16 +8,21 @@
   import type { PermissionStatus } from "$lib/permissions.js";
   import { COMMENT_COLLECTION, buildAtUri } from "$lib/tid.js";
   import AuthorBadge from "./AuthorBadge.svelte";
+  import MentionText from "./MentionText.svelte";
+  import MentionTextarea from "./MentionTextarea.svelte";
   import { EditorView, basicSetup } from "codemirror";
   import { EditorState } from "@codemirror/state";
   import { markdown } from "@codemirror/lang-markdown";
   import { languages } from "@codemirror/language-data";
   import { indentWithTab } from "@codemirror/commands";
   import { keymap, placeholder } from "@codemirror/view";
+  import { autocompletion } from "@codemirror/autocomplete";
+  import { mentionCompletionSource } from "$lib/mention-completions.js";
   import { Marked } from "marked";
+  import { mentionExtension } from "$lib/mention-markdown.js";
   import DOMPurify from "dompurify";
 
-  const markedInstance = new Marked();
+  const markedInstance = new Marked(mentionExtension());
 
   let {
     task,
@@ -143,6 +148,7 @@
         EditorView.lineWrapping,
         keymap.of([indentWithTab]),
         placeholder("Write a description using markdown..."),
+        autocompletion({ override: [mentionCompletionSource] }),
         EditorView.updateListener.of((update) => {
           if (update.docChanged) {
             editDescription = update.state.doc.toString();
@@ -310,7 +316,7 @@
                       >
                     {/if}
                   </div>
-                  <div class="comment-text">{comment.text}</div>
+                  <div class="comment-text"><MentionText text={comment.text} /></div>
                 </div>
               {/each}
             </div>
@@ -323,16 +329,15 @@
                 submitComment();
               }}
             >
-              <textarea
-                class="comment-input"
+              <MentionTextarea
                 bind:value={commentText}
                 placeholder={commentStatus === "pending"
                   ? "Add a comment (pending approval)..."
                   : "Add a comment..."}
-                rows="2"
-                maxlength="10240"
+                rows={2}
+                maxlength={10240}
                 disabled={submittingComment}
-              ></textarea>
+              />
               {#if commentText.trim()}
                 <button
                   class="comment-submit-btn"
@@ -646,6 +651,14 @@
     margin-bottom: 0;
   }
 
+  .rendered-description :global(.mention) {
+    color: var(--color-primary);
+    background: var(--color-primary-alpha, rgba(0, 102, 204, 0.1));
+    font-weight: 500;
+    border-radius: 2px;
+    padding: 0 1px;
+  }
+
   .no-description {
     font-size: 0.875rem;
     color: var(--color-text-secondary);
@@ -733,24 +746,6 @@
     display: flex;
     flex-direction: column;
     gap: 0.375rem;
-  }
-
-  .comment-input {
-    width: 100%;
-    padding: 0.5rem 0.625rem;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-md);
-    font-size: 0.8125rem;
-    font-family: inherit;
-    color: var(--color-text);
-    background: var(--color-surface);
-    resize: vertical;
-    min-height: 2.5rem;
-  }
-
-  .comment-input:focus {
-    outline: none;
-    border-color: var(--color-primary);
   }
 
   .comment-submit-btn {

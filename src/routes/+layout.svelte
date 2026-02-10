@@ -8,8 +8,29 @@
     stopBackgroundSync,
   } from "$lib/sync.js";
   import { getProfile, ensureProfile } from "$lib/profile-cache.svelte.js";
+  import { db } from "$lib/db.js";
+  import { useLiveQuery } from "$lib/db.svelte.js";
+  import {
+    generateCatchUpNotifications,
+    generateNotificationFromEvent,
+  } from "$lib/notifications.js";
+  import {
+    JetstreamClient,
+    loadJetstreamCursor,
+    processJetstreamEvent,
+  } from "$lib/jetstream.js";
+  import {
+    TASK_COLLECTION,
+    COMMENT_COLLECTION,
+    OP_COLLECTION,
+  } from "$lib/tid.js";
+  import {
+    fetchAllKnownParticipants,
+    addKnownParticipant,
+  } from "$lib/remote-sync.js";
   import LandingPage from "$lib/components/LandingPage.svelte";
   import SyncStatus from "$lib/components/SyncStatus.svelte";
+  import NotificationPanel from "$lib/components/NotificationPanel.svelte";
   import "../app.css";
 
   const auth = getAuth();
@@ -18,6 +39,14 @@
   const isPublicRoute = $derived(
     /^\/board\/did:[^/]+\/[^/]+$/.test($page.url.pathname),
   );
+
+  let showNotifications = $state(false);
+  let globalJetstream: JetstreamClient | null = null;
+
+  const unreadCount = useLiveQuery<number>(() => {
+    if (!auth.did) return 0;
+    return db.notifications.where("read").equals(0).count();
+  });
 
   $effect(() => {
     if (auth.did) ensureProfile(auth.did);
@@ -28,18 +57,79 @@
 
     return () => {
       stopBackgroundSync();
+      globalJetstream?.disconnect();
+      globalJetstream = null;
     };
   });
 
+  // Fetch participants for all local boards, then generate catch-up notifications
+  async function catchUpAllBoards(userDid: string, handle: string | undefined) {
+    const boards = await db.boards.toArray();
+    const boardUris = boards.map(
+      (b) => `at://${b.did}/dev.skyboard.board/${b.rkey}`,
+    );
+    // Fetch known participants' data for each board
+    await Promise.allSettled(
+      boardUris.map((uri) => fetchAllKnownParticipants(uri)),
+    );
+    await generateCatchUpNotifications(userDid, handle);
+  }
+
   $effect(() => {
     if (auth.agent && auth.did) {
-      pullFromPDS(auth.agent, auth.did).catch(console.error);
-      startBackgroundSync(auth.agent, auth.did);
+      const userDid = auth.did;
+      const handle = currentProfile?.data?.handle;
+      pullFromPDS(auth.agent, userDid)
+        .then(() => catchUpAllBoards(userDid, handle))
+        .catch(console.error);
+      startBackgroundSync(auth.agent, userDid);
     }
+  });
+
+  // Global Jetstream for real-time notifications on any page
+  $effect(() => {
+    if (!auth.did) return;
+    const userDid = auth.did;
+
+    loadJetstreamCursor().then((cursor) => {
+      globalJetstream = new JetstreamClient({
+        wantedCollections: [TASK_COLLECTION, COMMENT_COLLECTION, OP_COLLECTION],
+        cursor,
+        onEvent: async (event) => {
+          if (event.did === userDid) return;
+          // Store the record into Dexie so catch-up and board views stay current
+          const result = await processJetstreamEvent(event);
+          if (result) {
+            addKnownParticipant(result.did, result.boardUri).catch(
+              console.error,
+            );
+            if (event.commit.operation === "create") {
+              const handle = getProfile(userDid)?.data?.handle;
+              generateNotificationFromEvent(event, userDid, handle).catch(
+                console.error,
+              );
+            }
+          }
+        },
+        onReconnect: () => {
+          catchUpAllBoards(userDid, getProfile(userDid)?.data?.handle).catch(
+            console.error,
+          );
+        },
+      });
+      globalJetstream.connect();
+    });
+
+    return () => {
+      globalJetstream?.disconnect();
+      globalJetstream = null;
+    };
   });
 
   async function handleLogout() {
     stopBackgroundSync();
+    globalJetstream?.disconnect();
+    globalJetstream = null;
     await logout();
   }
 </script>
@@ -73,6 +163,28 @@
       </div>
       <div class="header-right">
         <SyncStatus />
+        <button
+          class="bell-btn"
+          onclick={() => (showNotifications = !showNotifications)}
+          title="Notifications"
+        >
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+            <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+          </svg>
+          {#if (unreadCount.current ?? 0) > 0}
+            <span class="bell-badge">{unreadCount.current}</span>
+          {/if}
+        </button>
         <span class="user-did" title={auth.did ?? ""}>
           {#if currentProfile?.data?.avatar}
             <img class="user-avatar" src={currentProfile.data.avatar} alt="" />
@@ -89,6 +201,10 @@
       {@render children()}
     </main>
   </div>
+
+  {#if showNotifications}
+    <NotificationPanel onclose={() => (showNotifications = false)} />
+  {/if}
 {/if}
 
 <style>
@@ -174,6 +290,40 @@
     border-radius: 50%;
     object-fit: cover;
     flex-shrink: 0;
+  }
+
+  .bell-btn {
+    position: relative;
+    background: none;
+    border: none;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    padding: 0.25rem;
+    display: flex;
+    align-items: center;
+    transition: color 0.15s;
+  }
+
+  .bell-btn:hover {
+    color: var(--color-text);
+  }
+
+  .bell-badge {
+    position: absolute;
+    top: -4px;
+    right: -6px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    background: var(--color-error);
+    color: white;
+    font-size: 0.625rem;
+    font-weight: 700;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
   }
 
   .sign-out-btn {

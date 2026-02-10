@@ -8,6 +8,7 @@ import type {
   Approval,
   Block,
   KnownParticipant,
+  Notification,
 } from "./types.js";
 
 type SkyboardDb = Dexie & {
@@ -19,6 +20,7 @@ type SkyboardDb = Dexie & {
   approvals: EntityTable<Approval, "id">;
   blocks: EntityTable<Block, "id">;
   knownParticipants: EntityTable<KnownParticipant, "id">;
+  notifications: EntityTable<Notification, "id">;
 };
 
 function createDb(name: string): SkyboardDb {
@@ -108,6 +110,23 @@ function createDb(name: string): SkyboardDb {
     blocks:
       "++id, did, blockedDid, boardUri, [did+boardUri+blockedDid]",
     knownParticipants: "++id, did, boardUri, [did+boardUri]",
+  });
+
+  d.version(7).stores({
+    boards: "++id, rkey, did, syncStatus",
+    tasks: "++id, rkey, did, columnId, boardUri, order, syncStatus, [did+rkey], createdAt",
+    ops: "++id, rkey, did, targetTaskUri, boardUri, createdAt, syncStatus, [did+rkey]",
+    trusts:
+      "++id, rkey, did, trustedDid, boardUri, syncStatus, [did+boardUri+trustedDid], [did+rkey]",
+    comments:
+      "++id, rkey, did, targetTaskUri, boardUri, createdAt, syncStatus, [did+rkey]",
+    approvals:
+      "++id, rkey, did, targetUri, boardUri, syncStatus, [did+rkey]",
+    blocks:
+      "++id, did, blockedDid, boardUri, [did+boardUri+blockedDid]",
+    knownParticipants: "++id, did, boardUri, [did+boardUri]",
+    notifications:
+      "++id, type, boardUri, read, createdAt, dedupeKey, [read+createdAt]",
   });
 
   return d;

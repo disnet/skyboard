@@ -186,3 +186,20 @@ export interface ApprovalRecord {
   boardUri: string;
   createdAt: string;
 }
+
+// --- Notification types (local-only, not synced to PDS) ---
+
+export type NotificationType = "task_created" | "comment_added" | "mention";
+
+export interface Notification {
+  id?: number;
+  type: NotificationType;
+  actorDid: string;
+  boardUri: string;
+  taskUri?: string;
+  commentRkey?: string;
+  text?: string;
+  read: number; // 0 = unread, 1 = read (number for Dexie indexing)
+  createdAt: string;
+  dedupeKey: string;
+}
