@@ -1,15 +1,12 @@
 <script lang="ts">
   import { untrack } from "svelte";
   import { db } from "$lib/db.js";
-  import type {
-    MaterializedTask,
-    BoardPermissions,
-    Comment,
-  } from "$lib/types.js";
+  import type { MaterializedTask, Comment } from "$lib/types.js";
   import { createOp } from "$lib/ops.js";
   import { createComment, deleteComment } from "$lib/comments.js";
-  import { getPermissionStatus } from "$lib/permissions.js";
+  import { getActionStatus, isContentVisible } from "$lib/permissions.js";
   import type { PermissionStatus } from "$lib/permissions.js";
+  import { COMMENT_COLLECTION, buildAtUri } from "$lib/tid.js";
   import AuthorBadge from "./AuthorBadge.svelte";
   import { EditorView, basicSetup } from "codemirror";
   import { EditorState } from "@codemirror/state";
@@ -26,8 +23,9 @@
     task,
     currentUserDid,
     boardOwnerDid,
-    permissions,
+    boardOpen,
     ownerTrustedDids,
+    approvedUris,
     comments = [],
     boardUri = "",
     onclose,
@@ -36,8 +34,9 @@
     task: MaterializedTask;
     currentUserDid: string;
     boardOwnerDid: string;
-    permissions: BoardPermissions;
+    boardOpen: boolean;
     ownerTrustedDids: Set<string>;
+    approvedUris: Set<string>;
     comments?: Comment[];
     boardUri?: string;
     onclose: () => void;
@@ -54,40 +53,29 @@
 
   const isOwned = $derived(task.ownerDid === currentUserDid);
 
-  const titleStatus: PermissionStatus = $derived(
+  const editStatus: PermissionStatus = $derived(
     isOwned
       ? "allowed"
-      : getPermissionStatus(
+      : getActionStatus(
           currentUserDid,
           boardOwnerDid,
           ownerTrustedDids,
-          permissions,
-          "edit_title",
-          task.effectiveColumnId,
+          boardOpen,
+          "edit",
         ),
   );
 
-  const descriptionStatus: PermissionStatus = $derived(
-    isOwned
-      ? "allowed"
-      : getPermissionStatus(
+  const commentStatus: PermissionStatus = $derived(
+    currentUserDid
+      ? getActionStatus(
           currentUserDid,
           boardOwnerDid,
           ownerTrustedDids,
-          permissions,
-          "edit_description",
-          task.effectiveColumnId,
-        ),
+          boardOpen,
+          "comment",
+        )
+      : "denied",
   );
-
-  // Best status across both fields (for footer messaging)
-  const editStatus: PermissionStatus = $derived.by(() => {
-    if (titleStatus === "allowed" || descriptionStatus === "allowed")
-      return "allowed";
-    if (titleStatus === "pending" || descriptionStatus === "pending")
-      return "pending";
-    return "denied";
-  });
 
   // Comment-related derivations
   const taskUri = $derived(
@@ -100,36 +88,21 @@
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
   );
 
-  // Only show comments from permitted users (board owner, trusted, current user, or anyone if scope allows)
+  // Only show comments from visible users
   const taskComments = $derived.by(() => {
     return allTaskComments.filter((c) => {
-      // Always show own comments
-      if (c.did === currentUserDid) return true;
-      // Always show board owner's comments
-      if (c.did === boardOwnerDid) return true;
-      // Check permission for the commenter
-      const status = getPermissionStatus(
+      const commentUri = buildAtUri(c.did, COMMENT_COLLECTION, c.rkey);
+      return isContentVisible(
         c.did,
+        currentUserDid,
         boardOwnerDid,
         ownerTrustedDids,
-        permissions,
-        "comment",
+        boardOpen,
+        approvedUris,
+        commentUri,
       );
-      return status === "allowed";
     });
   });
-
-  const commentStatus: PermissionStatus = $derived(
-    currentUserDid
-      ? getPermissionStatus(
-          currentUserDid,
-          boardOwnerDid,
-          ownerTrustedDids,
-          permissions,
-          "comment",
-        )
-      : "denied",
-  );
 
   let commentText = $state("");
   let submittingComment = $state(false);
@@ -265,10 +238,10 @@
           type="text"
           bind:value={editTitle}
           placeholder="Task title"
-          disabled={titleStatus === "denied"}
+          disabled={editStatus === "denied"}
         />
-        {#if titleStatus === "denied"}
-          <span class="field-status denied">Author only</span>
+        {#if editStatus === "denied"}
+          <span class="field-status denied">Trusted users only</span>
         {/if}
       {/if}
       <button class="close-btn" onclick={onclose}>&times;</button>
@@ -285,13 +258,13 @@
         <div class="field">
           <div class="field-header">
             <label>Description</label>
-            {#if descriptionStatus === "denied"}
-              <span class="field-status denied">Author only</span>
+            {#if editStatus === "denied"}
+              <span class="field-status denied">Trusted users only</span>
             {/if}
           </div>
           <div
             class="editor-wrapper"
-            class:disabled={descriptionStatus === "denied"}
+            class:disabled={editStatus === "denied"}
             bind:this={editorContainer}
           ></div>
           <span
@@ -380,13 +353,8 @@
         <AuthorBadge did={task.ownerDid} isCurrentUser={isOwned} />
         {#if !readonly && !isOwned && editStatus === "allowed"}
           <span class="op-notice">Changes will be proposed</span>
-        {:else if !readonly && !isOwned && editStatus === "pending"}
-          <span class="op-notice pending-notice">
-            <span class="info-icon">i</span>
-            Changes pending board creator approval
-          </span>
         {:else if !readonly && !isOwned && editStatus === "denied"}
-          <span class="op-notice denied">Author only</span>
+          <span class="op-notice denied">Trusted users only</span>
         {/if}
       </div>
       <div class="footer-right">
@@ -554,22 +522,6 @@
     font-style: italic;
   }
 
-  .info-icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 0.875rem;
-    height: 0.875rem;
-    border-radius: 50%;
-    background: var(--color-border);
-    color: var(--color-surface);
-    font-size: 0.5625rem;
-    font-weight: 700;
-    font-style: italic;
-    flex-shrink: 0;
-    cursor: help;
-  }
-
   .op-notice {
     font-size: 0.75rem;
     color: var(--color-warning);
@@ -579,13 +531,6 @@
   .op-notice.denied {
     color: var(--color-text-secondary);
     font-style: italic;
-  }
-
-  .op-notice.pending-notice {
-    color: var(--color-text-secondary);
-    display: flex;
-    align-items: center;
-    gap: 0.25rem;
   }
 
   .edit-title:disabled {

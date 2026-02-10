@@ -1,114 +1,46 @@
 <script lang="ts">
   import { db } from "$lib/db.js";
-  import type {
-    Board,
-    BoardPermissions,
-    PermissionRule,
-    PermissionScope,
-    OperationType,
-  } from "$lib/types.js";
-  import { getBoardPermissions, getEffectiveScope } from "$lib/permissions.js";
+  import type { Board, Trust } from "$lib/types.js";
+  import { grantTrust, revokeTrust } from "$lib/trust.js";
+  import { getAuth } from "$lib/auth.svelte.js";
+  import AuthorBadge from "./AuthorBadge.svelte";
+
+  const TYPEAHEAD_API =
+    "https://public.api.bsky.app/xrpc/app.bsky.actor.searchActorsTypeahead";
+  const RESOLVE_API =
+    "https://public.api.bsky.app/xrpc/com.atproto.identity.resolveHandle";
 
   let {
     board,
+    trusts = [],
+    boardUri,
     onclose,
   }: {
     board: Board;
+    trusts?: Trust[];
+    boardUri: string;
     onclose: () => void;
   } = $props();
 
-  const OPERATIONS: {
-    key: OperationType;
-    label: string;
-    showColumns: boolean;
-  }[] = [
-    { key: "create_task", label: "Create tasks", showColumns: true },
-    { key: "edit_title", label: "Edit title", showColumns: false },
-    { key: "edit_description", label: "Edit description", showColumns: false },
-    { key: "move_task", label: "Move between columns", showColumns: false },
-    { key: "reorder", label: "Reorder within column", showColumns: false },
-    { key: "comment", label: "Comment on tasks", showColumns: false },
-  ];
+  const auth = getAuth();
 
-  const SCOPES: { key: PermissionScope; label: string }[] = [
-    { key: "author_only", label: "Author only" },
-    { key: "trusted", label: "Trusted" },
-    { key: "anyone", label: "Anyone" },
-  ];
-
-  const currentPerms = getBoardPermissions(board);
-
-  // Initialize state from current permissions
   /* eslint-disable svelte/state-referenced-locally */
-  let operationStates = $state(
-    OPERATIONS.map((op) => {
-      const rules = currentPerms.rules.filter((r) => r.operation === op.key);
-      const globalRule = rules.find(
-        (r) => !r.columnIds || r.columnIds.length === 0,
-      );
-      const columnRules = rules.filter(
-        (r) => r.columnIds && r.columnIds.length > 0,
-      );
-      const scope: PermissionScope = globalRule?.scope ?? columnRules[0]?.scope ?? "author_only";
+  let isOpen = $state(board.open ?? false);
 
-      return {
-        operation: op.key,
-        scope,
-        useColumnRestrictions: columnRules.length > 0 && !globalRule,
-        columnIds: columnRules.flatMap((r) => r.columnIds ?? []),
-      };
-    }),
-  );
+  // Search state
+  let query = $state("");
+  let suggestions = $state<{ did: string; handle: string; displayName?: string; avatar?: string }[]>([]);
+  let showSuggestions = $state(false);
+  let addError = $state<string | null>(null);
+  let adding = $state(false);
+  let debounceTimer: ReturnType<typeof setTimeout> | undefined;
 
-  function setScope(index: number, scope: PermissionScope) {
-    operationStates[index].scope = scope;
-    if (scope === "author_only") {
-      operationStates[index].useColumnRestrictions = false;
-      operationStates[index].columnIds = [];
-    }
-  }
-
-  function toggleColumnRestrictions(index: number) {
-    operationStates[index].useColumnRestrictions =
-      !operationStates[index].useColumnRestrictions;
-    if (!operationStates[index].useColumnRestrictions) {
-      operationStates[index].columnIds = [];
-    }
-  }
-
-  function toggleColumn(index: number, columnId: string) {
-    const state = operationStates[index];
-    if (state.columnIds.includes(columnId)) {
-      state.columnIds = state.columnIds.filter((id) => id !== columnId);
-    } else {
-      state.columnIds = [...state.columnIds, columnId];
-    }
-  }
-
-  function buildPermissions(): BoardPermissions {
-    const rules: PermissionRule[] = [];
-    for (const state of operationStates) {
-      if (state.useColumnRestrictions && state.columnIds.length > 0) {
-        rules.push({
-          operation: state.operation,
-          scope: state.scope,
-          columnIds: [...state.columnIds],
-        });
-      } else {
-        rules.push({
-          operation: state.operation,
-          scope: state.scope,
-        });
-      }
-    }
-    return { rules };
-  }
+  const trustedDids = $derived(new Set(trusts.map((t) => t.trustedDid)));
 
   async function save() {
     if (!board.id) return;
-    const permissions = buildPermissions();
     await db.boards.update(board.id, {
-      permissions,
+      open: isOpen || undefined,
       syncStatus: "pending",
     });
     onclose();
@@ -121,66 +53,215 @@
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === "Escape") onclose();
   }
+
+  // Trusted user search
+  async function searchUsers(q: string) {
+    if (q.length < 2) {
+      suggestions = [];
+      return;
+    }
+    try {
+      const res = await fetch(
+        `${TYPEAHEAD_API}?q=${encodeURIComponent(q)}&limit=6`,
+      );
+      if (!res.ok) return;
+      const data = await res.json();
+      suggestions = (data.actors ?? []).map(
+        (a: { did: string; handle: string; displayName?: string; avatar?: string }) => ({
+          did: a.did,
+          handle: a.handle,
+          displayName: a.displayName,
+          avatar: a.avatar,
+        }),
+      );
+    } catch {
+      suggestions = [];
+    }
+  }
+
+  function handleInput() {
+    addError = null;
+    showSuggestions = true;
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => searchUsers(query.trim()), 200);
+  }
+
+  async function addUser(did: string) {
+    if (!auth.did || trustedDids.has(did) || did === auth.did) return;
+    adding = true;
+    addError = null;
+    try {
+      await grantTrust(auth.did, did, boardUri);
+      query = "";
+      suggestions = [];
+      showSuggestions = false;
+    } catch {
+      addError = "Failed to add user.";
+    } finally {
+      adding = false;
+    }
+  }
+
+  async function addByHandle() {
+    const handle = query.trim().replace(/^@/, "");
+    if (!handle || !auth.did) return;
+    adding = true;
+    addError = null;
+    try {
+      const res = await fetch(
+        `${RESOLVE_API}?handle=${encodeURIComponent(handle)}`,
+      );
+      if (!res.ok) {
+        addError = "Could not resolve handle.";
+        return;
+      }
+      const data = await res.json();
+      if (!data.did) {
+        addError = "Could not resolve handle.";
+        return;
+      }
+      if (trustedDids.has(data.did)) {
+        addError = "User is already trusted.";
+        return;
+      }
+      if (data.did === auth.did) {
+        addError = "You can't add yourself.";
+        return;
+      }
+      await grantTrust(auth.did, data.did, boardUri);
+      query = "";
+      suggestions = [];
+      showSuggestions = false;
+    } catch {
+      addError = "Failed to add user.";
+    } finally {
+      adding = false;
+    }
+  }
+
+  async function handleRevoke(trust: Trust) {
+    if (!auth.did) return;
+    if (
+      !confirm(`Revoke trust for this user? Their edits will become proposals.`)
+    )
+      return;
+    await revokeTrust(auth.did, trust.trustedDid, boardUri);
+  }
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
 
 <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
 <div class="modal-backdrop" onclick={handleBackdropClick}>
-  <div class="modal" role="dialog" aria-label="Board Permissions">
+  <div class="modal" role="dialog" aria-label="Board Access">
     <div class="modal-header">
-      <h3>Permissions</h3>
+      <h3>Board Access</h3>
       <button class="close-btn" onclick={onclose}>&times;</button>
     </div>
 
     <div class="modal-body">
       <p class="description">
-        Control what other users can do on this board. The board author always
-        has full access.
+        All boards are publicly visible on the AT Protocol. This setting
+        controls who can interact with the board. The board owner and trusted
+        users always have full access.
       </p>
 
-      {#each OPERATIONS as op, i (op.key)}
-        <div class="permission-row">
-          <div class="permission-label">{op.label}</div>
-          <div class="scope-selector">
-            {#each SCOPES as scope (scope.key)}
-              <button
-                class="scope-btn"
-                class:active={operationStates[i].scope === scope.key}
-                onclick={() => setScope(i, scope.key)}
-              >
-                {scope.label}
-              </button>
-            {/each}
+      <div class="option-group">
+        <button
+          class="option-card"
+          class:selected={!isOpen}
+          onclick={() => (isOpen = false)}
+        >
+          <strong>Closed</strong>
+          <span class="option-hint">
+            Only you and trusted users can make edits to this board.
+          </span>
+        </button>
+        <button
+          class="option-card"
+          class:selected={isOpen}
+          onclick={() => (isOpen = true)}
+        >
+          <strong>Open</strong>
+          <span class="option-hint">
+            Anyone can propose new tasks and comments. Proposals appear for you
+            to accept or reject.
+          </span>
+        </button>
+      </div>
+
+      <div class="trusted-section">
+        <h4>Trusted Users</h4>
+        <div class="add-section">
+          <div class="search-wrapper">
+            <input
+              class="search-input"
+              type="text"
+              placeholder="Search by handle..."
+              bind:value={query}
+              oninput={handleInput}
+              onfocus={() => (showSuggestions = true)}
+              onkeydown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  addByHandle();
+                }
+              }}
+            />
+            <button
+              class="add-btn"
+              onclick={addByHandle}
+              disabled={!query.trim() || adding}
+            >
+              Add
+            </button>
           </div>
-          {#if op.showColumns && operationStates[i].scope !== "author_only"}
-            <div class="column-restrictions">
-              <label class="restrict-toggle">
-                <input
-                  type="checkbox"
-                  checked={operationStates[i].useColumnRestrictions}
-                  onchange={() => toggleColumnRestrictions(i)}
-                />
-                Restrict to specific columns
-              </label>
-              {#if operationStates[i].useColumnRestrictions}
-                <div class="column-checkboxes">
-                  {#each board.columns as col (col.id)}
-                    <label class="column-check">
-                      <input
-                        type="checkbox"
-                        checked={operationStates[i].columnIds.includes(col.id)}
-                        onchange={() => toggleColumn(i, col.id)}
-                      />
-                      {col.name}
-                    </label>
-                  {/each}
-                </div>
-              {/if}
-            </div>
+          {#if showSuggestions && suggestions.length > 0}
+            <ul class="suggestions">
+              {#each suggestions as s}
+                <li>
+                  <button
+                    class="suggestion-item"
+                    onclick={() => addUser(s.did)}
+                    disabled={trustedDids.has(s.did) || s.did === auth.did}
+                  >
+                    {#if s.avatar}
+                      <img class="suggestion-avatar" src={s.avatar} alt="" />
+                    {/if}
+                    <span class="suggestion-text">
+                      {#if s.displayName}
+                        <span class="suggestion-name">{s.displayName}</span>
+                      {/if}
+                      <span class="suggestion-handle">@{s.handle}</span>
+                    </span>
+                    {#if trustedDids.has(s.did)}
+                      <span class="already-trusted">Trusted</span>
+                    {/if}
+                  </button>
+                </li>
+              {/each}
+            </ul>
+          {/if}
+          {#if addError}
+            <p class="add-error">{addError}</p>
           {/if}
         </div>
-      {/each}
+
+        {#if trusts.length === 0}
+          <p class="empty">No trusted users yet.</p>
+        {:else}
+          <div class="trust-list">
+            {#each trusts as trust (trust.id)}
+              <div class="trust-item">
+                <AuthorBadge did={trust.trustedDid} />
+                <button class="revoke-btn" onclick={() => handleRevoke(trust)}>
+                  Revoke
+                </button>
+              </div>
+            {/each}
+          </div>
+        {/if}
+      </div>
     </div>
 
     <div class="modal-footer">
@@ -206,7 +287,7 @@
     background: var(--color-surface);
     border-radius: var(--radius-lg);
     width: 100%;
-    max-width: 520px;
+    max-width: 420px;
     max-height: 90vh;
     overflow-y: auto;
     box-shadow: var(--shadow-lg);
@@ -249,91 +330,222 @@
     margin: 0;
   }
 
-  .permission-row {
+  .option-group {
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
   }
 
-  .permission-label {
-    font-size: 0.8125rem;
-    font-weight: 500;
+  .option-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 0.75rem;
+    border: 2px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .option-card:hover {
+    border-color: var(--color-primary);
+  }
+
+  .option-card.selected {
+    border-color: var(--color-primary);
+    background: color-mix(in srgb, var(--color-primary) 8%, var(--color-surface));
+  }
+
+  .option-card strong {
+    font-size: 0.875rem;
     color: var(--color-text);
   }
 
-  .scope-selector {
-    display: flex;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-md);
-    overflow: hidden;
-  }
-
-  .scope-btn {
-    flex: 1;
-    padding: 0.375rem 0.5rem;
-    border: none;
-    background: var(--color-bg);
-    color: var(--color-text-secondary);
+  .option-hint {
     font-size: 0.75rem;
-    cursor: pointer;
-    transition:
-      background 0.15s,
-      color 0.15s;
+    color: var(--color-text-secondary);
+    line-height: 1.4;
   }
 
-  .scope-btn:not(:last-child) {
-    border-right: 1px solid var(--color-border);
+  /* Trusted users section */
+
+  .trusted-section {
+    border-top: 1px solid var(--color-border-light);
+    padding-top: 1rem;
   }
 
-  .scope-btn.active {
-    background: var(--color-primary);
-    color: white;
-    font-weight: 500;
+  .trusted-section h4 {
+    margin: 0 0 0.75rem;
+    font-size: 0.875rem;
+    font-weight: 600;
   }
 
-  .scope-btn:hover:not(.active) {
+  .add-section {
+    position: relative;
+    margin-bottom: 0.75rem;
+  }
+
+  .search-wrapper {
+    display: flex;
+    gap: 0.375rem;
+  }
+
+  .search-input {
+    flex: 1;
+    padding: 0.4rem 0.625rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    font-size: 0.8125rem;
     background: var(--color-surface);
     color: var(--color-text);
+    outline: none;
   }
 
-  .column-restrictions {
+  .search-input:focus {
+    border-color: var(--color-primary);
+  }
+
+  .add-btn {
+    padding: 0.4rem 0.75rem;
+    background: var(--color-primary);
+    color: white;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .add-btn:hover {
+    background: var(--color-primary-hover);
+  }
+
+  .add-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  .suggestions {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    margin: 0.25rem 0 0;
+    padding: 0;
+    list-style: none;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-lg);
+    z-index: 10;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+
+  .suggestion-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.5rem 0.625rem;
+    border: none;
+    background: none;
+    cursor: pointer;
+    text-align: left;
+    font-size: 0.8125rem;
+    color: var(--color-text);
+  }
+
+  .suggestion-item:hover:not(:disabled) {
+    background: var(--color-bg);
+  }
+
+  .suggestion-item:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  .suggestion-avatar {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+  }
+
+  .suggestion-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .suggestion-name {
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .suggestion-handle {
+    font-size: 0.75rem;
+    color: var(--color-text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .already-trusted {
+    font-size: 0.6875rem;
+    color: var(--color-text-secondary);
+    white-space: nowrap;
+  }
+
+  .add-error {
+    margin: 0.375rem 0 0;
+    font-size: 0.75rem;
+    color: var(--color-error);
+  }
+
+  .empty {
+    color: var(--color-text-secondary);
+    font-size: 0.8125rem;
+    text-align: center;
+    padding: 1rem 0;
+  }
+
+  .trust-list {
     display: flex;
     flex-direction: column;
     gap: 0.375rem;
-    padding-left: 0.25rem;
   }
 
-  .restrict-toggle {
+  .trust-item {
     display: flex;
     align-items: center;
-    gap: 0.375rem;
-    font-size: 0.75rem;
-    color: var(--color-text-secondary);
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.5rem 0.625rem;
+    background: var(--color-bg);
+    border-radius: var(--radius-md);
+  }
+
+  .revoke-btn {
+    padding: 0.25rem 0.625rem;
+    background: var(--color-surface);
+    color: var(--color-error);
+    border: 1px solid var(--color-error);
+    border-radius: var(--radius-sm);
+    font-size: 0.6875rem;
+    font-weight: 500;
     cursor: pointer;
+    white-space: nowrap;
   }
 
-  .restrict-toggle input {
-    margin: 0;
-  }
-
-  .column-checkboxes {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.25rem 0.75rem;
-    padding-left: 1.25rem;
-  }
-
-  .column-check {
-    display: flex;
-    align-items: center;
-    gap: 0.25rem;
-    font-size: 0.75rem;
-    color: var(--color-text);
-    cursor: pointer;
-  }
-
-  .column-check input {
-    margin: 0;
+  .revoke-btn:hover {
+    background: var(--color-error-bg);
   }
 
   .modal-footer {
@@ -363,10 +575,5 @@
     font-size: 0.875rem;
     font-weight: 500;
     cursor: pointer;
-  }
-
-  .save-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
   }
 </style>

@@ -1,55 +1,50 @@
 <script lang="ts">
-  import type { Op, Task, Comment } from "$lib/types.js";
+  import type { Task, Comment } from "$lib/types.js";
   import { grantTrust } from "$lib/trust.js";
+  import { createApproval } from "$lib/approvals.js";
+  import { blockUser } from "$lib/block.js";
   import { getAuth } from "$lib/auth.svelte.js";
+  import { TASK_COLLECTION, COMMENT_COLLECTION, buildAtUri } from "$lib/tid.js";
   import AuthorBadge from "./AuthorBadge.svelte";
 
   let {
-    proposals,
     untrustedTasks,
     untrustedComments = [],
+    allTasks = [],
     boardUri,
     onclose,
   }: {
-    proposals: Op[];
     untrustedTasks: Task[];
     untrustedComments?: Comment[];
+    allTasks?: Task[];
     boardUri: string;
     onclose: () => void;
   } = $props();
 
+  const taskTitleByUri = $derived.by(() => {
+    const map = new Map<string, string>();
+    for (const t of allTasks) {
+      const uri = buildAtUri(t.did, TASK_COLLECTION, t.rkey);
+      map.set(uri, t.title);
+    }
+    return map;
+  });
+
   const auth = getAuth();
 
-  // Group everything by author DID
-  const groupedByAuthor = $derived.by(() => {
-    const map = new Map<
-      string,
-      { ops: Op[]; tasks: Task[]; comments: Comment[] }
-    >();
+  type ProposalItem =
+    | { kind: "task"; task: Task; did: string }
+    | { kind: "comment"; comment: Comment; did: string };
 
+  const proposals = $derived.by(() => {
+    const items: ProposalItem[] = [];
     for (const task of untrustedTasks) {
-      const entry = map.get(task.did) || { ops: [], tasks: [], comments: [] };
-      entry.tasks.push(task);
-      map.set(task.did, entry);
+      items.push({ kind: "task", task, did: task.did });
     }
-
-    for (const op of proposals) {
-      const entry = map.get(op.did) || { ops: [], tasks: [], comments: [] };
-      entry.ops.push(op);
-      map.set(op.did, entry);
-    }
-
     for (const comment of untrustedComments) {
-      const entry = map.get(comment.did) || {
-        ops: [],
-        tasks: [],
-        comments: [],
-      };
-      entry.comments.push(comment);
-      map.set(comment.did, entry);
+      items.push({ kind: "comment", comment, did: comment.did });
     }
-
-    return map;
+    return items;
   });
 
   async function trustUser(trustedDid: string) {
@@ -57,14 +52,21 @@
     await grantTrust(auth.did, trustedDid, boardUri);
   }
 
-  function describeOp(op: Op): string {
-    const parts: string[] = [];
-    if (op.fields.title !== undefined)
-      parts.push(`title to "${op.fields.title}"`);
-    if (op.fields.description !== undefined) parts.push("description");
-    if (op.fields.columnId !== undefined) parts.push("column");
-    if (op.fields.order !== undefined) parts.push("order");
-    return parts.length > 0 ? `Change ${parts.join(", ")}` : "Unknown change";
+  async function acceptTask(task: Task) {
+    if (!auth.did) return;
+    const taskUri = buildAtUri(task.did, TASK_COLLECTION, task.rkey);
+    await createApproval(auth.did, taskUri, boardUri);
+  }
+
+  async function acceptComment(comment: Comment) {
+    if (!auth.did) return;
+    const commentUri = buildAtUri(comment.did, COMMENT_COLLECTION, comment.rkey);
+    await createApproval(auth.did, commentUri, boardUri);
+  }
+
+  async function block(blockedDid: string) {
+    if (!auth.did) return;
+    await blockUser(auth.did, blockedDid, boardUri);
   }
 </script>
 
@@ -72,48 +74,45 @@
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="panel" onclick={(e) => e.stopPropagation()} onkeydown={() => {}}>
     <div class="panel-header">
-      <h3>Pending Proposals</h3>
+      <h3>Proposals</h3>
       <button class="close-btn" onclick={onclose}>Close</button>
     </div>
 
-    {#if groupedByAuthor.size === 0}
+    {#if proposals.length === 0}
       <p class="empty">No pending proposals.</p>
     {:else}
-      {#each [...groupedByAuthor.entries()] as [authorDid, { ops, tasks, comments }]}
-        <div class="author-section">
-          <div class="author-header">
-            <AuthorBadge did={authorDid} />
-            <button class="trust-btn" onclick={() => trustUser(authorDid)}>
-              Trust Editor
-            </button>
+      {#each proposals as item}
+        <div class="proposal-card">
+          <div class="proposal-header">
+            <AuthorBadge did={item.did} />
+            <div class="proposal-actions">
+              <button class="action-btn block-btn" onclick={() => block(item.did)}>
+                Block User
+              </button>
+              <button class="action-btn trust-btn" onclick={() => trustUser(item.did)}>
+                Trust User
+              </button>
+              {#if item.kind === "task"}
+                <button class="action-btn accept-btn" onclick={() => acceptTask(item.task)}>
+                  Accept
+                </button>
+              {:else}
+                <button class="action-btn accept-btn" onclick={() => acceptComment(item.comment)}>
+                  Accept
+                </button>
+              {/if}
+            </div>
           </div>
-          {#if tasks.length > 0}
-            <div class="subsection-label">Tasks ({tasks.length})</div>
-            <ul class="item-list">
-              {#each tasks as task}
-                <li class="item">{task.title}</li>
-              {/each}
-            </ul>
-          {/if}
-          {#if ops.length > 0}
-            <div class="subsection-label">Edits ({ops.length})</div>
-            <ul class="item-list">
-              {#each ops as op}
-                <li class="item">{describeOp(op)}</li>
-              {/each}
-            </ul>
-          {/if}
-          {#if comments.length > 0}
-            <div class="subsection-label">Comments ({comments.length})</div>
-            <ul class="item-list">
-              {#each comments as comment}
-                <li class="item comment-item">
-                  {comment.text.length > 80
-                    ? comment.text.slice(0, 80) + "..."
-                    : comment.text}
-                </li>
-              {/each}
-            </ul>
+          {#if item.kind === "task"}
+            <div class="proposal-body">
+              <span class="proposal-label">Task</span>
+              <span class="proposal-title">{item.task.title}</span>
+            </div>
+          {:else}
+            <div class="proposal-body">
+              <div class="comment-context">on <strong>{taskTitleByUri.get(item.comment.targetTaskUri) ?? "unknown card"}</strong></div>
+              <div class="comment-box">{item.comment.text}</div>
+            </div>
           {/if}
         </div>
       {/each}
@@ -173,14 +172,14 @@
     padding: 2rem 0;
   }
 
-  .author-section {
-    margin-bottom: 1rem;
-    padding: 0.75rem;
+  .proposal-card {
+    margin-bottom: 0.625rem;
+    padding: 0.625rem;
     background: var(--color-bg);
     border-radius: var(--radius-md);
   }
 
-  .author-header {
+  .proposal-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -188,21 +187,13 @@
     margin-bottom: 0.5rem;
   }
 
-  .subsection-label {
-    font-size: 0.6875rem;
-    font-weight: 600;
-    color: var(--color-text-secondary);
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-    margin-top: 0.375rem;
-    margin-bottom: 0.25rem;
+  .proposal-actions {
+    display: flex;
+    gap: 0.375rem;
   }
 
-  .trust-btn {
+  .action-btn {
     padding: 0.25rem 0.625rem;
-    background: var(--color-primary);
-    color: white;
-    border: none;
     border-radius: var(--radius-sm);
     font-size: 0.6875rem;
     font-weight: 500;
@@ -210,24 +201,73 @@
     white-space: nowrap;
   }
 
-  .trust-btn:hover {
-    background: var(--color-primary-hover);
-  }
-
-  .item-list {
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-
-  .item {
-    font-size: 0.75rem;
+  .block-btn {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
     color: var(--color-text-secondary);
-    padding: 0.25rem 0;
-    border-bottom: 1px solid var(--color-border-light);
   }
 
-  .item:last-child {
-    border-bottom: none;
+  .block-btn:hover {
+    background: var(--color-danger, #dc3545);
+    color: white;
+    border-color: var(--color-danger, #dc3545);
+  }
+
+  .trust-btn {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    color: var(--color-text-secondary);
+  }
+
+  .trust-btn:hover {
+    background: var(--color-primary);
+    color: white;
+    border-color: var(--color-primary);
+  }
+
+  .accept-btn {
+    background: var(--color-primary);
+    color: white;
+    border: 1px solid var(--color-primary);
+  }
+
+  .accept-btn:hover {
+    background: var(--color-primary-hover);
+    border-color: var(--color-primary-hover);
+  }
+
+  .proposal-body {
+    font-size: 0.75rem;
+  }
+
+  .proposal-label {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    margin-right: 0.375rem;
+  }
+
+  .proposal-title {
+    color: var(--color-text);
+  }
+
+  .comment-context {
+    font-size: 0.6875rem;
+    color: var(--color-text-secondary);
+    margin-bottom: 0.375rem;
+  }
+
+  .comment-box {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border-light);
+    border-radius: var(--radius-sm);
+    padding: 0.5rem;
+    color: var(--color-text);
+    font-size: 0.75rem;
+    line-height: 1.4;
+    white-space: pre-wrap;
+    word-break: break-word;
   }
 </style>

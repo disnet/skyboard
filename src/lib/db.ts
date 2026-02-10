@@ -5,6 +5,8 @@ import type {
   Op,
   Trust,
   Comment,
+  Approval,
+  Block,
   KnownParticipant,
 } from "./types.js";
 
@@ -14,6 +16,8 @@ type SkyboardDb = Dexie & {
   ops: EntityTable<Op, "id">;
   trusts: EntityTable<Trust, "id">;
   comments: EntityTable<Comment, "id">;
+  approvals: EntityTable<Approval, "id">;
+  blocks: EntityTable<Block, "id">;
   knownParticipants: EntityTable<KnownParticipant, "id">;
 };
 
@@ -51,6 +55,58 @@ function createDb(name: string): SkyboardDb {
       "++id, rkey, did, trustedDid, boardUri, syncStatus, [did+boardUri+trustedDid], [did+rkey]",
     comments:
       "++id, rkey, did, targetTaskUri, boardUri, createdAt, syncStatus, [did+rkey]",
+    knownParticipants: "++id, did, boardUri, [did+boardUri]",
+  });
+
+  d.version(5)
+    .stores({
+      boards: "++id, rkey, did, syncStatus",
+      tasks: "++id, rkey, did, columnId, boardUri, order, syncStatus, [did+rkey]",
+      ops: "++id, rkey, did, targetTaskUri, boardUri, createdAt, syncStatus, [did+rkey]",
+      trusts:
+        "++id, rkey, did, trustedDid, boardUri, syncStatus, [did+boardUri+trustedDid], [did+rkey]",
+      comments:
+        "++id, rkey, did, targetTaskUri, boardUri, createdAt, syncStatus, [did+rkey]",
+      approvals:
+        "++id, rkey, did, targetUri, boardUri, syncStatus, [did+rkey]",
+      knownParticipants: "++id, did, boardUri, [did+boardUri]",
+    })
+    .upgrade((tx) => {
+      // Migrate old permissions to the new open/closed model.
+      // If any rule had "anyone" scope → set open: true.
+      // Then remove the old permissions field.
+      return tx
+        .table("boards")
+        .toCollection()
+        .modify((board: Record<string, unknown>) => {
+          if (board.permissions && !board.open) {
+            const perms = board.permissions as {
+              rules?: Array<{ scope?: string }>;
+            };
+            const hadAnyone = perms.rules?.some(
+              (r) => r.scope === "anyone",
+            );
+            if (hadAnyone) {
+              board.open = true;
+              board.syncStatus = "pending";
+            }
+          }
+          delete board.permissions;
+        });
+    });
+
+  d.version(6).stores({
+    boards: "++id, rkey, did, syncStatus",
+    tasks: "++id, rkey, did, columnId, boardUri, order, syncStatus, [did+rkey]",
+    ops: "++id, rkey, did, targetTaskUri, boardUri, createdAt, syncStatus, [did+rkey]",
+    trusts:
+      "++id, rkey, did, trustedDid, boardUri, syncStatus, [did+boardUri+trustedDid], [did+rkey]",
+    comments:
+      "++id, rkey, did, targetTaskUri, boardUri, createdAt, syncStatus, [did+rkey]",
+    approvals:
+      "++id, rkey, did, targetUri, boardUri, syncStatus, [did+rkey]",
+    blocks:
+      "++id, did, blockedDid, boardUri, [did+boardUri+blockedDid]",
     knownParticipants: "++id, did, boardUri, [did+boardUri]",
   });
 

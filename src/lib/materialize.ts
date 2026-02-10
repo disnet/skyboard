@@ -1,17 +1,7 @@
 import { buildAtUri, TASK_COLLECTION } from "./tid.js";
 import { generateKeyBetween } from "fractional-indexing";
-import type {
-  Task,
-  Op,
-  OpFields,
-  MaterializedTask,
-  BoardPermissions,
-} from "./types.js";
-import {
-  hasPermission,
-  fieldToOperation,
-  getBoardPermissions,
-} from "./permissions.js";
+import type { Task, Op, OpFields, MaterializedTask } from "./types.js";
+import { isTrusted } from "./permissions.js";
 
 const MUTABLE_FIELDS: (keyof OpFields)[] = [
   "title",
@@ -47,7 +37,6 @@ export function materializeTasks(
   ownerTrustedDids: Set<string>,
   currentUserDid: string,
   boardOwnerDid: string,
-  permissions: BoardPermissions,
 ): MaterializedTask[] {
   // Deduplicate tasks by did+rkey (sync race conditions can create duplicates)
   const seenTasks = new Set<string>();
@@ -70,50 +59,18 @@ export function materializeTasks(
     const taskUri = buildAtUri(task.did, TASK_COLLECTION, task.rkey);
     const taskOps = opsByTask.get(taskUri) || [];
 
-    // Separate permitted vs pending ops
+    // Only apply ops from trusted sources: board owner, task owner, trusted users, current user
+    // All other ops are ignored entirely
     const appliedOps: Op[] = [];
-    const pendingOps: Op[] = [];
 
     for (const op of taskOps) {
-      // Board owner and task owner ops are always applied
-      if (op.did === boardOwnerDid || op.did === task.did) {
+      if (
+        op.did === boardOwnerDid ||
+        op.did === task.did ||
+        op.did === currentUserDid ||
+        isTrusted(op.did, boardOwnerDid, ownerTrustedDids)
+      ) {
         appliedOps.push(op);
-        continue;
-      }
-
-      // Current user's own ops are always visible to them
-      if (op.did === currentUserDid) {
-        appliedOps.push(op);
-        continue;
-      }
-
-      // Check per-field permissions
-      const hasColumnIdChange = op.fields.columnId !== undefined;
-      let allPermitted = true;
-      for (const field of MUTABLE_FIELDS) {
-        if (op.fields[field] === undefined) continue;
-        const operation = fieldToOperation(field, hasColumnIdChange);
-        const columnForCheck =
-          field === "columnId" ? op.fields.columnId : task.columnId;
-        if (
-          !hasPermission(
-            op.did,
-            boardOwnerDid,
-            ownerTrustedDids,
-            permissions,
-            operation,
-            columnForCheck,
-          )
-        ) {
-          allPermitted = false;
-          break;
-        }
-      }
-
-      if (allPermitted) {
-        appliedOps.push(op);
-      } else {
-        pendingOps.push(op);
       }
     }
 
@@ -176,7 +133,7 @@ export function materializeTasks(
       updatedAt: task.updatedAt,
       sourceTask: task,
       appliedOps,
-      pendingOps,
+      pendingOps: [],
       effectiveTitle: fieldStates.title.value as string,
       effectiveDescription: fieldStates.description.value as string | undefined,
       effectiveColumnId: fieldStates.columnId.value as string,

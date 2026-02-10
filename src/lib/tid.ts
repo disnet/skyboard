@@ -5,6 +5,7 @@ export const TASK_COLLECTION = "dev.skyboard.task";
 export const OP_COLLECTION = "dev.skyboard.op";
 export const TRUST_COLLECTION = "dev.skyboard.trust";
 export const COMMENT_COLLECTION = "dev.skyboard.comment";
+export const APPROVAL_COLLECTION = "dev.skyboard.approval";
 
 export function generateTID(): string {
   return TID.nextStr();
