@@ -78,7 +78,7 @@
         timestamp: op.createdAt,
         taskTitle: taskTitleByUri.get(op.targetTaskUri) ?? "Unknown task",
         description: describeOp(op),
-        key: `op-${op.rkey}`,
+        key: `op-${op.did}-${op.rkey}`,
       });
     }
 
