@@ -49,7 +49,7 @@
       const columnRules = rules.filter(
         (r) => r.columnIds && r.columnIds.length > 0,
       );
-      const scope: PermissionScope = globalRule?.scope ?? "author_only";
+      const scope: PermissionScope = globalRule?.scope ?? columnRules[0]?.scope ?? "author_only";
 
       return {
         operation: op.key,
