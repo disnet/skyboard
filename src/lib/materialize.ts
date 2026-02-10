@@ -49,6 +49,15 @@ export function materializeTasks(
   boardOwnerDid: string,
   permissions: BoardPermissions,
 ): MaterializedTask[] {
+  // Deduplicate tasks by did+rkey (sync race conditions can create duplicates)
+  const seenTasks = new Set<string>();
+  const uniqueTasks = tasks.filter((task) => {
+    const key = `${task.did}:${task.rkey}`;
+    if (seenTasks.has(key)) return false;
+    seenTasks.add(key);
+    return true;
+  });
+
   // Group ops by targetTaskUri
   const opsByTask = new Map<string, Op[]>();
   for (const op of ops) {
@@ -57,7 +66,7 @@ export function materializeTasks(
     opsByTask.set(op.targetTaskUri, list);
   }
 
-  return tasks.map((task) => {
+  return uniqueTasks.map((task) => {
     const taskUri = buildAtUri(task.did, TASK_COLLECTION, task.rkey);
     const taskOps = opsByTask.get(taskUri) || [];
 

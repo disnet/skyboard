@@ -253,7 +253,10 @@ export async function pullFromPDS(agent: Agent, did: string): Promise<void> {
       const rkey = record.uri.split("/").pop()!;
       const value = record.value as Record<string, unknown>;
 
-      const existing = await db.tasks.where("rkey").equals(rkey).first();
+      const existing = await db.tasks
+        .where("[did+rkey]")
+        .equals([did, rkey])
+        .first();
       if (existing && existing.syncStatus === "pending") {
         continue;
       }
