@@ -685,6 +685,8 @@
 
   function handlePasteLines(task: MaterializedTask, lines: string[]) {
     if (!auth.did || !inlineEditPos) return;
+    // Cap paste to 100 lines to prevent mass record creation
+    const cappedLines = lines.slice(0, 100);
     const colIdx = inlineEditPos.col;
     const colTasks = sortedTasksByColumn[colIdx] ?? [];
     const currentRow = inlineEditPos.row;
@@ -693,7 +695,7 @@
     const afterPos = colTasks[currentRow + 1]?.effectivePosition ?? null;
 
     let prevPos = currentPos;
-    for (const line of lines) {
+    for (const line of cappedLines) {
       const newPosition = generateKeyBetween(prevPos, afterPos);
       const rkey = generateTID();
       const taskData = {

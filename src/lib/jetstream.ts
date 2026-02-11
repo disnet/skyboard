@@ -7,6 +7,16 @@ import {
   APPROVAL_COLLECTION,
   REACTION_COLLECTION,
 } from "./tid.js";
+import {
+  safeParse,
+  JetstreamCommitEventSchema,
+  TaskRecordSchema,
+  OpRecordSchema,
+  TrustRecordSchema,
+  CommentRecordSchema,
+  ApprovalRecordSchema,
+  ReactionRecordSchema,
+} from "./schemas.js";
 
 const JETSTREAM_URL = "wss://jetstream2.us-east.bsky.network/subscribe";
 
@@ -105,8 +115,10 @@ export class JetstreamClient {
 
   private handleMessage(event: MessageEvent): void {
     try {
-      const data = JSON.parse(event.data as string) as JetstreamCommitEvent;
-      if (data.kind === "commit" && data.time_us) {
+      const raw = JSON.parse(event.data as string);
+      const data = safeParse(JetstreamCommitEventSchema, raw, "JetstreamCommitEvent");
+      if (!data) return;
+      if (data.time_us) {
         this.lastCursor = data.time_us;
         this.options.onEvent(data);
       }
@@ -289,6 +301,9 @@ export async function processJetstreamEvent(
   if (!boardUri) return null;
 
   if (commit.collection === TASK_COLLECTION) {
+    const validated = safeParse(TaskRecordSchema, record, "TaskRecord (jetstream)");
+    if (!validated) return null;
+
     const existing = await db.tasks
       .where("[did+rkey]")
       .equals([did, commit.rkey])
@@ -297,15 +312,15 @@ export async function processJetstreamEvent(
     const taskData = {
       rkey: commit.rkey,
       did,
-      title: (record.title as string) ?? "",
-      description: record.description as string | undefined,
-      columnId: (record.columnId as string) ?? "",
+      title: validated.title,
+      description: validated.description,
+      columnId: validated.columnId,
       boardUri,
-      position: record.position as string | undefined,
-      labelIds: (record.labelIds as string[]) ?? undefined,
-      order: (record.order as number) ?? 0,
-      createdAt: (record.createdAt as string) ?? new Date().toISOString(),
-      updatedAt: record.updatedAt as string | undefined,
+      position: validated.position,
+      labelIds: validated.labelIds,
+      order: validated.order ?? 0,
+      createdAt: validated.createdAt,
+      updatedAt: validated.updatedAt,
       syncStatus: "synced" as const,
     };
 
@@ -318,6 +333,9 @@ export async function processJetstreamEvent(
   }
 
   if (commit.collection === OP_COLLECTION) {
+    const validated = safeParse(OpRecordSchema, record, "OpRecord (jetstream)");
+    if (!validated) return null;
+
     const existing = await db.ops
       .where("[did+rkey]")
       .equals([did, commit.rkey])
@@ -326,10 +344,10 @@ export async function processJetstreamEvent(
     const opData = {
       rkey: commit.rkey,
       did,
-      targetTaskUri: (record.targetTaskUri as string) ?? "",
+      targetTaskUri: validated.targetTaskUri,
       boardUri,
-      fields: (record.fields as Record<string, unknown>) ?? {},
-      createdAt: (record.createdAt as string) ?? new Date().toISOString(),
+      fields: validated.fields,
+      createdAt: validated.createdAt,
       syncStatus: "synced" as const,
     };
 
@@ -342,17 +360,20 @@ export async function processJetstreamEvent(
   }
 
   if (commit.collection === TRUST_COLLECTION) {
+    const validated = safeParse(TrustRecordSchema, record, "TrustRecord (jetstream)");
+    if (!validated) return null;
+
     const existing = await db.trusts
       .where("[did+boardUri+trustedDid]")
-      .equals([did, boardUri, (record.trustedDid as string) ?? ""])
+      .equals([did, boardUri, validated.trustedDid])
       .first();
 
     const trustData = {
       rkey: commit.rkey,
       did,
-      trustedDid: (record.trustedDid as string) ?? "",
+      trustedDid: validated.trustedDid,
       boardUri,
-      createdAt: (record.createdAt as string) ?? new Date().toISOString(),
+      createdAt: validated.createdAt,
       syncStatus: "synced" as const,
     };
 
@@ -365,6 +386,9 @@ export async function processJetstreamEvent(
   }
 
   if (commit.collection === COMMENT_COLLECTION) {
+    const validated = safeParse(CommentRecordSchema, record, "CommentRecord (jetstream)");
+    if (!validated) return null;
+
     const existing = await db.comments
       .where("[did+rkey]")
       .equals([did, commit.rkey])
@@ -373,10 +397,10 @@ export async function processJetstreamEvent(
     const commentData = {
       rkey: commit.rkey,
       did,
-      targetTaskUri: (record.targetTaskUri as string) ?? "",
+      targetTaskUri: validated.targetTaskUri,
       boardUri,
-      text: (record.text as string) ?? "",
-      createdAt: (record.createdAt as string) ?? new Date().toISOString(),
+      text: validated.text,
+      createdAt: validated.createdAt,
       syncStatus: "synced" as const,
     };
 
@@ -389,6 +413,9 @@ export async function processJetstreamEvent(
   }
 
   if (commit.collection === APPROVAL_COLLECTION) {
+    const validated = safeParse(ApprovalRecordSchema, record, "ApprovalRecord (jetstream)");
+    if (!validated) return null;
+
     const existing = await db.approvals
       .where("[did+rkey]")
       .equals([did, commit.rkey])
@@ -397,9 +424,9 @@ export async function processJetstreamEvent(
     const approvalData = {
       rkey: commit.rkey,
       did,
-      targetUri: (record.targetUri as string) ?? "",
+      targetUri: validated.targetUri,
       boardUri,
-      createdAt: (record.createdAt as string) ?? new Date().toISOString(),
+      createdAt: validated.createdAt,
       syncStatus: "synced" as const,
     };
 
@@ -412,6 +439,9 @@ export async function processJetstreamEvent(
   }
 
   if (commit.collection === REACTION_COLLECTION) {
+    const validated = safeParse(ReactionRecordSchema, record, "ReactionRecord (jetstream)");
+    if (!validated) return null;
+
     const existing = await db.reactions
       .where("[did+rkey]")
       .equals([did, commit.rkey])
@@ -420,10 +450,10 @@ export async function processJetstreamEvent(
     const reactionData = {
       rkey: commit.rkey,
       did,
-      targetTaskUri: (record.targetTaskUri as string) ?? "",
+      targetTaskUri: validated.targetTaskUri,
       boardUri,
-      emoji: (record.emoji as string) ?? "",
-      createdAt: (record.createdAt as string) ?? new Date().toISOString(),
+      emoji: validated.emoji,
+      createdAt: validated.createdAt,
       syncStatus: "synced" as const,
     };
 

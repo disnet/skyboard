@@ -18,9 +18,11 @@ const MUTABLE_FIELDS: (keyof OpFields)[] = [
 function orderToPosition(order: number | undefined): string {
   if (order === undefined || order === null)
     return generateKeyBetween(null, null);
+  // Clamp to prevent DoS via huge order values
+  const clamped = Math.min(Math.max(0, order), 10_000);
   // Generate a chain of positions: null -> pos0 -> pos1 -> ... -> posN
   let pos: string | null = null;
-  for (let i = 0; i <= order; i++) {
+  for (let i = 0; i <= clamped; i++) {
     pos = generateKeyBetween(pos, null);
   }
   return pos!;

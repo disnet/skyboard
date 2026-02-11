@@ -21,7 +21,8 @@
     "dexie": "^4.0.11",
     "dompurify": "^3.3.1",
     "fractional-indexing": "^3.2.0",
-    "marked": "^17.0.1"
+    "marked": "^17.0.1",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@sveltejs/adapter-static": "^3.0.8",

@@ -21,6 +21,16 @@ import type {
   BoardRecord,
   TaskRecord,
 } from "./types.js";
+import {
+  safeParse,
+  BoardRecordSchema,
+  TaskRecordSchema,
+  OpRecordSchema,
+  TrustRecordSchema,
+  CommentRecordSchema,
+  ApprovalRecordSchema,
+  ReactionRecordSchema,
+} from "./schemas.js";
 import { opToRecord } from "./ops.js";
 import { trustToRecord } from "./trust.js";
 import { commentToRecord } from "./comments.js";
@@ -289,6 +299,9 @@ export async function pullFromPDS(agent: Agent, did: string): Promise<void> {
       const rkey = record.uri.split("/").pop()!;
       const value = record.value as Record<string, unknown>;
 
+      const validated = safeParse(BoardRecordSchema, value, "BoardRecord (pull)");
+      if (!validated) continue;
+
       const existing = await db.boards.where("rkey").equals(rkey).first();
       if (existing && existing.syncStatus === "pending") {
         // Local pending wins
@@ -298,12 +311,12 @@ export async function pullFromPDS(agent: Agent, did: string): Promise<void> {
       const boardData: Omit<Board, "id"> = {
         rkey,
         did,
-        name: (value.name as string) ?? "",
-        description: value.description as string | undefined,
-        columns: (value.columns as Board["columns"]) ?? [],
-        labels: (value.labels as Board["labels"]) ?? undefined,
+        name: validated.name,
+        description: validated.description,
+        columns: validated.columns,
+        labels: validated.labels,
         open: inferOpen(value),
-        createdAt: (value.createdAt as string) ?? new Date().toISOString(),
+        createdAt: validated.createdAt,
         syncStatus: "synced",
       };
 
@@ -331,6 +344,9 @@ export async function pullFromPDS(agent: Agent, did: string): Promise<void> {
       const rkey = record.uri.split("/").pop()!;
       const value = record.value as Record<string, unknown>;
 
+      const validated = safeParse(TaskRecordSchema, value, "TaskRecord (pull)");
+      if (!validated) continue;
+
       const existing = await db.tasks
         .where("[did+rkey]")
         .equals([did, rkey])
@@ -342,15 +358,15 @@ export async function pullFromPDS(agent: Agent, did: string): Promise<void> {
       const taskData: Omit<Task, "id"> = {
         rkey,
         did,
-        title: (value.title as string) ?? "",
-        description: value.description as string | undefined,
-        columnId: (value.columnId as string) ?? "",
-        boardUri: (value.boardUri as string) ?? "",
-        position: value.position as string | undefined,
-        labelIds: (value.labelIds as string[]) ?? undefined,
-        order: (value.order as number) ?? 0,
-        createdAt: (value.createdAt as string) ?? new Date().toISOString(),
-        updatedAt: value.updatedAt as string | undefined,
+        title: validated.title,
+        description: validated.description,
+        columnId: validated.columnId,
+        boardUri: validated.boardUri,
+        position: validated.position,
+        labelIds: validated.labelIds,
+        order: validated.order ?? 0,
+        createdAt: validated.createdAt,
+        updatedAt: validated.updatedAt,
         syncStatus: "synced",
       };
 
@@ -378,6 +394,9 @@ export async function pullFromPDS(agent: Agent, did: string): Promise<void> {
       const rkey = record.uri.split("/").pop()!;
       const value = record.value as Record<string, unknown>;
 
+      const validated = safeParse(OpRecordSchema, value, "OpRecord (pull)");
+      if (!validated) continue;
+
       const existing = await db.ops
         .where("[did+rkey]")
         .equals([did, rkey])
@@ -389,10 +408,10 @@ export async function pullFromPDS(agent: Agent, did: string): Promise<void> {
       const opData: Omit<Op, "id"> = {
         rkey,
         did,
-        targetTaskUri: (value.targetTaskUri as string) ?? "",
-        boardUri: (value.boardUri as string) ?? "",
-        fields: (value.fields as Op["fields"]) ?? {},
-        createdAt: (value.createdAt as string) ?? new Date().toISOString(),
+        targetTaskUri: validated.targetTaskUri,
+        boardUri: validated.boardUri,
+        fields: validated.fields,
+        createdAt: validated.createdAt,
         syncStatus: "synced",
       };
 
@@ -420,13 +439,12 @@ export async function pullFromPDS(agent: Agent, did: string): Promise<void> {
       const rkey = record.uri.split("/").pop()!;
       const value = record.value as Record<string, unknown>;
 
+      const validated = safeParse(TrustRecordSchema, value, "TrustRecord (pull)");
+      if (!validated) continue;
+
       const existing = await db.trusts
         .where("[did+boardUri+trustedDid]")
-        .equals([
-          did,
-          (value.boardUri as string) ?? "",
-          (value.trustedDid as string) ?? "",
-        ])
+        .equals([did, validated.boardUri, validated.trustedDid])
         .first();
       if (existing && existing.syncStatus === "pending") {
         continue;
@@ -435,9 +453,9 @@ export async function pullFromPDS(agent: Agent, did: string): Promise<void> {
       const trustData: Omit<Trust, "id"> = {
         rkey,
         did,
-        trustedDid: (value.trustedDid as string) ?? "",
-        boardUri: (value.boardUri as string) ?? "",
-        createdAt: (value.createdAt as string) ?? new Date().toISOString(),
+        trustedDid: validated.trustedDid,
+        boardUri: validated.boardUri,
+        createdAt: validated.createdAt,
         syncStatus: "synced",
       };
 
@@ -465,6 +483,9 @@ export async function pullFromPDS(agent: Agent, did: string): Promise<void> {
       const rkey = record.uri.split("/").pop()!;
       const value = record.value as Record<string, unknown>;
 
+      const validated = safeParse(CommentRecordSchema, value, "CommentRecord (pull)");
+      if (!validated) continue;
+
       const existing = await db.comments
         .where("[did+rkey]")
         .equals([did, rkey])
@@ -476,10 +497,10 @@ export async function pullFromPDS(agent: Agent, did: string): Promise<void> {
       const commentData: Omit<Comment, "id"> = {
         rkey,
         did,
-        targetTaskUri: (value.targetTaskUri as string) ?? "",
-        boardUri: (value.boardUri as string) ?? "",
-        text: (value.text as string) ?? "",
-        createdAt: (value.createdAt as string) ?? new Date().toISOString(),
+        targetTaskUri: validated.targetTaskUri,
+        boardUri: validated.boardUri,
+        text: validated.text,
+        createdAt: validated.createdAt,
         syncStatus: "synced",
       };
 
@@ -507,6 +528,9 @@ export async function pullFromPDS(agent: Agent, did: string): Promise<void> {
       const rkey = record.uri.split("/").pop()!;
       const value = record.value as Record<string, unknown>;
 
+      const validated = safeParse(ApprovalRecordSchema, value, "ApprovalRecord (pull)");
+      if (!validated) continue;
+
       const existing = await db.approvals
         .where("[did+rkey]")
         .equals([did, rkey])
@@ -518,9 +542,9 @@ export async function pullFromPDS(agent: Agent, did: string): Promise<void> {
       const approvalData: Omit<Approval, "id"> = {
         rkey,
         did,
-        targetUri: (value.targetUri as string) ?? "",
-        boardUri: (value.boardUri as string) ?? "",
-        createdAt: (value.createdAt as string) ?? new Date().toISOString(),
+        targetUri: validated.targetUri,
+        boardUri: validated.boardUri,
+        createdAt: validated.createdAt,
         syncStatus: "synced",
       };
 
@@ -548,6 +572,9 @@ export async function pullFromPDS(agent: Agent, did: string): Promise<void> {
       const rkey = record.uri.split("/").pop()!;
       const value = record.value as Record<string, unknown>;
 
+      const validated = safeParse(ReactionRecordSchema, value, "ReactionRecord (pull)");
+      if (!validated) continue;
+
       const existing = await db.reactions
         .where("[did+rkey]")
         .equals([did, rkey])
@@ -559,10 +586,10 @@ export async function pullFromPDS(agent: Agent, did: string): Promise<void> {
       const reactionData: Omit<Reaction, "id"> = {
         rkey,
         did,
-        targetTaskUri: (value.targetTaskUri as string) ?? "",
-        boardUri: (value.boardUri as string) ?? "",
-        emoji: (value.emoji as string) ?? "",
-        createdAt: (value.createdAt as string) ?? new Date().toISOString(),
+        targetTaskUri: validated.targetTaskUri,
+        boardUri: validated.boardUri,
+        emoji: validated.emoji,
+        createdAt: validated.createdAt,
         syncStatus: "synced",
       };
 

@@ -9,6 +9,16 @@ import {
   REACTION_COLLECTION,
 } from "./tid.js";
 import type { Task, Op, Board, Trust, Comment, Approval, Reaction } from "./types.js";
+import {
+  safeParse,
+  BoardRecordSchema,
+  TaskRecordSchema,
+  OpRecordSchema,
+  TrustRecordSchema,
+  CommentRecordSchema,
+  ApprovalRecordSchema,
+  ReactionRecordSchema,
+} from "./schemas.js";
 
 /**
  * Infer the `open` flag from a PDS record that may have the old `permissions`
@@ -111,6 +121,9 @@ export async function fetchRemoteTasks(
     const value = record.value;
     if (value.boardUri !== boardUri) continue;
 
+    const validated = safeParse(TaskRecordSchema, value, "TaskRecord (remote)");
+    if (!validated) continue;
+
     const rkey = record.uri.split("/").pop()!;
     const existing = await db.tasks
       .where("[did+rkey]")
@@ -120,15 +133,15 @@ export async function fetchRemoteTasks(
     const taskData: Omit<Task, "id"> = {
       rkey,
       did: participantDid,
-      title: (value.title as string) ?? "",
-      description: value.description as string | undefined,
-      columnId: (value.columnId as string) ?? "",
+      title: validated.title,
+      description: validated.description,
+      columnId: validated.columnId,
       boardUri,
-      position: value.position as string | undefined,
-      labelIds: (value.labelIds as string[]) ?? undefined,
-      order: (value.order as number) ?? 0,
-      createdAt: (value.createdAt as string) ?? new Date().toISOString(),
-      updatedAt: value.updatedAt as string | undefined,
+      position: validated.position,
+      labelIds: validated.labelIds,
+      order: validated.order ?? 0,
+      createdAt: validated.createdAt,
+      updatedAt: validated.updatedAt,
       syncStatus: "synced",
     };
 
@@ -150,6 +163,9 @@ export async function fetchRemoteOps(
     const value = record.value;
     if (value.boardUri !== boardUri) continue;
 
+    const validated = safeParse(OpRecordSchema, value, "OpRecord (remote)");
+    if (!validated) continue;
+
     const rkey = record.uri.split("/").pop()!;
     const existing = await db.ops
       .where("[did+rkey]")
@@ -159,10 +175,10 @@ export async function fetchRemoteOps(
     const opData: Omit<Op, "id"> = {
       rkey,
       did: participantDid,
-      targetTaskUri: (value.targetTaskUri as string) ?? "",
+      targetTaskUri: validated.targetTaskUri,
       boardUri,
-      fields: (value.fields as Op["fields"]) ?? {},
-      createdAt: (value.createdAt as string) ?? new Date().toISOString(),
+      fields: validated.fields,
+      createdAt: validated.createdAt,
       syncStatus: "synced",
     };
 
@@ -196,15 +212,18 @@ export async function fetchRemoteBoard(
     const data = await res.json();
     const value = data.value as Record<string, unknown>;
 
+    const validated = safeParse(BoardRecordSchema, value, "BoardRecord (remote)");
+    if (!validated) return null;
+
     return {
       rkey,
       did: ownerDid,
-      name: (value.name as string) ?? "",
-      description: value.description as string | undefined,
-      columns: (value.columns as Board["columns"]) ?? [],
-      labels: (value.labels as Board["labels"]) ?? undefined,
+      name: validated.name,
+      description: validated.description,
+      columns: validated.columns,
+      labels: validated.labels,
       open: inferOpenFromRecord(value),
-      createdAt: (value.createdAt as string) ?? new Date().toISOString(),
+      createdAt: validated.createdAt,
       syncStatus: "synced",
     };
   } catch {
@@ -222,19 +241,21 @@ export async function fetchRemoteTrusts(
     const value = record.value;
     if (value.boardUri !== boardUri) continue;
 
+    const validated = safeParse(TrustRecordSchema, value, "TrustRecord (remote)");
+    if (!validated) continue;
+
     const rkey = record.uri.split("/").pop()!;
-    const trustedDid = (value.trustedDid as string) ?? "";
     const existing = await db.trusts
       .where("[did+boardUri+trustedDid]")
-      .equals([ownerDid, boardUri, trustedDid])
+      .equals([ownerDid, boardUri, validated.trustedDid])
       .first();
 
     const trustData: Omit<Trust, "id"> = {
       rkey,
       did: ownerDid,
-      trustedDid,
+      trustedDid: validated.trustedDid,
       boardUri,
-      createdAt: (value.createdAt as string) ?? new Date().toISOString(),
+      createdAt: validated.createdAt,
       syncStatus: "synced",
     };
 
@@ -259,6 +280,9 @@ export async function fetchRemoteComments(
     const value = record.value;
     if (value.boardUri !== boardUri) continue;
 
+    const validated = safeParse(CommentRecordSchema, value, "CommentRecord (remote)");
+    if (!validated) continue;
+
     const rkey = record.uri.split("/").pop()!;
     const existing = await db.comments
       .where("[did+rkey]")
@@ -268,10 +292,10 @@ export async function fetchRemoteComments(
     const commentData: Omit<Comment, "id"> = {
       rkey,
       did: participantDid,
-      targetTaskUri: (value.targetTaskUri as string) ?? "",
+      targetTaskUri: validated.targetTaskUri,
       boardUri,
-      text: (value.text as string) ?? "",
-      createdAt: (value.createdAt as string) ?? new Date().toISOString(),
+      text: validated.text,
+      createdAt: validated.createdAt,
       syncStatus: "synced",
     };
 
@@ -293,6 +317,9 @@ export async function fetchRemoteApprovals(
     const value = record.value;
     if (value.boardUri !== boardUri) continue;
 
+    const validated = safeParse(ApprovalRecordSchema, value, "ApprovalRecord (remote)");
+    if (!validated) continue;
+
     const rkey = record.uri.split("/").pop()!;
     const existing = await db.approvals
       .where("[did+rkey]")
@@ -302,9 +329,9 @@ export async function fetchRemoteApprovals(
     const approvalData: Omit<Approval, "id"> = {
       rkey,
       did: ownerDid,
-      targetUri: (value.targetUri as string) ?? "",
+      targetUri: validated.targetUri,
       boardUri,
-      createdAt: (value.createdAt as string) ?? new Date().toISOString(),
+      createdAt: validated.createdAt,
       syncStatus: "synced",
     };
 
@@ -329,6 +356,9 @@ export async function fetchRemoteReactions(
     const value = record.value;
     if (value.boardUri !== boardUri) continue;
 
+    const validated = safeParse(ReactionRecordSchema, value, "ReactionRecord (remote)");
+    if (!validated) continue;
+
     const rkey = record.uri.split("/").pop()!;
     const existing = await db.reactions
       .where("[did+rkey]")
@@ -338,10 +368,10 @@ export async function fetchRemoteReactions(
     const reactionData: Omit<Reaction, "id"> = {
       rkey,
       did: participantDid,
-      targetTaskUri: (value.targetTaskUri as string) ?? "",
+      targetTaskUri: validated.targetTaskUri,
       boardUri,
-      emoji: (value.emoji as string) ?? "",
-      createdAt: (value.createdAt as string) ?? new Date().toISOString(),
+      emoji: validated.emoji,
+      createdAt: validated.createdAt,
       syncStatus: "synced",
     };
 

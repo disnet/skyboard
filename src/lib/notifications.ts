@@ -2,6 +2,12 @@ import { db } from "./db.js";
 import { TASK_COLLECTION, COMMENT_COLLECTION, OP_COLLECTION } from "./tid.js";
 import type { JetstreamCommitEvent } from "./jetstream.js";
 import type { NotificationType } from "./types.js";
+import {
+  safeParse,
+  TaskRecordSchema,
+  CommentRecordSchema,
+  OpRecordSchema,
+} from "./schemas.js";
 
 const MENTION_RE =
   /@((?:[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?\.)+[a-zA-Z]{2,})/g;
@@ -67,17 +73,19 @@ export async function generateNotificationFromEvent(
   if (!localBoard) return;
 
   if (commit.collection === TASK_COLLECTION) {
-    const title = (record.title as string) ?? "";
+    const validated = safeParse(TaskRecordSchema, record, "TaskRecord (notification)");
+    if (!validated) return;
     await dedupeInsert("task_created", `task:${did}:${commit.rkey}`, {
       actorDid: did,
       boardUri,
       taskUri: `at://${did}/${TASK_COLLECTION}/${commit.rkey}`,
-      text: title.slice(0, 100),
-      createdAt: (record.createdAt as string) ?? new Date().toISOString(),
+      text: validated.title.slice(0, 100),
+      createdAt: validated.createdAt,
     });
   } else if (commit.collection === COMMENT_COLLECTION) {
-    const text = (record.text as string) ?? "";
-    const mentions = parseMentions(text);
+    const validated = safeParse(CommentRecordSchema, record, "CommentRecord (notification)");
+    if (!validated) return;
+    const mentions = parseMentions(validated.text);
     const handle = currentUserHandle?.toLowerCase();
     const isMentioned = handle ? mentions.includes(handle) : false;
 
@@ -90,18 +98,18 @@ export async function generateNotificationFromEvent(
     await dedupeInsert(type, key, {
       actorDid: did,
       boardUri,
-      taskUri: record.targetTaskUri as string | undefined,
+      taskUri: validated.targetTaskUri,
       commentRkey: commit.rkey,
-      text: text.slice(0, 100),
-      createdAt: (record.createdAt as string) ?? new Date().toISOString(),
+      text: validated.text.slice(0, 100),
+      createdAt: validated.createdAt,
     });
   } else if (commit.collection === OP_COLLECTION) {
-    const fields = record.fields as Record<string, unknown> | undefined;
-    if (!fields) return;
+    const validated = safeParse(OpRecordSchema, record, "OpRecord (notification)");
+    if (!validated) return;
 
     // Check for mentions in description updates
-    const desc = (fields.description as string) ?? "";
-    const title = (fields.title as string) ?? "";
+    const desc = validated.fields.description ?? "";
+    const title = validated.fields.title ?? "";
     const combined = `${desc} ${title}`;
     const mentions = parseMentions(combined);
     const handle = currentUserHandle?.toLowerCase();
@@ -110,9 +118,9 @@ export async function generateNotificationFromEvent(
     await dedupeInsert("mention", `mention:op:${did}:${commit.rkey}`, {
       actorDid: did,
       boardUri,
-      taskUri: record.targetTaskUri as string | undefined,
+      taskUri: validated.targetTaskUri,
       text: (desc || title).slice(0, 100),
-      createdAt: (record.createdAt as string) ?? new Date().toISOString(),
+      createdAt: validated.createdAt,
     });
   }
 }
