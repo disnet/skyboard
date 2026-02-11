@@ -516,12 +516,11 @@
         {/if}
       {:else}
         <div class="field">
+          {#if editStatus === "denied"}
           <div class="field-header">
-            <label>Description</label>
-            {#if editStatus === "denied"}
               <span class="field-status denied">Trusted users only</span>
-            {/if}
           </div>
+          {/if}
           <div
             class="editor-wrapper"
             class:disabled={editStatus === "denied"}
