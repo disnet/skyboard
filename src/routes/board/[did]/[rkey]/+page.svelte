@@ -45,6 +45,11 @@
     MaterializedTask,
   } from "$lib/types.js";
   import Column from "$lib/components/Column.svelte";
+  import {
+    getSelectedPos,
+    setSelectedPos,
+    clearSelection,
+  } from "$lib/board-nav.svelte.js";
   import BoardSettingsModal from "$lib/components/BoardSettingsModal.svelte";
   import PermissionsModal from "$lib/components/PermissionsModal.svelte";
   import ProposalPanel from "$lib/components/ProposalPanel.svelte";
@@ -321,6 +326,103 @@
       : [],
   );
 
+  // Sorted tasks per column (same sort as Column.svelte uses)
+  const sortedTasksByColumn = $derived.by(() => {
+    const result: MaterializedTask[][] = [];
+    for (const col of sortedColumns) {
+      const tasks = tasksByColumn.get(col.id) ?? [];
+      result.push(
+        [...tasks].sort((a, b) => {
+          if (a.effectivePosition < b.effectivePosition) return -1;
+          if (a.effectivePosition > b.effectivePosition) return 1;
+          return (a.rkey + a.did).localeCompare(b.rkey + b.did);
+        }),
+      );
+    }
+    return result;
+  });
+
+  // Clear selection when leaving the board
+  onDestroy(() => clearSelection());
+
+  function handleBoardKeydown(e: KeyboardEvent) {
+    // Skip when a modal is open
+    if (editingTask || showSettings || showPermissions || showProposals || showOpsPanel) return;
+
+    // Skip when focus is inside an input, textarea, or contenteditable
+    const tag = (e.target as HTMLElement)?.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+    if ((e.target as HTMLElement)?.isContentEditable) return;
+
+    const pos = getSelectedPos();
+    const numCols = sortedColumns.length;
+    if (numCols === 0) return;
+
+    switch (e.key) {
+      case "ArrowLeft":
+      case "h": {
+        e.preventDefault();
+        if (!pos) {
+          setSelectedPos({ col: 0, row: 0 });
+        } else {
+          const newCol = Math.max(0, pos.col - 1);
+          const maxRow = Math.max(0, (sortedTasksByColumn[newCol]?.length ?? 1) - 1);
+          setSelectedPos({ col: newCol, row: Math.min(pos.row, maxRow) });
+        }
+        break;
+      }
+      case "ArrowRight":
+      case "l": {
+        e.preventDefault();
+        if (!pos) {
+          setSelectedPos({ col: 0, row: 0 });
+        } else {
+          const newCol = Math.min(numCols - 1, pos.col + 1);
+          const maxRow = Math.max(0, (sortedTasksByColumn[newCol]?.length ?? 1) - 1);
+          setSelectedPos({ col: newCol, row: Math.min(pos.row, maxRow) });
+        }
+        break;
+      }
+      case "ArrowUp":
+      case "k": {
+        e.preventDefault();
+        if (!pos) {
+          setSelectedPos({ col: 0, row: 0 });
+        } else {
+          setSelectedPos({ col: pos.col, row: Math.max(0, pos.row - 1) });
+        }
+        break;
+      }
+      case "ArrowDown":
+      case "j": {
+        e.preventDefault();
+        if (!pos) {
+          setSelectedPos({ col: 0, row: 0 });
+        } else {
+          const maxRow = Math.max(0, (sortedTasksByColumn[pos.col]?.length ?? 1) - 1);
+          setSelectedPos({ col: pos.col, row: Math.min(maxRow, pos.row + 1) });
+        }
+        break;
+      }
+      case "Enter": {
+        if (!pos) return;
+        const task = sortedTasksByColumn[pos.col]?.[pos.row];
+        if (task) {
+          e.preventDefault();
+          openTaskEditor(task);
+        }
+        break;
+      }
+      case "Escape": {
+        if (pos) {
+          e.preventDefault();
+          clearSelection();
+        }
+        break;
+      }
+    }
+  }
+
   let showSettings = $state(false);
   let showPermissions = $state(false);
   let showProposals = $state(false);
@@ -469,6 +571,8 @@
   }
 </script>
 
+<svelte:window onkeydown={handleBoardKeydown} />
+
 {#if loading && !board.current}
   <div class="loading-state">
     <div class="spinner"></div>
@@ -549,7 +653,7 @@
     {/if}
 
     <div class="columns-container">
-      {#each sortedColumns as column (column.id)}
+      {#each sortedColumns as column, colIdx (column.id)}
         <Column
           {column}
           tasks={tasksByColumn.get(column.id) ?? []}
@@ -565,6 +669,7 @@
           onedit={openTaskEditor}
           onreact={handleReact}
           readonly={!auth.isLoggedIn}
+          selectedTaskIndex={getSelectedPos()?.col === colIdx ? getSelectedPos()?.row ?? null : null}
         />
       {/each}
     </div>

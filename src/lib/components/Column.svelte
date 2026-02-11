@@ -25,6 +25,7 @@
     onedit,
     onreact,
     readonly = false,
+    selectedTaskIndex = null,
   }: {
     column: Column;
     tasks: MaterializedTask[];
@@ -40,6 +41,7 @@
     onedit: (task: MaterializedTask) => void;
     onreact?: (taskUri: string, emoji: string) => void;
     readonly?: boolean;
+    selectedTaskIndex?: number | null;
   } = $props();
 
   const createStatus: PermissionStatus = $derived(
@@ -239,6 +241,7 @@
           {boardLabels}
           {onedit}
           {readonly}
+          selected={selectedTaskIndex === i}
         />
       </div>
     {/each}

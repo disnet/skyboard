@@ -27,6 +27,7 @@
     boardLabels = [],
     onedit,
     readonly = false,
+    selected = false,
   }: {
     task: MaterializedTask;
     currentUserDid: string;
@@ -38,7 +39,16 @@
     boardLabels?: Label[];
     onedit: (task: MaterializedTask) => void;
     readonly?: boolean;
+    selected?: boolean;
   } = $props();
+
+  let cardEl: HTMLDivElement | undefined = $state();
+
+  $effect(() => {
+    if (selected && cardEl) {
+      cardEl.scrollIntoView({ block: "nearest" });
+    }
+  });
 
   let showReactionPopover = $state(false);
   let popoverStyle = $state("");
@@ -196,10 +206,12 @@
   class:task-pending={pending}
   class:dragging={isDragging}
   class:task-readonly={readonly}
+  class:task-selected={selected}
   draggable={readonly ? "false" : "true"}
   ondragstart={handleDragStart}
   ondragend={handleDragEnd}
   onclick={handleClick}
+  bind:this={cardEl}
 >
   {#if pending}
     <div class="pending-bar">
@@ -315,6 +327,12 @@
     border-color: var(--color-border);
   }
 
+  .task-card.task-selected {
+    outline: 2px solid var(--color-primary);
+    outline-offset: -1px;
+    box-shadow: 0 0 0 3px var(--color-primary-alpha, rgba(0, 102, 204, 0.15));
+  }
+
   .task-card.dragging {
     opacity: 0.3;
   }
@@ -349,7 +367,7 @@
   }
 
   .task-title {
-    font-size: 0.8125rem;
+    font-size: 0.875rem;
     font-weight: 500;
     word-break: break-word;
   }
@@ -372,7 +390,7 @@
 
   .task-desc {
     margin-top: 0.25rem;
-    font-size: 0.75rem;
+    font-size: 0.8125rem;
     line-height: 1.4;
     color: var(--color-text-secondary);
     max-height: calc(7 * 1.4em);
@@ -451,7 +469,7 @@
   }
 
   .comment-badge {
-    font-size: 0.625rem;
+    font-size: 0.75rem;
     background: var(--color-border);
     color: var(--color-text-secondary);
     padding: 0 0.3125rem;
@@ -460,7 +478,7 @@
   }
 
   .pending-badge {
-    font-size: 0.625rem;
+    font-size: 0.75rem;
     background: var(--color-warning);
     color: white;
     padding: 0 0.3125rem;
@@ -494,7 +512,7 @@
     border-radius: var(--radius-sm);
     border: none;
     background: none;
-    font-size: 0.625rem;
+    font-size: 0.75rem;
     cursor: pointer;
     color: var(--color-text-secondary);
     line-height: 1.4;
@@ -513,7 +531,7 @@
   }
 
   .reaction-trigger-icon {
-    font-size: 0.6875rem;
+    font-size: 0.8125rem;
     opacity: 0.5;
   }
 

@@ -40,7 +40,7 @@
     display: inline-flex;
     align-items: center;
     gap: 0.25rem;
-    font-size: 0.625rem;
+    font-size: 0.75rem;
     color: var(--color-text-secondary);
     background: var(--color-bg);
     padding: 0.0625rem 0.375rem;
