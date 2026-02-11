@@ -31,6 +31,7 @@
   import LandingPage from "$lib/components/LandingPage.svelte";
   import SyncStatus from "$lib/components/SyncStatus.svelte";
   import NotificationPanel from "$lib/components/NotificationPanel.svelte";
+  import KeyboardShortcutsModal from "$lib/components/KeyboardShortcutsModal.svelte";
   import "../app.css";
 
   const auth = getAuth();
@@ -41,6 +42,7 @@
   );
 
   let showNotifications = $state(false);
+  let showShortcuts = $state(false);
   let globalJetstream: JetstreamClient | null = null;
 
   const unreadCount = useLiveQuery<number>(() => {
@@ -126,6 +128,17 @@
     };
   });
 
+  function handleGlobalKeydown(e: KeyboardEvent) {
+    if (showShortcuts || showNotifications) return;
+    const tag = (e.target as HTMLElement)?.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+    if ((e.target as HTMLElement)?.isContentEditable) return;
+    if (e.key === "?") {
+      e.preventDefault();
+      showShortcuts = true;
+    }
+  }
+
   async function handleLogout() {
     stopBackgroundSync();
     globalJetstream?.disconnect();
@@ -133,6 +146,8 @@
     await logout();
   }
 </script>
+
+<svelte:window onkeydown={handleGlobalKeydown} />
 
 {#if auth.isLoading}
   <div class="loading">
@@ -185,6 +200,11 @@
             <span class="bell-badge">{unreadCount.current}</span>
           {/if}
         </button>
+        <button
+          class="help-btn"
+          onclick={() => (showShortcuts = true)}
+          title="Keyboard shortcuts (?)"
+        >?</button>
         <span class="user-did" title={auth.did ?? ""}>
           {#if currentProfile?.data?.avatar}
             <img class="user-avatar" src={currentProfile.data.avatar} alt="" />
@@ -204,6 +224,10 @@
 
   {#if showNotifications}
     <NotificationPanel onclose={() => (showNotifications = false)} />
+  {/if}
+
+  {#if showShortcuts}
+    <KeyboardShortcutsModal onclose={() => (showShortcuts = false)} />
   {/if}
 {/if}
 
@@ -290,6 +314,28 @@
     border-radius: 50%;
     object-fit: cover;
     flex-shrink: 0;
+  }
+
+  .help-btn {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 1px solid var(--color-border);
+    background: none;
+    color: var(--color-text-secondary);
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    transition: color 0.15s, border-color 0.15s;
+  }
+
+  .help-btn:hover {
+    color: var(--color-text);
+    border-color: var(--color-text-secondary);
   }
 
   .bell-btn {
