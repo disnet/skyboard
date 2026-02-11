@@ -58,6 +58,7 @@
   import OpsPanel from "$lib/components/OpsPanel.svelte";
   import TaskEditModal from "$lib/components/TaskEditModal.svelte";
   import FilterPanel from "$lib/components/FilterPanel.svelte";
+  import QuickLabelPicker from "$lib/components/QuickLabelPicker.svelte";
   import { goto, replaceState } from "$app/navigation";
   import { logout } from "$lib/auth.svelte.js";
   import { getProfile } from "$lib/profile-cache.svelte.js";
@@ -404,7 +405,7 @@
 
   function handleBoardKeydown(e: KeyboardEvent) {
     // Skip when a modal is open
-    if (editingTask || showSettings || showPermissions || showProposals || showOpsPanel || showFilterPanel || showViewDropdown) return;
+    if (editingTask || showSettings || showPermissions || showProposals || showOpsPanel || showFilterPanel || showViewDropdown || showQuickLabel) return;
 
     // Skip when focus is inside an input, textarea, or contenteditable
     const tag = (e.target as HTMLElement)?.tagName;
@@ -545,6 +546,16 @@
         addNewCard(col, afterRow);
         break;
       }
+      case "t": {
+        if (!pos || !auth.did) break;
+        const labelTask = sortedTasksByColumn[pos.col]?.[pos.row];
+        if (!labelTask) break;
+        e.preventDefault();
+        const selectedCard = document.querySelector(".task-card.task-selected");
+        quickLabelAnchorRect = selectedCard?.getBoundingClientRect() ?? null;
+        showQuickLabel = true;
+        break;
+      }
       case "Escape": {
         if (pos) {
           e.preventDefault();
@@ -560,6 +571,8 @@
   let showProposals = $state(false);
   let showOpsPanel = $state(false);
   let showFilterPanel = $state(false);
+  let showQuickLabel = $state(false);
+  let quickLabelAnchorRect = $state<DOMRect | null>(null);
   let filterTitle = $state("");
   let filterLabelIds = $state<string[]>([]);
   let editingTask = $state<MaterializedTask | null>(null);
@@ -813,6 +826,25 @@
     toggleReaction(auth.did, taskUri, boardUri, emoji);
   }
 
+  const quickLabelTask = $derived.by(() => {
+    if (!showQuickLabel) return null;
+    const pos = getSelectedPos();
+    if (!pos) return null;
+    return sortedTasksByColumn[pos.col]?.[pos.row] ?? null;
+  });
+
+  function handleQuickLabelToggle(labelId: string) {
+    if (!auth.did || !quickLabelTask) return;
+    const current = [...quickLabelTask.effectiveLabelIds];
+    const idx = current.indexOf(labelId);
+    if (idx >= 0) {
+      current.splice(idx, 1);
+    } else {
+      current.push(labelId);
+    }
+    createOp(auth.did, quickLabelTask.sourceTask, boardUri, { labelIds: current });
+  }
+
   let shareCopied = $state(false);
   async function shareBoardUri() {
     try {
@@ -1040,6 +1072,16 @@
       onsave={handleSaveView}
       ondelete={editingViewId ? handleDeleteView : null}
       onclose={() => (showFilterPanel = false)}
+    />
+  {/if}
+
+  {#if showQuickLabel && quickLabelTask && board.current && quickLabelAnchorRect}
+    <QuickLabelPicker
+      labels={board.current.labels ?? []}
+      activeLabelIds={quickLabelTask.effectiveLabelIds}
+      anchorRect={quickLabelAnchorRect}
+      ontogglelabel={handleQuickLabelToggle}
+      onclose={() => { showQuickLabel = false; quickLabelAnchorRect = null; }}
     />
   {/if}
 

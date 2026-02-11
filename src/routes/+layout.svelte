@@ -146,10 +146,6 @@
       e.preventDefault();
       showBoardSwitcher = true;
     }
-    if (e.key === "t") {
-      e.preventDefault();
-      cycleTheme();
-    }
   }
 
   async function handleLogout() {
@@ -239,7 +235,7 @@
         <button
           class="theme-btn"
           onclick={cycleTheme}
-          title="Toggle theme (t) — {theme.mode}"
+          title="Toggle theme — {theme.mode}"
         >
           {#if theme.effectiveTheme === "dark"}
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

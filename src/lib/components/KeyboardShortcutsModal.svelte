@@ -26,6 +26,7 @@
       shortcuts: [
         { keys: ["Enter"], description: "Open task editor" },
         { keys: ["e"], description: "Inline edit task title" },
+        { keys: ["t"], description: "Quick label selected task" },
         { keys: ["n"], description: "New task in current column" },
       ],
     },
@@ -41,7 +42,6 @@
       title: "General",
       shortcuts: [
         { keys: ["b"], description: "Switch board" },
-        { keys: ["t"], description: "Toggle theme" },
         { keys: ["?"], description: "Show this help" },
       ],
     },
