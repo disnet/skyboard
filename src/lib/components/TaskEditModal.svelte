@@ -19,6 +19,7 @@
   import { autocompletion } from "@codemirror/autocomplete";
   import { mentionCompletionSource } from "$lib/mention-completions.js";
   import { markdownLivePreview } from "$lib/markdown-live-preview.js";
+  import { formattingToolbar } from "$lib/editor-formatting-toolbar.js";
   import { Marked } from "marked";
   import { mentionExtension } from "$lib/mention-markdown.js";
   import DOMPurify from "dompurify";
@@ -225,6 +226,7 @@
         placeholder("Write a description using markdown..."),
         autocompletion({ override: [mentionCompletionSource] }),
         markdownLivePreview,
+        formattingToolbar,
         EditorView.updateListener.of((update) => {
           if (update.docChanged) {
             editDescription = update.state.doc.toString();
@@ -267,7 +269,9 @@
     };
   });
 
-  async function save() {
+  async function commitChanges() {
+    if (readonly || editStatus === "denied") return;
+
     const title = editTitle.trim();
     if (!title) return;
 
@@ -284,6 +288,10 @@
     if (Object.keys(fields).length > 0) {
       await createOp(currentUserDid, task.sourceTask, task.boardUri, fields);
     }
+  }
+
+  async function closeModal() {
+    await commitChanges();
     onclose();
   }
 
@@ -295,7 +303,7 @@
   }
 
   function handleBackdropClick(e: MouseEvent) {
-    if (e.target === e.currentTarget) onclose();
+    if (e.target === e.currentTarget) closeModal();
   }
 
   function handleKeydown(e: KeyboardEvent) {
@@ -303,7 +311,7 @@
       if (editorView?.hasFocus) {
         editorView.contentDOM.blur();
       } else {
-        onclose();
+        closeModal();
       }
     }
   }
@@ -333,7 +341,7 @@
           <span class="field-status denied">Trusted users only</span>
         {/if}
       {/if}
-      <button class="close-btn" onclick={onclose}>&times;</button>
+      <button class="close-btn" onclick={closeModal}>&times;</button>
     </div>
 
     <div class="modal-body">
@@ -538,18 +546,6 @@
         {#if !readonly && isOwned}
           <button class="delete-btn" onclick={deleteTask}>Delete</button>
         {/if}
-        <button class="cancel-btn" onclick={onclose}
-          >{readonly ? "Close" : "Cancel"}</button
-        >
-        {#if !readonly && editStatus !== "denied"}
-          <button
-            class="save-btn"
-            onclick={save}
-            disabled={!editTitle.trim() || editDescription.length > 10240}
-          >
-            {isOwned ? "Save" : "Propose"}
-          </button>
-        {/if}
       </div>
     </div>
   </div>
@@ -723,32 +719,6 @@
   .footer-right {
     display: flex;
     gap: 0.5rem;
-  }
-
-  .cancel-btn {
-    padding: 0.5rem 1rem;
-    background: var(--color-bg);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-md);
-    font-size: 0.875rem;
-    color: var(--color-text-secondary);
-    cursor: pointer;
-  }
-
-  .save-btn {
-    padding: 0.5rem 1rem;
-    background: var(--color-primary);
-    color: white;
-    border: none;
-    border-radius: var(--radius-md);
-    font-size: 0.875rem;
-    font-weight: 500;
-    cursor: pointer;
-  }
-
-  .save-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
   }
 
   .delete-btn {
