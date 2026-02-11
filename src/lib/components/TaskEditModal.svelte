@@ -11,7 +11,7 @@
   import MentionText from "./MentionText.svelte";
   import MentionTextarea from "./MentionTextarea.svelte";
   import { EditorView, basicSetup } from "codemirror";
-  import { EditorState } from "@codemirror/state";
+  import { EditorState, Prec } from "@codemirror/state";
   import { markdown } from "@codemirror/lang-markdown";
   import { languages } from "@codemirror/language-data";
   import { indentWithTab } from "@codemirror/commands";
@@ -222,8 +222,17 @@
         basicSetup,
         markdown({ codeLanguages: languages }),
         EditorView.lineWrapping,
+        Prec.highest(keymap.of([
+          {
+            key: "Mod-Enter",
+            run: () => {
+              closeModal();
+              return true;
+            },
+          },
+        ])),
         keymap.of([indentWithTab]),
-        placeholder("Write a description using markdown..."),
+        placeholder("Write a description..."),
         autocompletion({ override: [mentionCompletionSource] }),
         markdownLivePreview,
         formattingToolbar,
@@ -454,12 +463,6 @@
             class:disabled={editStatus === "denied"}
             bind:this={editorContainer}
           ></div>
-          <span
-            class="char-count"
-            class:over-limit={editDescription.length > 10240}
-          >
-            {editDescription.length.toLocaleString()} / 10,240
-          </span>
         </div>
       {/if}
 
@@ -638,27 +641,10 @@
   }
 
   .editor-wrapper {
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-md);
     overflow: hidden;
     min-height: 150px;
-    background: var(--color-bg);
   }
 
-  .editor-wrapper:focus-within {
-    border-color: var(--color-primary);
-  }
-
-  .char-count {
-    font-size: 0.6875rem;
-    color: var(--color-text-secondary);
-    text-align: right;
-  }
-
-  .char-count.over-limit {
-    color: var(--color-error);
-    font-weight: 500;
-  }
 
   .modal-footer {
     display: flex;
@@ -807,7 +793,7 @@
   }
 
   .labels-section {
-    margin-top: 1rem;
+    margin-bottom: 1rem;
   }
 
   .labels-header {
@@ -958,9 +944,9 @@
   }
 
   .comments-section {
-    margin-top: 1.25rem;
+    margin-top: 0.75rem;
     border-top: 1px solid var(--color-border-light);
-    padding-top: 1rem;
+    padding-top: 0.75rem;
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
