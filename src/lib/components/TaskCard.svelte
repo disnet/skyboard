@@ -43,11 +43,12 @@
     readonly?: boolean;
     selected?: boolean;
     editing?: boolean;
-    onsavetitle?: (task: MaterializedTask, title: string) => void;
+    onsavetitle?: (task: MaterializedTask, title: string, andContinue?: boolean) => void;
   } = $props();
 
   let cardEl: HTMLDivElement | undefined = $state();
   let titleEl: HTMLDivElement | undefined = $state();
+  let svelteTextNode: Text | null = null;
 
   $effect(() => {
     if (selected && cardEl) {
@@ -57,6 +58,13 @@
 
   $effect(() => {
     if (editing && titleEl) {
+      // Capture Svelte's text node before contenteditable modifies the DOM
+      for (const node of titleEl.childNodes) {
+        if (node.nodeType === Node.TEXT_NODE) {
+          svelteTextNode = node as Text;
+          break;
+        }
+      }
       titleEl.focus();
       const sel = window.getSelection();
       const range = document.createRange();
@@ -66,13 +74,25 @@
     }
   });
 
-  function commitEdit() {
+  // Restore the DOM to a single Svelte-tracked text node after contenteditable
+  // may have created extra nodes (prevents doubled text on reactive updates)
+  function normalizeTitleDom(value: string) {
+    if (!titleEl || !svelteTextNode) return;
+    svelteTextNode.nodeValue = value;
+    while (titleEl.firstChild) {
+      titleEl.removeChild(titleEl.firstChild);
+    }
+    titleEl.appendChild(svelteTextNode);
+  }
+
+  function commitEdit(andContinue = false) {
     if (!titleEl) return;
     const trimmed = (titleEl.textContent ?? "").trim();
+    normalizeTitleDom(trimmed || task.effectiveTitle);
     if (trimmed && trimmed !== task.effectiveTitle) {
-      onsavetitle?.(task, trimmed);
+      onsavetitle?.(task, trimmed, andContinue);
     } else {
-      onsavetitle?.(task, task.effectiveTitle);
+      onsavetitle?.(task, task.effectiveTitle, andContinue);
     }
   }
 
@@ -253,11 +273,11 @@
     contenteditable={editing ? "plaintext-only" : false}
     bind:this={titleEl}
     onkeydown={editing ? (e) => {
-      if (e.key === "Enter") { e.preventDefault(); commitEdit(); }
-      if (e.key === "Escape") { e.preventDefault(); onsavetitle?.(task, task.effectiveTitle); }
+      if (e.key === "Enter") { e.preventDefault(); commitEdit(true); }
+      if (e.key === "Escape") { e.preventDefault(); normalizeTitleDom(task.effectiveTitle); onsavetitle?.(task, task.effectiveTitle); }
       e.stopPropagation();
     } : undefined}
-    onblur={editing ? commitEdit : undefined}
+    onblur={editing ? () => commitEdit() : undefined}
     onclick={editing ? (e) => e.stopPropagation() : undefined}
   >{task.effectiveTitle}</div>
   {#if taskLabels.length > 0}
@@ -347,6 +367,7 @@
     padding: 0.625rem 0.75rem;
     cursor: grab;
     position: relative;
+    scroll-margin: 6px;
     transition:
       box-shadow 0.15s,
       border-color 0.15s;

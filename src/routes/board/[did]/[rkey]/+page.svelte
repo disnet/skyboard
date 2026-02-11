@@ -6,6 +6,7 @@
   import { getAuth } from "$lib/auth.svelte.js";
   import {
     buildAtUri,
+    generateTID,
     BOARD_COLLECTION,
     TASK_COLLECTION,
     OP_COLLECTION,
@@ -352,6 +353,41 @@
   // Clear selection when leaving the board
   onDestroy(() => clearSelection());
 
+  // Create a new empty card and start inline editing its title.
+  // afterRow: insert after this row index. If undefined, insert at bottom.
+  function addNewCard(colIdx: number, afterRow?: number) {
+    if (!auth.did) return;
+    const colTasks = sortedTasksByColumn[colIdx] ?? [];
+    let before: string | null;
+    let after: string | null;
+    let insertRow: number;
+    if (afterRow !== undefined && colTasks.length > 0) {
+      before = colTasks[afterRow]?.effectivePosition ?? null;
+      after = colTasks[afterRow + 1]?.effectivePosition ?? null;
+      insertRow = afterRow + 1;
+    } else {
+      // Append at bottom
+      before = colTasks.at(-1)?.effectivePosition ?? null;
+      after = null;
+      insertRow = colTasks.length;
+    }
+    const newPosition = generateKeyBetween(before, after);
+    db.tasks.add({
+      rkey: generateTID(),
+      did: auth.did,
+      title: "",
+      columnId: sortedColumns[colIdx].id,
+      boardUri,
+      position: newPosition,
+      createdAt: new Date().toISOString(),
+      syncStatus: "pending",
+    });
+    setSelectedPos({ col: colIdx, row: insertRow });
+    requestAnimationFrame(() => {
+      inlineEditPos = { col: colIdx, row: insertRow };
+    });
+  }
+
   function handleBoardKeydown(e: KeyboardEvent) {
     // Skip when a modal is open
     if (editingTask || showSettings || showPermissions || showProposals || showOpsPanel) return;
@@ -487,6 +523,14 @@
         setSelectedPos({ col: destColTop, row: 0 });
         break;
       }
+      case "n": {
+        if (!auth.did) break;
+        e.preventDefault();
+        const col = pos ? pos.col : 0;
+        const afterRow = pos && (sortedTasksByColumn[col]?.length ?? 0) > 0 ? pos.row : undefined;
+        addNewCard(col, afterRow);
+        break;
+      }
       case "Escape": {
         if (pos) {
           e.preventDefault();
@@ -504,11 +548,22 @@
   let editingTask = $state<MaterializedTask | null>(null);
   let inlineEditPos = $state<{ col: number; row: number } | null>(null);
 
-  function handleSaveTitle(task: MaterializedTask, title: string) {
+  function handleSaveTitle(task: MaterializedTask, title: string, andContinue = false) {
+    const pos = inlineEditPos;
+    if (!title && !task.effectiveTitle) {
+      // Empty title on a new card — discard it
+      db.tasks.delete(task.sourceTask.id);
+      inlineEditPos = null;
+      clearSelection();
+      return;
+    }
     if (auth.did && title !== task.effectiveTitle) {
       createOp(auth.did, task.sourceTask, boardUri, { title });
     }
     inlineEditPos = null;
+    if (andContinue && pos) {
+      addNewCard(pos.col, pos.row);
+    }
   }
 
   function openTaskEditor(task: MaterializedTask) {
@@ -763,6 +818,7 @@
           selectedTaskIndex={getSelectedPos()?.col === colIdx ? getSelectedPos()?.row ?? null : null}
           editingTaskIndex={inlineEditPos?.col === colIdx ? inlineEditPos.row : null}
           onsavetitle={handleSaveTitle}
+          onaddtask={() => addNewCard(colIdx)}
         />
       {/each}
     </div>

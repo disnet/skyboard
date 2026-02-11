@@ -1,6 +1,5 @@
 <script lang="ts">
   import { db } from "$lib/db.js";
-  import { generateTID } from "$lib/tid.js";
   import { generateKeyBetween } from "fractional-indexing";
   import type { Column, Label, MaterializedTask } from "$lib/types.js";
   import { createOp } from "$lib/ops.js";
@@ -28,6 +27,7 @@
     selectedTaskIndex = null,
     editingTaskIndex = null,
     onsavetitle,
+    onaddtask,
   }: {
     column: Column;
     tasks: MaterializedTask[];
@@ -46,6 +46,7 @@
     selectedTaskIndex?: number | null;
     editingTaskIndex?: number | null;
     onsavetitle?: (task: MaterializedTask, title: string) => void;
+    onaddtask?: () => void;
   } = $props();
 
   const createStatus: PermissionStatus = $derived(
@@ -56,8 +57,6 @@
     getActionStatus(did, boardOwnerDid, ownerTrustedDids, boardOpen, "move"),
   );
 
-  let newTaskTitle = $state("");
-  let adding = $state(false);
   let dropIndex = $state<number | null>(null);
   let taskListEl: HTMLElement | undefined = $state();
 
@@ -68,32 +67,6 @@
       return (a.rkey + a.did).localeCompare(b.rkey + b.did);
     }),
   );
-
-  async function addTask(e: Event) {
-    e.preventDefault();
-    const title = newTaskTitle.trim();
-    if (!title) return;
-
-    adding = true;
-    try {
-      const lastPosition = sortedTasks.at(-1)?.effectivePosition ?? null;
-      await db.tasks.add({
-        rkey: generateTID(),
-        did,
-        title,
-        columnId: column.id,
-        boardUri,
-        position: generateKeyBetween(lastPosition, null),
-        createdAt: new Date().toISOString(),
-        syncStatus: "pending",
-      });
-      newTaskTitle = "";
-    } catch (err) {
-      console.error("Failed to add task:", err);
-    } finally {
-      adding = false;
-    }
-  }
 
   function handleDragOver(e: DragEvent) {
     if (readonly || moveStatus === "denied") return;
@@ -258,19 +231,9 @@
 
   {#if !readonly}
     {#if createStatus !== "denied"}
-      <form class="add-task-form" onsubmit={addTask}>
-        <input
-          type="text"
-          bind:value={newTaskTitle}
-          placeholder={createStatus === "pending"
-            ? "Add a task (pending approval)..."
-            : "Add a task..."}
-          disabled={adding}
-        />
-        {#if newTaskTitle.trim()}
-          <button type="submit" disabled={adding}>Add</button>
-        {/if}
-      </form>
+      <button class="add-task-btn" onclick={() => onaddtask?.()}>
+        + {createStatus === "pending" ? "Add a task (pending approval)" : "Add a task"}
+      </button>
     {:else}
       <div class="permission-notice denied">
         <span>Trusted users only</span>
@@ -360,42 +323,23 @@
     border-radius: 1px;
   }
 
-  .add-task-form {
-    display: flex;
-    gap: 0.375rem;
+  .add-task-btn {
+    width: 100%;
     margin-top: 0.5rem;
-  }
-
-  .add-task-form input {
-    flex: 1;
     padding: 0.4375rem 0.625rem;
-    border: 1px solid transparent;
-    border-radius: var(--radius-md);
-    font-size: 0.8125rem;
-    background: var(--color-surface);
-    color: var(--color-text);
-    transition: border-color 0.15s;
-  }
-
-  .add-task-form input:focus {
-    outline: none;
-    border-color: var(--color-primary);
-  }
-
-  .add-task-form button {
-    padding: 0.4375rem 0.75rem;
-    background: var(--color-primary);
-    color: white;
     border: none;
     border-radius: var(--radius-md);
     font-size: 0.8125rem;
-    font-weight: 500;
+    background: transparent;
+    color: var(--color-text-secondary);
     cursor: pointer;
-    transition: background 0.15s;
+    text-align: left;
+    transition: background 0.15s, color 0.15s;
   }
 
-  .add-task-form button:hover:not(:disabled) {
-    background: var(--color-primary-hover);
+  .add-task-btn:hover {
+    background: var(--color-surface);
+    color: var(--color-text);
   }
 
   .permission-notice {
