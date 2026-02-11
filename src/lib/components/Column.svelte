@@ -29,6 +29,7 @@
     onsavetitle,
     onpastelines,
     onaddtask,
+    onhover,
   }: {
     column: Column;
     tasks: MaterializedTask[];
@@ -49,6 +50,7 @@
     onsavetitle?: (task: MaterializedTask, title: string) => void;
     onpastelines?: (task: MaterializedTask, lines: string[]) => void;
     onaddtask?: () => void;
+    onhover?: (taskIndex: number) => void;
   } = $props();
 
   const createStatus: PermissionStatus = $derived(
@@ -204,7 +206,8 @@
 
   <div class="task-list" bind:this={taskListEl}>
     {#each sortedTasks as task, i (task.rkey + task.did)}
-      <div class="card-slot" class:drop-above={dropIndex === i}>
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div class="card-slot" class:drop-above={dropIndex === i} onmouseenter={() => onhover?.(i)}>
         <TaskCard
           {task}
           currentUserDid={did}

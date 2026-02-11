@@ -989,6 +989,7 @@
           onsavetitle={handleSaveTitle}
           onpastelines={handlePasteLines}
           onaddtask={() => addNewCard(colIdx)}
+          onhover={(taskIndex) => setSelectedPos({ col: colIdx, row: taskIndex })}
         />
       {/each}
     </div>
