@@ -123,7 +123,7 @@ export async function syncPendingToPDS(
   const pendingTasks = await db.tasks
     .where("syncStatus")
     .equals("pending")
-    .filter((t) => t.did === did)
+    .filter((t) => t.did === did && t.title !== "")
     .toArray();
 
   for (const task of pendingTasks) {
