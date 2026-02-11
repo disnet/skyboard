@@ -56,6 +56,7 @@
   import ProposalPanel from "$lib/components/ProposalPanel.svelte";
   import OpsPanel from "$lib/components/OpsPanel.svelte";
   import TaskEditModal from "$lib/components/TaskEditModal.svelte";
+  import FilterPanel from "$lib/components/FilterPanel.svelte";
   import { goto, replaceState } from "$app/navigation";
   import { logout } from "$lib/auth.svelte.js";
   import { getProfile } from "$lib/profile-cache.svelte.js";
@@ -321,6 +322,14 @@
           taskUri,
         )
       ) {
+        // Apply title filter
+        if (filterTitle && !task.effectiveTitle.toLowerCase().includes(filterTitle.toLowerCase())) {
+          continue;
+        }
+        // Apply label filter (OR logic: task must have at least one selected label)
+        if (filterLabelIds.length > 0 && !filterLabelIds.some((id) => task.effectiveLabelIds.includes(id))) {
+          continue;
+        }
         const list = map.get(task.effectiveColumnId);
         if (list) list.push(task);
       }
@@ -390,7 +399,7 @@
 
   function handleBoardKeydown(e: KeyboardEvent) {
     // Skip when a modal is open
-    if (editingTask || showSettings || showPermissions || showProposals || showOpsPanel) return;
+    if (editingTask || showSettings || showPermissions || showProposals || showOpsPanel || showFilterPanel) return;
 
     // Skip when focus is inside an input, textarea, or contenteditable
     const tag = (e.target as HTMLElement)?.tagName;
@@ -545,6 +554,9 @@
   let showPermissions = $state(false);
   let showProposals = $state(false);
   let showOpsPanel = $state(false);
+  let showFilterPanel = $state(false);
+  let filterTitle = $state("");
+  let filterLabelIds = $state<string[]>([]);
   let editingTask = $state<MaterializedTask | null>(null);
   let inlineEditPos = $state<{ col: number; row: number } | null>(null);
 
@@ -741,6 +753,12 @@
           <button class="activity-btn" onclick={() => (showOpsPanel = true)}>
             Activity
           </button>
+          <button class="activity-btn" onclick={() => (showFilterPanel = true)}>
+            Filter
+            {#if filterTitle || filterLabelIds.length > 0}
+              <span class="filter-dot"></span>
+            {/if}
+          </button>
           {#if isBoardOwner && (untrustedTasks.length > 0 || untrustedComments.length > 0)}
             <button
               class="proposals-btn"
@@ -856,6 +874,15 @@
       ops={allOps.current ?? []}
       tasks={allTasks.current ?? []}
       onclose={() => (showOpsPanel = false)}
+    />
+  {/if}
+
+  {#if showFilterPanel}
+    <FilterPanel
+      labels={board.current.labels ?? []}
+      bind:titleFilter={filterTitle}
+      bind:selectedLabelIds={filterLabelIds}
+      onclose={() => (showFilterPanel = false)}
     />
   {/if}
 
@@ -1033,6 +1060,14 @@
   .activity-btn:hover {
     background: var(--color-bg);
     color: var(--color-text);
+  }
+
+  .filter-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--color-primary);
   }
 
   .proposals-btn {

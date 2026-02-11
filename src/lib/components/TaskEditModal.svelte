@@ -508,6 +508,20 @@
           </div>
         {/if}
       {:else}
+        <div class="field">
+          <div class="field-header">
+            <label>Description</label>
+            {#if editStatus === "denied"}
+              <span class="field-status denied">Trusted users only</span>
+            {/if}
+          </div>
+          <div
+            class="editor-wrapper"
+            class:disabled={editStatus === "denied"}
+            bind:this={editorContainer}
+          ></div>
+        </div>
+
         <div class="labels-section">
           <div class="labels-header">
             <!-- svelte-ignore a11y_label_has_associated_control -->
@@ -578,20 +592,6 @@
               >&times;</button>
             </div>
           {/if}
-        </div>
-
-        <div class="field">
-          <div class="field-header">
-            <label>Description</label>
-            {#if editStatus === "denied"}
-              <span class="field-status denied">Trusted users only</span>
-            {/if}
-          </div>
-          <div
-            class="editor-wrapper"
-            class:disabled={editStatus === "denied"}
-            bind:this={editorContainer}
-          ></div>
         </div>
       {/if}
 
@@ -1034,7 +1034,7 @@
   }
 
   .labels-section {
-    margin-bottom: 1rem;
+    margin-top: 1rem;
   }
 
   .labels-header {
