@@ -18,6 +18,7 @@
   import { keymap, placeholder } from "@codemirror/view";
   import { autocompletion } from "@codemirror/autocomplete";
   import { mentionCompletionSource } from "$lib/mention-completions.js";
+  import { markdownLivePreview } from "$lib/markdown-live-preview.js";
   import { Marked } from "marked";
   import { mentionExtension } from "$lib/mention-markdown.js";
   import DOMPurify from "dompurify";
@@ -223,6 +224,7 @@
         keymap.of([indentWithTab]),
         placeholder("Write a description using markdown..."),
         autocompletion({ override: [mentionCompletionSource] }),
+        markdownLivePreview,
         EditorView.updateListener.of((update) => {
           if (update.docChanged) {
             editDescription = update.state.doc.toString();
@@ -246,6 +248,9 @@
           },
           ".cm-gutters": {
             display: "none",
+          },
+          ".cm-activeLine": {
+            backgroundColor: "transparent",
           },
         }),
       ],
@@ -468,7 +473,6 @@
                 placeholder={commentStatus === "pending"
                   ? "Add a comment (pending approval)..."
                   : "Add a comment..."}
-                rows={2}
                 maxlength={10240}
                 disabled={submittingComment}
               />

@@ -1,0 +1,203 @@
+import {
+  EditorView,
+  Decoration,
+  type DecorationSet,
+  ViewPlugin,
+  type ViewUpdate,
+} from "@codemirror/view";
+import { syntaxTree } from "@codemirror/language";
+
+function buildDecorations(view: EditorView): DecorationSet {
+  const decs: ReturnType<Decoration["range"]>[] = [];
+  const { from: curFrom, to: curTo } = view.state.selection.main;
+
+  for (const { from: visFrom, to: visTo } of view.visibleRanges) {
+    syntaxTree(view.state).iterate({
+      from: visFrom,
+      to: visTo,
+      enter(nodeRef) {
+        const { from, to, name } = nodeRef;
+
+        // If cursor overlaps this node, show raw markdown
+        if (curFrom <= to && curTo >= from) return;
+
+        switch (name) {
+          case "StrongEmphasis": {
+            const marks = nodeRef.node.getChildren("EmphasisMark");
+            if (marks.length >= 2) {
+              const first = marks[0];
+              const last = marks[marks.length - 1];
+              decs.push(
+                Decoration.replace({}).range(first.from, first.to),
+                Decoration.replace({}).range(last.from, last.to),
+                Decoration.mark({ class: "cm-md-bold" }).range(
+                  first.to,
+                  last.from,
+                ),
+              );
+            }
+            return false;
+          }
+
+          case "Emphasis": {
+            const marks = nodeRef.node.getChildren("EmphasisMark");
+            if (marks.length >= 2) {
+              const first = marks[0];
+              const last = marks[marks.length - 1];
+              decs.push(
+                Decoration.replace({}).range(first.from, first.to),
+                Decoration.replace({}).range(last.from, last.to),
+                Decoration.mark({ class: "cm-md-italic" }).range(
+                  first.to,
+                  last.from,
+                ),
+              );
+            }
+            return false;
+          }
+
+          case "InlineCode": {
+            const marks = nodeRef.node.getChildren("CodeMark");
+            if (marks.length >= 2) {
+              const first = marks[0];
+              const last = marks[marks.length - 1];
+              decs.push(
+                Decoration.replace({}).range(first.from, first.to),
+                Decoration.replace({}).range(last.from, last.to),
+                Decoration.mark({ class: "cm-md-code" }).range(
+                  first.to,
+                  last.from,
+                ),
+              );
+            }
+            return false;
+          }
+
+          case "Strikethrough": {
+            const marks = nodeRef.node.getChildren("StrikethroughMark");
+            if (marks.length >= 2) {
+              const first = marks[0];
+              const last = marks[marks.length - 1];
+              decs.push(
+                Decoration.replace({}).range(first.from, first.to),
+                Decoration.replace({}).range(last.from, last.to),
+                Decoration.mark({ class: "cm-md-strikethrough" }).range(
+                  first.to,
+                  last.from,
+                ),
+              );
+            }
+            return false;
+          }
+
+          case "ATXHeading1":
+          case "ATXHeading2":
+          case "ATXHeading3":
+          case "ATXHeading4":
+          case "ATXHeading5":
+          case "ATXHeading6": {
+            const level = parseInt(name.slice(-1));
+            const headerMarks = nodeRef.node.getChildren("HeaderMark");
+            if (headerMarks.length > 0) {
+              const openMark = headerMarks[0];
+              let contentStart = openMark.to;
+              if (
+                view.state.doc.sliceString(contentStart, contentStart + 1) ===
+                " "
+              ) {
+                contentStart++;
+              }
+              decs.push(
+                Decoration.replace({}).range(openMark.from, contentStart),
+              );
+              // Hide closing header mark if present
+              if (headerMarks.length > 1) {
+                const closeMark = headerMarks[headerMarks.length - 1];
+                decs.push(
+                  Decoration.replace({}).range(closeMark.from, closeMark.to),
+                );
+              }
+              if (contentStart < to) {
+                decs.push(
+                  Decoration.mark({
+                    class: `cm-md-heading cm-md-h${level}`,
+                  }).range(contentStart, to),
+                );
+              }
+            }
+            return false;
+          }
+
+          case "Link": {
+            const linkMarks = nodeRef.node.getChildren("LinkMark");
+            const urls = nodeRef.node.getChildren("URL");
+            if (linkMarks.length >= 4 && urls.length > 0) {
+              // [text](url) — hide [ and ](url), style text as link
+              decs.push(
+                Decoration.replace({}).range(
+                  linkMarks[0].from,
+                  linkMarks[0].to,
+                ),
+                Decoration.replace({}).range(
+                  linkMarks[1].from,
+                  linkMarks[linkMarks.length - 1].to,
+                ),
+                Decoration.mark({ class: "cm-md-link" }).range(
+                  linkMarks[0].to,
+                  linkMarks[1].from,
+                ),
+              );
+            }
+            return false;
+          }
+        }
+      },
+    });
+  }
+
+  return Decoration.set(decs, true);
+}
+
+const plugin = ViewPlugin.fromClass(
+  class {
+    decorations: DecorationSet;
+    constructor(view: EditorView) {
+      this.decorations = buildDecorations(view);
+    }
+    update(update: ViewUpdate) {
+      if (update.docChanged || update.selectionSet || update.viewportChanged) {
+        this.decorations = buildDecorations(update.view);
+      }
+    }
+  },
+  { decorations: (v) => v.decorations },
+);
+
+const theme = EditorView.baseTheme({
+  ".cm-md-bold": { fontWeight: "700" },
+  ".cm-md-italic": { fontStyle: "italic" },
+  ".cm-md-code": {
+    backgroundColor: "rgba(128, 128, 128, 0.15)",
+    borderRadius: "3px",
+    padding: "1px 3px",
+    fontFamily: "monospace",
+    fontSize: "0.9em",
+  },
+  ".cm-md-strikethrough": {
+    textDecoration: "line-through",
+    opacity: "0.7",
+  },
+  ".cm-md-heading": { fontWeight: "700", lineHeight: "1.3" },
+  ".cm-md-h1": { fontSize: "1.5em" },
+  ".cm-md-h2": { fontSize: "1.3em" },
+  ".cm-md-h3": { fontSize: "1.15em" },
+  ".cm-md-h4": { fontSize: "1.05em" },
+  ".cm-md-h5": { fontSize: "1em" },
+  ".cm-md-h6": { fontSize: "0.95em", opacity: "0.8" },
+  ".cm-md-link": {
+    color: "var(--color-primary, #3b82f6)",
+    textDecoration: "underline",
+  },
+});
+
+export const markdownLivePreview = [plugin, theme];
