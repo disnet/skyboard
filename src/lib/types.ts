@@ -135,6 +135,27 @@ export interface CommentRecord {
   createdAt: string;
 }
 
+// --- Reaction types ---
+
+export interface Reaction {
+  id?: number;
+  rkey: string;
+  did: string;
+  targetTaskUri: string;
+  boardUri: string;
+  emoji: string;
+  createdAt: string;
+  syncStatus: SyncStatus;
+}
+
+export interface ReactionRecord {
+  $type: "dev.skyboard.reaction";
+  targetTaskUri: string;
+  boardUri: string;
+  emoji: string;
+  createdAt: string;
+}
+
 // --- Block types (local-only, not synced to PDS) ---
 
 export interface Block {

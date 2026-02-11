@@ -6,8 +6,9 @@ import {
   TRUST_COLLECTION,
   COMMENT_COLLECTION,
   APPROVAL_COLLECTION,
+  REACTION_COLLECTION,
 } from "./tid.js";
-import type { Task, Op, Board, Trust, Comment, Approval } from "./types.js";
+import type { Task, Op, Board, Trust, Comment, Approval, Reaction } from "./types.js";
 
 /**
  * Infer the `open` flag from a PDS record that may have the old `permissions`
@@ -315,6 +316,43 @@ export async function fetchRemoteApprovals(
   }
 }
 
+export async function fetchRemoteReactions(
+  participantDid: string,
+  boardUri: string,
+): Promise<void> {
+  const records = await fetchRecordsFromRepo(
+    participantDid,
+    REACTION_COLLECTION,
+  );
+
+  for (const record of records) {
+    const value = record.value;
+    if (value.boardUri !== boardUri) continue;
+
+    const rkey = record.uri.split("/").pop()!;
+    const existing = await db.reactions
+      .where("[did+rkey]")
+      .equals([participantDid, rkey])
+      .first();
+
+    const reactionData: Omit<Reaction, "id"> = {
+      rkey,
+      did: participantDid,
+      targetTaskUri: (value.targetTaskUri as string) ?? "",
+      boardUri,
+      emoji: (value.emoji as string) ?? "",
+      createdAt: (value.createdAt as string) ?? new Date().toISOString(),
+      syncStatus: "synced",
+    };
+
+    if (existing?.id) {
+      await db.reactions.update(existing.id, reactionData);
+    } else {
+      await db.reactions.add(reactionData as Reaction);
+    }
+  }
+}
+
 export async function seedParticipantsFromTrusts(
   boardUri: string,
 ): Promise<void> {
@@ -368,6 +406,7 @@ export async function fetchAllKnownParticipants(
         fetchRemoteTasks(did, boardUri),
         fetchRemoteOps(did, boardUri),
         fetchRemoteComments(did, boardUri),
+        fetchRemoteReactions(did, boardUri),
       ]),
     );
   }

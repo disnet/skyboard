@@ -1,0 +1,37 @@
+{
+  "lexicon": 1,
+  "id": "dev.skyboard.reaction",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "An emoji reaction on a task within a board",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": ["targetTaskUri", "boardUri", "emoji", "createdAt"],
+        "properties": {
+          "targetTaskUri": {
+            "type": "string",
+            "format": "at-uri",
+            "description": "AT URI of the task this reaction is on"
+          },
+          "boardUri": {
+            "type": "string",
+            "format": "at-uri",
+            "description": "AT URI of the board this reaction belongs to"
+          },
+          "emoji": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "The emoji character for this reaction"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "When the reaction was created"
+          }
+        }
+      }
+    }
+  }
+}

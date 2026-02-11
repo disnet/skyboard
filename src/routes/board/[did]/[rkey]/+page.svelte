@@ -12,6 +12,7 @@
     TRUST_COLLECTION,
     COMMENT_COLLECTION,
     APPROVAL_COLLECTION,
+    REACTION_COLLECTION,
   } from "$lib/tid.js";
   import { materializeTasks } from "$lib/materialize.js";
   import { isTrusted, isContentVisible } from "$lib/permissions.js";
@@ -27,6 +28,7 @@
     fetchRemoteTrusts,
     fetchRemoteComments,
     fetchRemoteApprovals,
+    fetchRemoteReactions,
     seedParticipantsFromTrusts,
     fetchAllKnownParticipants,
     addKnownParticipant,
@@ -38,6 +40,7 @@
     Trust,
     Comment,
     Approval,
+    Reaction,
     Block,
     MaterializedTask,
   } from "$lib/types.js";
@@ -51,6 +54,7 @@
   import { logout } from "$lib/auth.svelte.js";
   import { getProfile } from "$lib/profile-cache.svelte.js";
   import { generateNotificationFromEvent } from "$lib/notifications.js";
+  import { toggleReaction } from "$lib/reactions.js";
 
   const auth = getAuth();
 
@@ -104,12 +108,13 @@
         await fetchRemoteTrusts(ownerDid, boardUri);
         await seedParticipantsFromTrusts(boardUri);
 
-        // Fetch owner's tasks, ops, comments, and approvals
+        // Fetch owner's tasks, ops, comments, approvals, and reactions
         await Promise.all([
           fetchRemoteTasks(ownerDid, boardUri),
           fetchRemoteOps(ownerDid, boardUri),
           fetchRemoteComments(ownerDid, boardUri),
           fetchRemoteApprovals(ownerDid, boardUri),
+          fetchRemoteReactions(ownerDid, boardUri),
         ]);
 
         // Fetch all known participants' data
@@ -157,6 +162,11 @@
   const allApprovals = useLiveQuery<Approval[]>(() => {
     if (!boardUri) return [];
     return db.approvals.where("boardUri").equals(boardUri).toArray();
+  });
+
+  const allReactions = useLiveQuery<Reaction[]>(() => {
+    if (!boardUri) return [];
+    return db.reactions.where("boardUri").equals(boardUri).toArray();
   });
 
   const allBlocks = useLiveQuery<Block[]>(() => {
@@ -212,6 +222,29 @@
           comment.targetTaskUri,
           (map.get(comment.targetTaskUri) ?? 0) + 1,
         );
+      }
+    }
+    return map;
+  });
+
+  // Reactions grouped by task → emoji → {count, userReacted}
+  const reactionsByTask = $derived.by(() => {
+    const map = new Map<string, Map<string, { count: number; userReacted: boolean }>>();
+    for (const reaction of allReactions.current ?? []) {
+      let emojiMap = map.get(reaction.targetTaskUri);
+      if (!emojiMap) {
+        emojiMap = new Map();
+        map.set(reaction.targetTaskUri, emojiMap);
+      }
+      const existing = emojiMap.get(reaction.emoji);
+      if (existing) {
+        existing.count++;
+        if (reaction.did === auth.did) existing.userReacted = true;
+      } else {
+        emojiMap.set(reaction.emoji, {
+          count: 1,
+          userReacted: reaction.did === auth.did,
+        });
       }
     }
     return map;
@@ -357,6 +390,7 @@
           TRUST_COLLECTION,
           COMMENT_COLLECTION,
           APPROVAL_COLLECTION,
+          REACTION_COLLECTION,
         ],
         cursor,
         onEvent: async (event) => {
@@ -401,6 +435,11 @@
     };
   });
 
+  function handleReact(taskUri: string, emoji: string) {
+    if (!auth.did || !boardUri) return;
+    toggleReaction(auth.did, taskUri, boardUri, emoji);
+  }
+
   let shareCopied = $state(false);
   async function shareBoardUri() {
     try {
@@ -423,6 +462,7 @@
     await db.ops.where("boardUri").equals(uri).delete();
     await db.comments.where("boardUri").equals(uri).delete();
     await db.approvals.where("boardUri").equals(uri).delete();
+    await db.reactions.where("boardUri").equals(uri).delete();
     await db.boards.delete(boardId);
 
     goto("/");
@@ -520,8 +560,10 @@
           {ownerTrustedDids}
           {approvedUris}
           commentCounts={commentCountsByTask}
+          {reactionsByTask}
           boardLabels={board.current.labels ?? []}
           onedit={openTaskEditor}
+          onreact={handleReact}
           readonly={!auth.isLoggedIn}
         />
       {/each}
@@ -572,9 +614,13 @@
       {ownerTrustedDids}
       {approvedUris}
       comments={allComments.current ?? []}
+      reactions={reactionsByTask.get(
+        `at://${editingTask.ownerDid}/dev.skyboard.task/${editingTask.rkey}`,
+      )}
       boardLabels={board.current.labels ?? []}
       {boardUri}
       onclose={closeTaskEditor}
+      onreact={handleReact}
       readonly={!auth.isLoggedIn}
     />
   {/if}

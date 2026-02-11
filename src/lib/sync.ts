@@ -7,6 +7,7 @@ import {
   TRUST_COLLECTION,
   COMMENT_COLLECTION,
   APPROVAL_COLLECTION,
+  REACTION_COLLECTION,
   buildAtUri,
 } from "./tid.js";
 import type {
@@ -16,6 +17,7 @@ import type {
   Trust,
   Comment,
   Approval,
+  Reaction,
   BoardRecord,
   TaskRecord,
 } from "./types.js";
@@ -23,6 +25,7 @@ import { opToRecord } from "./ops.js";
 import { trustToRecord } from "./trust.js";
 import { commentToRecord } from "./comments.js";
 import { approvalToRecord } from "./approvals.js";
+import { reactionToRecord } from "./reactions.js";
 
 let syncInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -237,6 +240,33 @@ export async function syncPendingToPDS(
       console.error("Failed to sync approval to PDS:", err);
       if (approval.id && !isNetworkError(err)) {
         await db.approvals.update(approval.id, { syncStatus: "error" });
+      }
+    }
+  }
+
+  // Sync pending reactions
+  const pendingReactions = await db.reactions
+    .where("syncStatus")
+    .equals("pending")
+    .filter((r) => r.did === did)
+    .toArray();
+
+  for (const reaction of pendingReactions) {
+    try {
+      await agent.com.atproto.repo.putRecord({
+        repo: did,
+        collection: REACTION_COLLECTION,
+        rkey: reaction.rkey,
+        record: reactionToRecord(reaction),
+        validate: false,
+      });
+      if (reaction.id) {
+        await db.reactions.update(reaction.id, { syncStatus: "synced" });
+      }
+    } catch (err) {
+      console.error("Failed to sync reaction to PDS:", err);
+      if (reaction.id && !isNetworkError(err)) {
+        await db.reactions.update(reaction.id, { syncStatus: "error" });
       }
     }
   }
@@ -503,6 +533,48 @@ export async function pullFromPDS(agent: Agent, did: string): Promise<void> {
 
     cursor = res.data.cursor;
   } while (cursor);
+
+  // Pull reactions
+  cursor = undefined;
+  do {
+    const res = await agent.com.atproto.repo.listRecords({
+      repo: did,
+      collection: REACTION_COLLECTION,
+      limit: 100,
+      cursor,
+    });
+
+    for (const record of res.data.records) {
+      const rkey = record.uri.split("/").pop()!;
+      const value = record.value as Record<string, unknown>;
+
+      const existing = await db.reactions
+        .where("[did+rkey]")
+        .equals([did, rkey])
+        .first();
+      if (existing && existing.syncStatus === "pending") {
+        continue;
+      }
+
+      const reactionData: Omit<Reaction, "id"> = {
+        rkey,
+        did,
+        targetTaskUri: (value.targetTaskUri as string) ?? "",
+        boardUri: (value.boardUri as string) ?? "",
+        emoji: (value.emoji as string) ?? "",
+        createdAt: (value.createdAt as string) ?? new Date().toISOString(),
+        syncStatus: "synced",
+      };
+
+      if (existing?.id) {
+        await db.reactions.update(existing.id, reactionData);
+      } else {
+        await db.reactions.add(reactionData as Reaction);
+      }
+    }
+
+    cursor = res.data.cursor;
+  } while (cursor);
 }
 
 export async function deleteBoardFromPDS(
@@ -566,6 +638,27 @@ export async function deleteBoardFromPDS(
         });
       } catch (err) {
         console.error("Failed to delete approval from PDS:", err);
+      }
+    }
+  }
+
+  // Delete reactions from PDS
+  const reactions = await db.reactions
+    .where("boardUri")
+    .equals(boardUri)
+    .filter((r) => r.did === did)
+    .toArray();
+
+  for (const reaction of reactions) {
+    if (reaction.syncStatus === "synced") {
+      try {
+        await agent.com.atproto.repo.deleteRecord({
+          repo: did,
+          collection: REACTION_COLLECTION,
+          rkey: reaction.rkey,
+        });
+      } catch (err) {
+        console.error("Failed to delete reaction from PDS:", err);
       }
     }
   }
@@ -638,8 +731,26 @@ export async function deleteTrustFromPDS(
   }
 }
 
+export async function deleteReactionFromPDS(
+  agent: Agent,
+  did: string,
+  reaction: Reaction,
+): Promise<void> {
+  if (reaction.syncStatus === "synced") {
+    try {
+      await agent.com.atproto.repo.deleteRecord({
+        repo: did,
+        collection: REACTION_COLLECTION,
+        rkey: reaction.rkey,
+      });
+    } catch (err) {
+      console.error("Failed to delete reaction from PDS:", err);
+    }
+  }
+}
+
 async function resetErrorsToPending(did: string): Promise<void> {
-  const tables = [db.boards, db.tasks, db.ops, db.trusts, db.comments, db.approvals];
+  const tables = [db.boards, db.tasks, db.ops, db.trusts, db.comments, db.approvals, db.reactions];
   for (const table of tables) {
     const errored = await (table as any)
       .where("syncStatus")

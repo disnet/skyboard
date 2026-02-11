@@ -5,6 +5,7 @@ import {
   TRUST_COLLECTION,
   COMMENT_COLLECTION,
   APPROVAL_COLLECTION,
+  REACTION_COLLECTION,
 } from "./tid.js";
 
 const JETSTREAM_URL = "wss://jetstream2.us-east.bsky.network/subscribe";
@@ -266,6 +267,16 @@ export async function processJetstreamEvent(
         await db.approvals.delete(existing.id);
         return { did, boardUri };
       }
+    } else if (commit.collection === REACTION_COLLECTION) {
+      const existing = await db.reactions
+        .where("[did+rkey]")
+        .equals([did, commit.rkey])
+        .first();
+      if (existing?.id) {
+        const boardUri = existing.boardUri;
+        await db.reactions.delete(existing.id);
+        return { did, boardUri };
+      }
     }
     return null;
   }
@@ -396,6 +407,30 @@ export async function processJetstreamEvent(
       await db.approvals.update(existing.id, approvalData);
     } else {
       await db.approvals.add(approvalData);
+    }
+    return { did, boardUri };
+  }
+
+  if (commit.collection === REACTION_COLLECTION) {
+    const existing = await db.reactions
+      .where("[did+rkey]")
+      .equals([did, commit.rkey])
+      .first();
+
+    const reactionData = {
+      rkey: commit.rkey,
+      did,
+      targetTaskUri: (record.targetTaskUri as string) ?? "",
+      boardUri,
+      emoji: (record.emoji as string) ?? "",
+      createdAt: (record.createdAt as string) ?? new Date().toISOString(),
+      syncStatus: "synced" as const,
+    };
+
+    if (existing?.id) {
+      await db.reactions.update(existing.id, reactionData);
+    } else {
+      await db.reactions.add(reactionData);
     }
     return { did, boardUri };
   }

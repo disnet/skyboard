@@ -20,8 +20,10 @@
     ownerTrustedDids,
     approvedUris,
     commentCounts = new Map(),
+    reactionsByTask = new Map(),
     boardLabels = [],
     onedit,
+    onreact,
     readonly = false,
   }: {
     column: Column;
@@ -33,8 +35,10 @@
     ownerTrustedDids: Set<string>;
     approvedUris: Set<string>;
     commentCounts?: Map<string, number>;
+    reactionsByTask?: Map<string, Map<string, { count: number; userReacted: boolean }>>;
     boardLabels?: Label[];
     onedit: (task: MaterializedTask) => void;
+    onreact?: (taskUri: string, emoji: string) => void;
     readonly?: boolean;
   } = $props();
 
@@ -227,6 +231,11 @@
           commentCount={commentCounts.get(
             `at://${task.ownerDid}/dev.skyboard.task/${task.rkey}`,
           ) ?? 0}
+          reactions={reactionsByTask.get(
+            `at://${task.ownerDid}/dev.skyboard.task/${task.rkey}`,
+          )}
+          {onreact}
+          taskUri={`at://${task.ownerDid}/dev.skyboard.task/${task.rkey}`}
           {boardLabels}
           {onedit}
           {readonly}

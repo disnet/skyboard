@@ -6,6 +6,7 @@ import type {
   Trust,
   Comment,
   Approval,
+  Reaction,
   Block,
   KnownParticipant,
   Notification,
@@ -18,6 +19,7 @@ type SkyboardDb = Dexie & {
   trusts: EntityTable<Trust, "id">;
   comments: EntityTable<Comment, "id">;
   approvals: EntityTable<Approval, "id">;
+  reactions: EntityTable<Reaction, "id">;
   blocks: EntityTable<Block, "id">;
   knownParticipants: EntityTable<KnownParticipant, "id">;
   notifications: EntityTable<Notification, "id">;
@@ -122,6 +124,25 @@ function createDb(name: string): SkyboardDb {
       "++id, rkey, did, targetTaskUri, boardUri, createdAt, syncStatus, [did+rkey]",
     approvals:
       "++id, rkey, did, targetUri, boardUri, syncStatus, [did+rkey]",
+    blocks:
+      "++id, did, blockedDid, boardUri, [did+boardUri+blockedDid]",
+    knownParticipants: "++id, did, boardUri, [did+boardUri]",
+    notifications:
+      "++id, type, boardUri, read, createdAt, dedupeKey, [read+createdAt]",
+  });
+
+  d.version(8).stores({
+    boards: "++id, rkey, did, syncStatus",
+    tasks: "++id, rkey, did, columnId, boardUri, order, syncStatus, [did+rkey], createdAt",
+    ops: "++id, rkey, did, targetTaskUri, boardUri, createdAt, syncStatus, [did+rkey]",
+    trusts:
+      "++id, rkey, did, trustedDid, boardUri, syncStatus, [did+boardUri+trustedDid], [did+rkey]",
+    comments:
+      "++id, rkey, did, targetTaskUri, boardUri, createdAt, syncStatus, [did+rkey]",
+    approvals:
+      "++id, rkey, did, targetUri, boardUri, syncStatus, [did+rkey]",
+    reactions:
+      "++id, rkey, did, targetTaskUri, boardUri, emoji, syncStatus, [did+rkey], [did+targetTaskUri+emoji]",
     blocks:
       "++id, did, blockedDid, boardUri, [did+boardUri+blockedDid]",
     knownParticipants: "++id, did, boardUri, [did+boardUri]",

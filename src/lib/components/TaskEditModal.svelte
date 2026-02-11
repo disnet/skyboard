@@ -26,6 +26,8 @@
 
   const markedInstance = new Marked(mentionExtension());
 
+  const EMOJI_OPTIONS = ["\u{1F44D}", "\u{1F44E}", "\u{2764}\u{FE0F}", "\u{1F389}", "\u{1F680}"];
+
   let {
     task,
     currentUserDid,
@@ -34,9 +36,11 @@
     ownerTrustedDids,
     approvedUris,
     comments = [],
+    reactions,
     boardLabels = [],
     boardUri = "",
     onclose,
+    onreact,
     readonly = false,
   }: {
     task: MaterializedTask;
@@ -46,11 +50,23 @@
     ownerTrustedDids: Set<string>;
     approvedUris: Set<string>;
     comments?: Comment[];
+    reactions?: Map<string, { count: number; userReacted: boolean }>;
     boardLabels?: Label[];
     boardUri?: string;
     onclose: () => void;
+    onreact?: (taskUri: string, emoji: string) => void;
     readonly?: boolean;
   } = $props();
+
+  const activeReactions = $derived(
+    reactions
+      ? [...reactions.entries()].filter(([, v]) => v.count > 0)
+      : [],
+  );
+
+  function handleReactionClick(emoji: string) {
+    onreact?.(taskUri, emoji);
+  }
 
   const renderedDescription = $derived(
     task.effectiveDescription
@@ -336,21 +352,50 @@
     aria-label={readonly ? "View Task" : "Edit Task"}
   >
     <div class="modal-header">
-      {#if readonly}
-        <span class="view-title">{task.effectiveTitle}</span>
-      {:else}
-        <input
-          class="edit-title"
-          type="text"
-          bind:value={editTitle}
-          placeholder="Task title"
-          disabled={editStatus === "denied"}
-        />
-        {#if editStatus === "denied"}
-          <span class="field-status denied">Trusted users only</span>
+      <div class="modal-header-top">
+        {#if readonly}
+          <span class="view-title">{task.effectiveTitle}</span>
+        {:else}
+          <input
+            class="edit-title"
+            type="text"
+            bind:value={editTitle}
+            placeholder="Task title"
+            disabled={editStatus === "denied"}
+          />
+          {#if editStatus === "denied"}
+            <span class="field-status denied">Trusted users only</span>
+          {/if}
         {/if}
+        <button class="close-btn" onclick={closeModal}>&times;</button>
+      </div>
+      {#if activeReactions.length > 0 || (!readonly && onreact)}
+        <div class="modal-reactions">
+          {#each activeReactions as [emoji, data] (emoji)}
+            <button
+              class="modal-reaction-pill"
+              class:reacted={data.userReacted}
+              onclick={() => handleReactionClick(emoji)}
+              title="{emoji} {data.count}"
+            >
+              {emoji} {data.count}
+            </button>
+          {/each}
+          {#if !readonly && onreact}
+            {#each EMOJI_OPTIONS as emoji (emoji)}
+              {#if !reactions?.has(emoji) || reactions.get(emoji)!.count === 0}
+                <button
+                  class="modal-reaction-pill add"
+                  onclick={() => handleReactionClick(emoji)}
+                  title="React with {emoji}"
+                >
+                  {emoji}
+                </button>
+              {/if}
+            {/each}
+          {/if}
+        </div>
       {/if}
-      <button class="close-btn" onclick={closeModal}>&times;</button>
     </div>
 
     <div class="modal-body">
@@ -579,10 +624,59 @@
 
   .modal-header {
     display: flex;
-    align-items: center;
+    flex-direction: column;
     gap: 0.5rem;
     padding: 1rem 1.25rem;
     border-bottom: 1px solid var(--color-border-light);
+  }
+
+  .modal-header-top {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .modal-reactions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    align-items: center;
+  }
+
+  .modal-reaction-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.1875rem;
+    padding: 0.125rem 0.5rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-border-light);
+    background: var(--color-surface);
+    font-size: 0.8125rem;
+    cursor: pointer;
+    line-height: 1.4;
+    transition:
+      background 0.15s,
+      border-color 0.15s;
+  }
+
+  .modal-reaction-pill:hover {
+    background: var(--color-bg);
+    border-color: var(--color-border);
+  }
+
+  .modal-reaction-pill.reacted {
+    background: var(--color-primary-alpha, rgba(0, 102, 204, 0.1));
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+  }
+
+  .modal-reaction-pill.add {
+    opacity: 0.4;
+    border-style: dashed;
+  }
+
+  .modal-reaction-pill.add:hover {
+    opacity: 1;
   }
 
   .edit-title {
