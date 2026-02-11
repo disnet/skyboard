@@ -5,11 +5,19 @@
     labels,
     titleFilter = $bindable(""),
     selectedLabelIds = $bindable([]),
+    viewName = $bindable(""),
+    editingViewId = null,
+    onsave,
+    ondelete = null,
     onclose,
   }: {
     labels: Label[];
     titleFilter: string;
     selectedLabelIds: string[];
+    viewName: string;
+    editingViewId: number | null;
+    onsave: () => void;
+    ondelete: (() => void) | null;
     onclose: () => void;
   } = $props();
 
@@ -33,8 +41,19 @@
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="panel" onclick={(e) => e.stopPropagation()} onkeydown={() => {}}>
     <div class="panel-header">
-      <h3>Filter</h3>
+      <h3>{editingViewId ? "Edit View" : "New View"}</h3>
       <button class="close-btn" onclick={onclose}>Close</button>
+    </div>
+
+    <div class="filter-section">
+      <label class="filter-label" for="view-name">View name</label>
+      <input
+        id="view-name"
+        class="filter-input"
+        type="text"
+        placeholder="e.g. My bugs, In progress..."
+        bind:value={viewName}
+      />
     </div>
 
     <div class="filter-section">
@@ -52,6 +71,13 @@
       <div class="filter-section">
         <span class="filter-label">Labels</span>
         <div class="label-pills">
+          <button
+            class="label-pill no-labels-pill"
+            class:selected={selectedLabelIds.includes("__no_labels__")}
+            onclick={() => toggleLabel("__no_labels__")}
+          >
+            No labels
+          </button>
           {#each labels as label (label.id)}
             <button
               class="label-pill"
@@ -68,9 +94,26 @@
 
     {#if hasFilters}
       <button class="clear-btn" onclick={clearAll}>
-        Clear all
+        Clear all filters
       </button>
     {/if}
+
+    <div class="save-actions">
+      {#if editingViewId}
+        <button class="save-btn" onclick={onsave} disabled={!viewName.trim()}>
+          Update view
+        </button>
+        {#if ondelete}
+          <button class="delete-view-btn" onclick={ondelete}>
+            Delete view
+          </button>
+        {/if}
+      {:else}
+        <button class="save-btn" onclick={onsave} disabled={!viewName.trim()}>
+          Save view
+        </button>
+      {/if}
+    </div>
   </div>
 </div>
 
@@ -175,6 +218,17 @@
     box-shadow: 0 0 0 1px currentColor;
   }
 
+  .no-labels-pill {
+    background: var(--color-border-light);
+    color: var(--color-text-secondary);
+    border-color: var(--color-border);
+  }
+
+  .no-labels-pill.selected {
+    background: var(--color-bg);
+    border-color: var(--color-text-secondary);
+  }
+
   .clear-btn {
     padding: 0.375rem 0.75rem;
     border: 1px solid var(--color-border);
@@ -186,10 +240,57 @@
     transition:
       background 0.15s,
       color 0.15s;
+    margin-bottom: 1rem;
   }
 
   .clear-btn:hover {
     background: var(--color-bg);
     color: var(--color-text);
+  }
+
+  .save-actions {
+    display: flex;
+    gap: 0.5rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--color-border-light);
+  }
+
+  .save-btn {
+    padding: 0.4375rem 0.875rem;
+    border: none;
+    border-radius: var(--radius-md);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    cursor: pointer;
+    background: var(--color-primary);
+    color: white;
+    transition: opacity 0.15s;
+  }
+
+  .save-btn:hover:not(:disabled) {
+    opacity: 0.9;
+  }
+
+  .save-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .delete-view-btn {
+    padding: 0.4375rem 0.875rem;
+    border: 1px solid var(--color-error, #dc2626);
+    border-radius: var(--radius-md);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    cursor: pointer;
+    background: var(--color-surface);
+    color: var(--color-error, #dc2626);
+    transition:
+      background 0.15s,
+      color 0.15s;
+  }
+
+  .delete-view-btn:hover {
+    background: var(--color-error-bg, rgba(220, 38, 38, 0.08));
   }
 </style>

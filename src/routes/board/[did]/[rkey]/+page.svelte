@@ -44,6 +44,7 @@
     Reaction,
     Block,
     MaterializedTask,
+    FilterView,
   } from "$lib/types.js";
   import Column from "$lib/components/Column.svelte";
   import {
@@ -326,9 +327,13 @@
         if (filterTitle && !task.effectiveTitle.toLowerCase().includes(filterTitle.toLowerCase())) {
           continue;
         }
-        // Apply label filter (OR logic: task must have at least one selected label)
-        if (filterLabelIds.length > 0 && !filterLabelIds.some((id) => task.effectiveLabelIds.includes(id))) {
-          continue;
+        // Apply label filter (OR logic: task must match at least one selected label, or have no labels if "__no_labels__" is selected)
+        if (filterLabelIds.length > 0) {
+          const matchesNoLabels = filterLabelIds.includes("__no_labels__") && task.effectiveLabelIds.length === 0;
+          const matchesLabel = filterLabelIds.some((id) => id !== "__no_labels__" && task.effectiveLabelIds.includes(id));
+          if (!matchesNoLabels && !matchesLabel) {
+            continue;
+          }
         }
         const list = map.get(task.effectiveColumnId);
         if (list) list.push(task);
@@ -399,7 +404,7 @@
 
   function handleBoardKeydown(e: KeyboardEvent) {
     // Skip when a modal is open
-    if (editingTask || showSettings || showPermissions || showProposals || showOpsPanel || showFilterPanel) return;
+    if (editingTask || showSettings || showPermissions || showProposals || showOpsPanel || showFilterPanel || showViewDropdown) return;
 
     // Skip when focus is inside an input, textarea, or contenteditable
     const tag = (e.target as HTMLElement)?.tagName;
@@ -559,6 +564,92 @@
   let filterLabelIds = $state<string[]>([]);
   let editingTask = $state<MaterializedTask | null>(null);
   let inlineEditPos = $state<{ col: number; row: number } | null>(null);
+
+  // --- Saved filter views ---
+  let activeViewId = $state<number | null>(null);
+  let viewName = $state("");
+  let editingViewId = $state<number | null>(null);
+  let showViewDropdown = $state(false);
+
+  const savedViews = useLiveQuery<FilterView[]>(() => {
+    if (!boardUri) return [];
+    return db.filterViews.where("boardUri").equals(boardUri).toArray();
+  });
+
+  const activeViewName = $derived(() => {
+    if (activeViewId === null) return "All";
+    const view = (savedViews.current ?? []).find((v) => v.id === activeViewId);
+    return view?.name ?? "All";
+  });
+
+  function selectView(view: FilterView) {
+    activeViewId = view.id!;
+    filterTitle = view.titleFilter;
+    filterLabelIds = [...view.labelIds];
+    showViewDropdown = false;
+  }
+
+  function selectAllView() {
+    activeViewId = null;
+    filterTitle = "";
+    filterLabelIds = [];
+    showViewDropdown = false;
+  }
+
+  function openNewView() {
+    viewName = "";
+    editingViewId = null;
+    // Keep current filters so user can save them
+    showViewDropdown = false;
+    showFilterPanel = true;
+  }
+
+  function openEditView(view: FilterView) {
+    viewName = view.name;
+    editingViewId = view.id!;
+    filterTitle = view.titleFilter;
+    filterLabelIds = [...view.labelIds];
+    showViewDropdown = false;
+    showFilterPanel = true;
+  }
+
+  async function handleSaveView() {
+    if (!viewName.trim() || !boardUri) return;
+    if (editingViewId) {
+      await db.filterViews.update(editingViewId, {
+        name: viewName.trim(),
+        titleFilter: filterTitle,
+        labelIds: [...filterLabelIds],
+      });
+      activeViewId = editingViewId;
+    } else {
+      const id = await db.filterViews.add({
+        boardUri,
+        name: viewName.trim(),
+        titleFilter: filterTitle,
+        labelIds: [...filterLabelIds],
+      });
+      activeViewId = id as number;
+    }
+    showFilterPanel = false;
+  }
+
+  async function handleDeleteView() {
+    if (!editingViewId) return;
+    await db.filterViews.delete(editingViewId);
+    editingViewId = null;
+    activeViewId = null;
+    filterTitle = "";
+    filterLabelIds = [];
+    viewName = "";
+    showFilterPanel = false;
+  }
+
+  function handleViewDropdownKeydown(e: KeyboardEvent) {
+    if (e.key === "Escape") {
+      showViewDropdown = false;
+    }
+  }
 
   function handleSaveTitle(task: MaterializedTask, title: string, andContinue = false) {
     const pos = inlineEditPos;
@@ -747,17 +838,46 @@
         {#if boardOpen}
           <span class="open-badge">Open</span>
         {/if}
+        {#if auth.isLoggedIn}
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div class="view-dropdown-wrapper" onkeydown={handleViewDropdownKeydown}>
+            <button class="view-dropdown-btn" onclick={() => (showViewDropdown = !showViewDropdown)}>
+              {activeViewName()}
+              <svg width="10" height="6" viewBox="0 0 10 6" fill="none" aria-hidden="true">
+                <path d="M1 1L5 5L9 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+            {#if showViewDropdown}
+              <div class="view-dropdown-backdrop" onclick={() => (showViewDropdown = false)} role="presentation"></div>
+              <div class="view-dropdown-menu">
+                <button class="view-dropdown-item" class:active={activeViewId === null} onclick={selectAllView}>
+                  All
+                </button>
+                {#each savedViews.current ?? [] as view (view.id)}
+                  <div class="view-dropdown-item-row">
+                    <button class="view-dropdown-item" class:active={activeViewId === view.id} onclick={() => selectView(view)}>
+                      {view.name}
+                    </button>
+                    <button class="view-edit-btn" onclick={() => openEditView(view)} title="Edit view">
+                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                        <path d="M8.5 1.5L10.5 3.5M1 11L1.5 8.5L9.5 0.5L11.5 2.5L3.5 10.5L1 11Z" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+                      </svg>
+                    </button>
+                  </div>
+                {/each}
+                <div class="view-dropdown-separator"></div>
+                <button class="view-dropdown-item view-dropdown-new" onclick={openNewView}>
+                  New view...
+                </button>
+              </div>
+            {/if}
+          </div>
+        {/if}
       </div>
       <div class="board-header-right">
         {#if auth.isLoggedIn}
           <button class="activity-btn" onclick={() => (showOpsPanel = true)}>
             Activity
-          </button>
-          <button class="activity-btn" onclick={() => (showFilterPanel = true)}>
-            Filter
-            {#if filterTitle || filterLabelIds.length > 0}
-              <span class="filter-dot"></span>
-            {/if}
           </button>
           {#if isBoardOwner && (untrustedTasks.length > 0 || untrustedComments.length > 0)}
             <button
@@ -882,6 +1002,10 @@
       labels={board.current.labels ?? []}
       bind:titleFilter={filterTitle}
       bind:selectedLabelIds={filterLabelIds}
+      bind:viewName={viewName}
+      {editingViewId}
+      onsave={handleSaveView}
+      ondelete={editingViewId ? handleDeleteView : null}
       onclose={() => (showFilterPanel = false)}
     />
   {/if}
@@ -1006,6 +1130,115 @@
     font-weight: 500;
   }
 
+  .view-dropdown-wrapper {
+    position: relative;
+    margin-left: 0.25rem;
+  }
+
+  .view-dropdown-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.25rem 0.5rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    color: var(--color-text-secondary);
+    font-size: 0.8125rem;
+    cursor: pointer;
+    transition:
+      background 0.15s,
+      color 0.15s;
+  }
+
+  .view-dropdown-btn:hover {
+    background: var(--color-bg);
+    color: var(--color-text);
+  }
+
+  .view-dropdown-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 49;
+  }
+
+  .view-dropdown-menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    min-width: 180px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    z-index: 50;
+    padding: 0.25rem 0;
+  }
+
+  .view-dropdown-item-row {
+    display: flex;
+    align-items: center;
+  }
+
+  .view-dropdown-item-row .view-dropdown-item {
+    flex: 1;
+  }
+
+  .view-dropdown-item {
+    display: block;
+    width: 100%;
+    padding: 0.4375rem 0.75rem;
+    border: none;
+    background: none;
+    color: var(--color-text);
+    font-size: 0.8125rem;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+
+  .view-dropdown-item:hover {
+    background: var(--color-bg);
+  }
+
+  .view-dropdown-item.active {
+    font-weight: 600;
+    color: var(--color-primary);
+  }
+
+  .view-dropdown-new {
+    color: var(--color-text-secondary);
+  }
+
+  .view-edit-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: none;
+    background: none;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    flex-shrink: 0;
+    margin-right: 0.25rem;
+    transition:
+      background 0.1s,
+      color 0.1s;
+  }
+
+  .view-edit-btn:hover {
+    background: var(--color-border-light);
+    color: var(--color-text);
+  }
+
+  .view-dropdown-separator {
+    height: 1px;
+    background: var(--color-border-light);
+    margin: 0.25rem 0;
+  }
+
   .board-header-right {
     display: flex;
     gap: 0.5rem;
@@ -1060,14 +1293,6 @@
   .activity-btn:hover {
     background: var(--color-bg);
     color: var(--color-text);
-  }
-
-  .filter-dot {
-    display: inline-block;
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--color-primary);
   }
 
   .proposals-btn {

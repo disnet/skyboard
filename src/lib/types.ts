@@ -238,3 +238,13 @@ export interface Notification {
   createdAt: string;
   dedupeKey: string;
 }
+
+// --- Filter view types (local-only, not synced to PDS) ---
+
+export interface FilterView {
+  id?: number;
+  boardUri: string;
+  name: string;
+  titleFilter: string;
+  labelIds: string[];
+}
