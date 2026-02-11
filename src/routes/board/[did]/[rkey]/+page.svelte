@@ -1006,7 +1006,10 @@
         {/if}
         {#if boardOpen}
           <span class="open-badge">Open</span>
+        {:else}
+          <span class="closed-badge">Closed</span>
         {/if}
+        <span class="public-badge" title="All boards are publicly viewable on the AT Protocol network">Public</span>
         {#if auth.isLoggedIn}
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div class="view-dropdown-wrapper" onkeydown={handleViewDropdownKeydown}>
@@ -1358,7 +1361,9 @@
 
   .shared-badge,
   .readonly-badge,
-  .open-badge {
+  .open-badge,
+  .closed-badge,
+  .public-badge {
     font-size: 0.6875rem;
     padding: 0.125rem 0.5rem;
     border-radius: var(--radius-sm);
@@ -1380,6 +1385,17 @@
   .open-badge {
     background: var(--color-success-alpha);
     color: rgb(22, 163, 74);
+  }
+
+  .closed-badge {
+    background: var(--color-border-light, rgba(0, 0, 0, 0.05));
+    color: var(--color-text-secondary);
+  }
+
+  .public-badge {
+    background: var(--color-primary-alpha, rgba(59, 130, 246, 0.1));
+    color: var(--color-primary);
+    cursor: help;
   }
 
   .view-dropdown-wrapper {

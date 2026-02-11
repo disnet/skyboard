@@ -15,6 +15,12 @@
         ? "s"
         : ""}</span
     >
+    {#if board.open}
+      <span class="sync-badge open">Open</span>
+    {:else}
+      <span class="sync-badge closed">Closed</span>
+    {/if}
+    <span class="sync-badge public" title="All boards are publicly viewable on the AT Protocol network">Public</span>
     {#if board.syncStatus === "pending"}
       <span class="sync-badge pending">Pending</span>
     {:else if board.syncStatus === "error"}
@@ -72,6 +78,22 @@
     border-radius: var(--radius-sm);
     font-size: 0.6875rem;
     font-weight: 500;
+  }
+
+  .sync-badge.open {
+    background: var(--color-success-alpha, rgba(22, 163, 74, 0.1));
+    color: rgb(22, 163, 74);
+  }
+
+  .sync-badge.closed {
+    background: var(--color-border-light, rgba(0, 0, 0, 0.05));
+    color: var(--color-text-secondary);
+  }
+
+  .sync-badge.public {
+    background: var(--color-primary-alpha, rgba(59, 130, 246, 0.1));
+    color: var(--color-primary);
+    cursor: help;
   }
 
   .sync-badge.pending {
