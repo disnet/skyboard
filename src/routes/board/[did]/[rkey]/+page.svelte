@@ -670,6 +670,36 @@
     }
   }
 
+  function handlePasteLines(task: MaterializedTask, lines: string[]) {
+    if (!auth.did || !inlineEditPos) return;
+    const colIdx = inlineEditPos.col;
+    const colTasks = sortedTasksByColumn[colIdx] ?? [];
+    const currentRow = inlineEditPos.row;
+
+    const currentPos = colTasks[currentRow]?.effectivePosition ?? null;
+    const afterPos = colTasks[currentRow + 1]?.effectivePosition ?? null;
+
+    let prevPos = currentPos;
+    for (const line of lines) {
+      const newPosition = generateKeyBetween(prevPos, afterPos);
+      const rkey = generateTID();
+      const taskData = {
+        rkey,
+        did: auth.did,
+        title: "",
+        columnId: sortedColumns[colIdx].id,
+        boardUri,
+        position: newPosition,
+        createdAt: new Date().toISOString(),
+        syncStatus: "pending" as const,
+      };
+      db.tasks.add(taskData).then(() => {
+        createOp(auth.did!, taskData as Task, boardUri, { title: line });
+      });
+      prevPos = newPosition;
+    }
+  }
+
   function openTaskEditor(task: MaterializedTask) {
     editingTask = task;
     replaceState(`${$page.url.pathname}#task-${task.rkey}`, $page.state);
@@ -957,6 +987,7 @@
           selectedTaskIndex={getSelectedPos()?.col === colIdx ? getSelectedPos()?.row ?? null : null}
           editingTaskIndex={inlineEditPos?.col === colIdx ? inlineEditPos.row : null}
           onsavetitle={handleSaveTitle}
+          onpastelines={handlePasteLines}
           onaddtask={() => addNewCard(colIdx)}
         />
       {/each}

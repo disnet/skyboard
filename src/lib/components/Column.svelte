@@ -27,6 +27,7 @@
     selectedTaskIndex = null,
     editingTaskIndex = null,
     onsavetitle,
+    onpastelines,
     onaddtask,
   }: {
     column: Column;
@@ -46,6 +47,7 @@
     selectedTaskIndex?: number | null;
     editingTaskIndex?: number | null;
     onsavetitle?: (task: MaterializedTask, title: string) => void;
+    onpastelines?: (task: MaterializedTask, lines: string[]) => void;
     onaddtask?: () => void;
   } = $props();
 
@@ -221,6 +223,7 @@
           selected={selectedTaskIndex === i}
           editing={editingTaskIndex === i}
           {onsavetitle}
+          {onpastelines}
         />
       </div>
     {/each}

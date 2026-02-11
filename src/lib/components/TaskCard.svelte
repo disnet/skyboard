@@ -30,6 +30,7 @@
     selected = false,
     editing = false,
     onsavetitle,
+    onpastelines,
   }: {
     task: MaterializedTask;
     currentUserDid: string;
@@ -44,6 +45,7 @@
     selected?: boolean;
     editing?: boolean;
     onsavetitle?: (task: MaterializedTask, title: string, andContinue?: boolean) => void;
+    onpastelines?: (task: MaterializedTask, lines: string[]) => void;
   } = $props();
 
   let cardEl: HTMLDivElement | undefined = $state();
@@ -94,6 +96,22 @@
     } else {
       onsavetitle?.(task, task.effectiveTitle, andContinue);
     }
+  }
+
+  function stripListMarker(line: string): string {
+    return line.replace(/^(?:[-*+]|\d+[.)]\s?|☐\s?|☑\s?|>\s?)\s*/, "");
+  }
+
+  function handlePaste(e: ClipboardEvent) {
+    const text = e.clipboardData?.getData("text/plain") ?? "";
+    const lines = text.split(/\r?\n/).map((l) => stripListMarker(l.trim())).filter(Boolean);
+    if (lines.length <= 1) return; // single line — let default paste behavior handle it
+    e.preventDefault();
+    if (titleEl) {
+      titleEl.textContent = lines[0];
+    }
+    onpastelines?.(task, lines.slice(1));
+    commitEdit(false);
   }
 
   let showReactionPopover = $state(false);
@@ -277,6 +295,7 @@
       if (e.key === "Escape") { e.preventDefault(); normalizeTitleDom(task.effectiveTitle); onsavetitle?.(task, task.effectiveTitle); }
       e.stopPropagation();
     } : undefined}
+    onpaste={editing ? handlePaste : undefined}
     onblur={editing ? () => commitEdit() : undefined}
     onclick={editing ? (e) => e.stopPropagation() : undefined}
   >{task.effectiveTitle}</div>
