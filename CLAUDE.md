@@ -64,6 +64,13 @@ Board owners configure per-operation permission rules with three scopes: `author
 - `QueryRune` (`src/lib/db.svelte.ts`) bridges Dexie's `liveQuery` observables to Svelte 5 reactivity — use `useLiveQuery()` for reactive database queries
 - Auth state is exposed via `getAuth()` which returns an object with reactive getters
 
+### Adding a New Lexicon Checklist
+
+When adding a new AT Protocol record type (lexicon), always do the following:
+
+1. Add `repo:dev.skyboard.<name>` to `OAUTH_SCOPE` in `src/lib/auth.svelte.ts`
+2. In the board page (`src/routes/board/[did]/[rkey]/+page.svelte`), add a `$derived` that detects sync errors for the new collection (check for `syncStatus === "error"`) and add a reauth banner prompting the user to sign out and re-login to grant updated permissions (follow the existing pattern used for approvals and reactions)
+
 ### Routing
 
 - `/` — Board list (`src/routes/+page.svelte`)

@@ -206,6 +206,11 @@
     (allApprovals.current ?? []).some((a) => a.syncStatus === "error"),
   );
 
+  // Detect if reactions are failing to sync (likely a scope/auth issue requiring re-login)
+  const hasReactionSyncErrors = $derived(
+    (allReactions.current ?? []).some((r) => r.syncStatus === "error"),
+  );
+
   // Comment counts grouped by targetTaskUri — only count visible comments
   const commentCountsByTask = $derived.by(() => {
     const map = new Map<string, number>();
@@ -646,6 +651,15 @@
     {#if hasApprovalSyncErrors && isBoardOwner}
       <div class="reauth-banner">
         Approval sync failed. You may need to sign out and re-login to grant updated permissions.
+        <button class="reauth-btn" onclick={async () => { await logout(); goto("/"); }}>
+          Sign out
+        </button>
+      </div>
+    {/if}
+
+    {#if hasReactionSyncErrors && auth.isLoggedIn}
+      <div class="reauth-banner">
+        Reaction sync failed. You may need to sign out and re-login to grant updated permissions.
         <button class="reauth-btn" onclick={async () => { await logout(); goto("/"); }}>
           Sign out
         </button>
