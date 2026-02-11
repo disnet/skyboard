@@ -6,7 +6,11 @@
   import { getActionStatus } from "$lib/permissions.js";
   import type { PermissionStatus } from "$lib/permissions.js";
   import { TASK_COLLECTION, buildAtUri } from "$lib/tid.js";
-  import { getDraggedCard } from "$lib/drag-state.svelte.js";
+  import {
+    getDraggedCard,
+    registerColumn,
+    unregisterColumn,
+  } from "$lib/drag-state.svelte.js";
   import TaskCard from "./TaskCard.svelte";
 
   let {
@@ -63,6 +67,7 @@
 
   let dropIndex = $state<number | null>(null);
   let taskListEl: HTMLElement | undefined = $state();
+  let columnEl: HTMLElement | undefined = $state();
 
   const sortedTasks = $derived(
     [...tasks].sort((a, b) => {
@@ -133,10 +138,52 @@
     dropIndex = null;
   }
 
+  async function executeDrop(
+    taskId: number,
+    taskDid: string,
+    currentDropIdx: number | null,
+  ) {
+    if (readonly) return;
+
+    const filtered = sortedTasks.filter(
+      (t) => !(t.sourceTask.id === taskId && t.ownerDid === taskDid),
+    );
+    let insertIdx = currentDropIdx ?? filtered.length;
+
+    const draggedIndex = sortedTasks.findIndex(
+      (t) => t.sourceTask.id === taskId && t.ownerDid === taskDid,
+    );
+    if (
+      draggedIndex !== -1 &&
+      currentDropIdx !== null &&
+      currentDropIdx > draggedIndex
+    ) {
+      insertIdx = currentDropIdx - 1;
+    }
+    insertIdx = Math.max(0, Math.min(insertIdx, filtered.length));
+
+    if (
+      draggedIndex !== -1 &&
+      (currentDropIdx === null || insertIdx === draggedIndex)
+    )
+      return;
+
+    const before = filtered[insertIdx - 1]?.effectivePosition ?? null;
+    const after = filtered[insertIdx]?.effectivePosition ?? null;
+    const newPosition = generateKeyBetween(before, after);
+    const task = await db.tasks.get(taskId);
+    if (task) {
+      await createOp(did, task, boardUri, {
+        columnId: column.id,
+        position: newPosition,
+      });
+    }
+  }
+
   async function handleDrop(e: DragEvent) {
     if (readonly) return;
     e.preventDefault();
-    const currentDropIndex = dropIndex;
+    const currentDropIdx = dropIndex;
     dropIndex = null;
 
     if (!e.dataTransfer) return;
@@ -150,51 +197,58 @@
       return;
     }
 
-    // Filter out the dragged card and compute insert position
-    const filtered = sortedTasks.filter(
-      (t) => !(t.sourceTask.id === data.id && t.ownerDid === data.did),
-    );
-    let insertIdx = currentDropIndex ?? filtered.length;
-
-    // Adjust for same-column drag (dragged card still in DOM)
-    const draggedIndex = sortedTasks.findIndex(
-      (t) => t.sourceTask.id === data.id && t.ownerDid === data.did,
-    );
-    if (
-      draggedIndex !== -1 &&
-      currentDropIndex !== null &&
-      currentDropIndex > draggedIndex
-    ) {
-      insertIdx = currentDropIndex - 1;
-    }
-    insertIdx = Math.max(0, Math.min(insertIdx, filtered.length));
-
-    // Skip no-op: card dropped back at its original position in the same column
-    // currentDropIndex is null when handleDragOver detected same-position hover
-    if (
-      draggedIndex !== -1 &&
-      (currentDropIndex === null || insertIdx === draggedIndex)
-    )
-      return;
-
-    // Generate a position between the neighbors
-    const before = filtered[insertIdx - 1]?.effectivePosition ?? null;
-    const after = filtered[insertIdx]?.effectivePosition ?? null;
-    const newPosition = generateKeyBetween(before, after);
-    const task = await db.tasks.get(data.id);
-    if (task) {
-      await createOp(did, task, boardUri, {
-        columnId: column.id,
-        position: newPosition,
-      });
-    }
+    await executeDrop(data.id, data.did, currentDropIdx);
   }
+
+  function handleTouchDragOver(index: number) {
+    if (readonly || moveStatus === "denied") return;
+    const dragged = getDraggedCard();
+    if (dragged) {
+      const draggedIndex = sortedTasks.findIndex(
+        (t) => t.sourceTask.id === dragged.id && t.ownerDid === dragged.did,
+      );
+      if (
+        draggedIndex !== -1 &&
+        (index === draggedIndex || index === draggedIndex + 1)
+      ) {
+        dropIndex = null;
+        return;
+      }
+    }
+    dropIndex = index;
+  }
+
+  function handleTouchDrop(
+    taskId: number,
+    taskDid: string,
+    touchDropIndex: number,
+  ) {
+    dropIndex = null;
+    executeDrop(taskId, taskDid, touchDropIndex);
+  }
+
+  // Register column for touch drag coordination
+  $effect(() => {
+    if (columnEl) {
+      registerColumn(column.id, {
+        element: columnEl,
+        onDrop: handleTouchDrop,
+        setDropIndex: handleTouchDragOver,
+        clearDropIndex: () => {
+          dropIndex = null;
+        },
+      });
+      return () => unregisterColumn(column.id);
+    }
+  });
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   class="column"
   class:drag-over={dropIndex !== null}
+  data-column-id={column.id}
+  bind:this={columnEl}
   ondragover={handleDragOver}
   ondragleave={handleDragLeave}
   ondrop={handleDrop}

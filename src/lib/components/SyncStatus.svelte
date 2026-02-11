@@ -121,4 +121,10 @@
       opacity: 0.4;
     }
   }
+
+  @media (max-width: 600px) {
+    .text {
+      display: none;
+    }
+  }
 </style>

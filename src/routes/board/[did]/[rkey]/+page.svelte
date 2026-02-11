@@ -59,6 +59,7 @@
   import TaskEditModal from "$lib/components/TaskEditModal.svelte";
   import FilterPanel from "$lib/components/FilterPanel.svelte";
   import QuickLabelPicker from "$lib/components/QuickLabelPicker.svelte";
+  import QuickMovePicker from "$lib/components/QuickMovePicker.svelte";
   import { goto, replaceState } from "$app/navigation";
   import { logout } from "$lib/auth.svelte.js";
   import { getProfile } from "$lib/profile-cache.svelte.js";
@@ -405,7 +406,7 @@
 
   function handleBoardKeydown(e: KeyboardEvent) {
     // Skip when a modal is open
-    if (editingTask || showSettings || showPermissions || showProposals || showOpsPanel || showFilterPanel || showViewDropdown || showQuickLabel) return;
+    if (editingTask || showSettings || showPermissions || showProposals || showOpsPanel || showFilterPanel || showViewDropdown || showQuickLabel || showQuickMove) return;
 
     // Skip when focus is inside an input, textarea, or contenteditable
     const tag = (e.target as HTMLElement)?.tagName;
@@ -546,6 +547,16 @@
         addNewCard(col, afterRow);
         break;
       }
+      case "m": {
+        if (!pos || !auth.did) break;
+        const moveTask = sortedTasksByColumn[pos.col]?.[pos.row];
+        if (!moveTask) break;
+        e.preventDefault();
+        const moveCard = document.querySelector(".task-card.task-selected");
+        quickMoveAnchorRect = moveCard?.getBoundingClientRect() ?? null;
+        showQuickMove = true;
+        break;
+      }
       case "t": {
         if (!pos || !auth.did) break;
         const labelTask = sortedTasksByColumn[pos.col]?.[pos.row];
@@ -573,6 +584,9 @@
   let showFilterPanel = $state(false);
   let showQuickLabel = $state(false);
   let quickLabelAnchorRect = $state<DOMRect | null>(null);
+  let showQuickMove = $state(false);
+  let quickMoveAnchorRect = $state<DOMRect | null>(null);
+  let showMoreMenu = $state(false);
   let filterTitle = $state("");
   let filterLabelIds = $state<string[]>([]);
   let editingTask = $state<MaterializedTask | null>(null);
@@ -823,6 +837,20 @@
     };
   });
 
+  function handleMoveTask(task: MaterializedTask, columnId: string) {
+    if (!auth.did) return;
+    const colIdx = sortedColumns.findIndex((c) => c.id === columnId);
+    if (colIdx === -1) return;
+    const targetTasks = sortedTasksByColumn[colIdx] ?? [];
+    const firstPos =
+      targetTasks.length > 0 ? targetTasks[0].effectivePosition : null;
+    const newPosition = generateKeyBetween(null, firstPos);
+    createOp(auth.did, task.sourceTask, boardUri, {
+      columnId,
+      position: newPosition,
+    });
+  }
+
   function handleReact(taskUri: string, emoji: string) {
     if (!auth.did || !boardUri) return;
     toggleReaction(auth.did, taskUri, boardUri, emoji);
@@ -835,6 +863,18 @@
     return sortedTasksByColumn[pos.col]?.[pos.row] ?? null;
   });
 
+  const quickMoveTask = $derived.by(() => {
+    if (!showQuickMove) return null;
+    const pos = getSelectedPos();
+    if (!pos) return null;
+    return sortedTasksByColumn[pos.col]?.[pos.row] ?? null;
+  });
+
+  function handleQuickMove(columnId: string) {
+    if (!quickMoveTask) return;
+    handleMoveTask(quickMoveTask, columnId);
+  }
+
   function handleQuickLabelToggle(labelId: string) {
     if (!auth.did || !quickLabelTask) return;
     const current = [...quickLabelTask.effectiveLabelIds];
@@ -845,6 +885,58 @@
       current.push(labelId);
     }
     createOp(auth.did, quickLabelTask.sourceTask, boardUri, { labelIds: current });
+  }
+
+  // Auto-scroll columns-container during HTML5 drag
+  const DRAG_SCROLL_EDGE = 80;
+  const DRAG_SCROLL_MAX_SPEED = 20;
+  let dragScrollRAF: number | null = null;
+  let dragClientX = 0;
+  let columnsContainerEl: HTMLElement | undefined = $state();
+
+  function handleContainerDragOver(e: DragEvent) {
+    dragClientX = e.clientX;
+    if (!dragScrollRAF) {
+      dragScrollRAF = requestAnimationFrame(dragAutoScroll);
+    }
+  }
+
+  function handleContainerDragLeave(e: DragEvent) {
+    const related = e.relatedTarget as Node | null;
+    const current = e.currentTarget as HTMLElement;
+    if (related && current.contains(related)) return;
+    stopDragAutoScroll();
+  }
+
+  function handleContainerDrop() {
+    stopDragAutoScroll();
+  }
+
+  function dragAutoScroll() {
+    if (!columnsContainerEl) {
+      dragScrollRAF = null;
+      return;
+    }
+    const rect = columnsContainerEl.getBoundingClientRect();
+    let speed = 0;
+    if (dragClientX < rect.left + DRAG_SCROLL_EDGE) {
+      const ratio = 1 - (dragClientX - rect.left) / DRAG_SCROLL_EDGE;
+      speed = -DRAG_SCROLL_MAX_SPEED * Math.max(0, Math.min(1, ratio));
+    } else if (dragClientX > rect.right - DRAG_SCROLL_EDGE) {
+      const ratio = 1 - (rect.right - dragClientX) / DRAG_SCROLL_EDGE;
+      speed = DRAG_SCROLL_MAX_SPEED * Math.max(0, Math.min(1, ratio));
+    }
+    if (speed !== 0) {
+      columnsContainerEl.scrollLeft += speed;
+    }
+    dragScrollRAF = requestAnimationFrame(dragAutoScroll);
+  }
+
+  function stopDragAutoScroll() {
+    if (dragScrollRAF) {
+      cancelAnimationFrame(dragScrollRAF);
+      dragScrollRAF = null;
+    }
   }
 
   let shareCopied = $state(false);
@@ -941,7 +1033,7 @@
       </div>
       <div class="board-header-right">
         {#if auth.isLoggedIn}
-          <button class="activity-btn" onclick={() => (showOpsPanel = true)}>
+          <button class="activity-btn header-desktop" onclick={() => (showOpsPanel = true)}>
             Activity
           </button>
           {#if isBoardOwner && (untrustedTasks.length > 0 || untrustedComments.length > 0)}
@@ -956,12 +1048,12 @@
             </button>
           {/if}
         {/if}
-        <button class="share-btn" onclick={shareBoardUri}>
+        <button class="share-btn header-desktop" onclick={shareBoardUri}>
           {shareCopied ? "Copied!" : "Share"}
         </button>
         {#if isBoardOwner}
           <button
-            class="settings-btn"
+            class="settings-btn header-desktop"
             onclick={() => (showPermissions = true)}
           >
             Access
@@ -969,11 +1061,40 @@
               <span class="access-badge">{(ownerTrusts.current ?? []).length}</span>
             {/if}
           </button>
-          <button class="settings-btn" onclick={() => (showSettings = true)}>
+          <button class="settings-btn header-desktop" onclick={() => (showSettings = true)}>
             Settings
           </button>
-          <button class="delete-btn" onclick={deleteBoard}>Delete</button>
+          <button class="delete-btn header-desktop" onclick={deleteBoard}>Delete</button>
         {/if}
+        <div class="more-wrapper header-mobile">
+          <button class="more-btn" onclick={() => (showMoreMenu = !showMoreMenu)}>
+            &hellip;
+          </button>
+          {#if showMoreMenu}
+            <div class="more-backdrop" onclick={() => (showMoreMenu = false)} role="presentation"></div>
+            <div class="more-menu">
+              {#if auth.isLoggedIn}
+                <button class="more-item" onclick={() => { showMoreMenu = false; showOpsPanel = true; }}>
+                  Activity
+                </button>
+              {/if}
+              <button class="more-item" onclick={() => { showMoreMenu = false; shareBoardUri(); }}>
+                {shareCopied ? "Copied!" : "Share"}
+              </button>
+              {#if isBoardOwner}
+                <button class="more-item" onclick={() => { showMoreMenu = false; showPermissions = true; }}>
+                  Access
+                </button>
+                <button class="more-item" onclick={() => { showMoreMenu = false; showSettings = true; }}>
+                  Settings
+                </button>
+                <button class="more-item more-item-danger" onclick={() => { showMoreMenu = false; deleteBoard(); }}>
+                  Delete
+                </button>
+              {/if}
+            </div>
+          {/if}
+        </div>
       </div>
     </div>
 
@@ -1001,7 +1122,14 @@
       </div>
     {/if}
 
-    <div class="columns-container">
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div
+      class="columns-container"
+      bind:this={columnsContainerEl}
+      ondragover={handleContainerDragOver}
+      ondragleave={handleContainerDragLeave}
+      ondrop={handleContainerDrop}
+    >
       {#each sortedColumns as column, colIdx (column.id)}
         <Column
           {column}
@@ -1087,6 +1215,16 @@
     />
   {/if}
 
+  {#if showQuickMove && quickMoveTask && quickMoveAnchorRect}
+    <QuickMovePicker
+      columns={sortedColumns}
+      currentColumnId={quickMoveTask.effectiveColumnId}
+      anchorRect={quickMoveAnchorRect}
+      onmove={handleQuickMove}
+      onclose={() => { showQuickMove = false; quickMoveAnchorRect = null; }}
+    />
+  {/if}
+
   {#if editingTask}
     <TaskEditModal
       task={editingTask}
@@ -1100,9 +1238,11 @@
         `at://${editingTask.ownerDid}/dev.skyboard.task/${editingTask.rkey}`,
       )}
       boardLabels={board.current.labels ?? []}
+      columns={sortedColumns}
       {boardUri}
       onclose={closeTaskEditor}
       onreact={handleReact}
+      onmove={handleMoveTask}
       readonly={!auth.isLoggedIn}
     />
   {/if}
@@ -1157,54 +1297,77 @@
     padding: 0.75rem 1.5rem;
     border-bottom: 1px solid var(--color-border-light);
     flex-shrink: 0;
+    gap: 0.5rem;
+    flex-wrap: wrap;
   }
 
   .board-header-left {
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    min-width: 0;
   }
 
   .back-link {
     font-size: 0.875rem;
     color: var(--color-text-secondary);
+    flex-shrink: 0;
   }
 
   .separator {
     color: var(--color-border);
+    flex-shrink: 0;
   }
 
   .board-header h2 {
     margin: 0;
     font-size: 1.125rem;
     font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+  }
+
+  @media (max-width: 600px) {
+    .board-header {
+      padding: 0.5rem 0.75rem;
+    }
+
+    .board-header h2 {
+      font-size: 0.9375rem;
+    }
+
+    .back-link,
+    .separator {
+      display: none;
+    }
+  }
+
+  .shared-badge,
+  .readonly-badge,
+  .open-badge {
+    font-size: 0.6875rem;
+    padding: 0.125rem 0.5rem;
+    border-radius: var(--radius-sm);
+    font-weight: 500;
+    flex-shrink: 0;
+    white-space: nowrap;
   }
 
   .shared-badge {
-    font-size: 0.6875rem;
     background: var(--color-primary-alpha, rgba(0, 102, 204, 0.1));
     color: var(--color-primary);
-    padding: 0.125rem 0.5rem;
-    border-radius: var(--radius-sm);
-    font-weight: 500;
   }
 
   .readonly-badge {
-    font-size: 0.6875rem;
     background: var(--color-border-light);
     color: var(--color-text-secondary);
-    padding: 0.125rem 0.5rem;
-    border-radius: var(--radius-sm);
-    font-weight: 500;
   }
 
   .open-badge {
-    font-size: 0.6875rem;
     background: var(--color-success-alpha);
     color: rgb(22, 163, 74);
-    padding: 0.125rem 0.5rem;
-    border-radius: var(--radius-sm);
-    font-weight: 500;
   }
 
   .view-dropdown-wrapper {
@@ -1318,7 +1481,9 @@
 
   .board-header-right {
     display: flex;
-    gap: 0.5rem;
+    gap: 0.375rem;
+    flex-wrap: wrap;
+    flex-shrink: 0;
   }
 
   .settings-btn,
@@ -1334,6 +1499,7 @@
     display: flex;
     align-items: center;
     gap: 0.375rem;
+    white-space: nowrap;
     transition:
       background 0.15s,
       color 0.15s;
@@ -1362,6 +1528,7 @@
     display: flex;
     align-items: center;
     gap: 0.375rem;
+    white-space: nowrap;
     transition:
       background 0.15s,
       color 0.15s;
@@ -1384,11 +1551,100 @@
     display: flex;
     align-items: center;
     gap: 0.375rem;
+    white-space: nowrap;
     transition: background 0.15s;
   }
 
   .proposals-btn:hover {
     background: var(--color-bg);
+  }
+
+  .header-mobile {
+    display: none;
+  }
+
+  .more-wrapper {
+    position: relative;
+  }
+
+  .more-btn {
+    padding: 0.375rem 0.625rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    cursor: pointer;
+    background: var(--color-surface);
+    color: var(--color-text-secondary);
+    line-height: 1;
+    transition:
+      background 0.15s,
+      color 0.15s;
+  }
+
+  .more-btn:hover {
+    background: var(--color-bg);
+    color: var(--color-text);
+  }
+
+  .more-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 49;
+  }
+
+  .more-menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    min-width: 160px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    z-index: 50;
+    padding: 0.25rem 0;
+  }
+
+  .more-item {
+    display: block;
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    border: none;
+    background: none;
+    color: var(--color-text);
+    font-size: 0.8125rem;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+
+  .more-item:hover {
+    background: var(--color-bg);
+  }
+
+  .more-item-danger {
+    color: var(--color-error);
+  }
+
+  .more-item-danger:hover {
+    background: var(--color-error-bg);
+  }
+
+  @media (max-width: 700px) {
+    .header-desktop {
+      display: none;
+    }
+
+    .header-mobile {
+      display: block;
+    }
+
+    .proposals-btn {
+      padding: 0.3125rem 0.5rem;
+      font-size: 0.75rem;
+    }
   }
 
   .badge {
@@ -1457,6 +1713,14 @@
     gap: 0.75rem;
     padding: 1rem 1.5rem;
     overflow-x: auto;
+    overscroll-behavior-y: none;
     align-items: flex-start;
+  }
+
+  @media (max-width: 600px) {
+    .columns-container {
+      padding: 0.5rem;
+      gap: 0.5rem;
+    }
   }
 </style>

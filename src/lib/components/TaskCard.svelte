@@ -2,6 +2,7 @@
   import type { MaterializedTask, Label } from "$lib/types.js";
   import { Marked } from "marked";
   import { getDraggedCard, setDraggedCard } from "$lib/drag-state.svelte.js";
+  import { handleTouchStart } from "$lib/touch-drag.svelte.js";
   import DOMPurify from "dompurify";
   import AuthorBadge from "./AuthorBadge.svelte";
 
@@ -255,6 +256,30 @@
     }, 0);
   }
 
+  function handleTouchStartLocal(e: TouchEvent) {
+    if (readonly || editing || !task.sourceTask.id || !cardEl) return;
+    const target = e.target as HTMLElement;
+    if (
+      target.closest(
+        'a, button, [contenteditable="true"], [contenteditable="plaintext-only"]',
+      )
+    )
+      return;
+    handleTouchStart(
+      e,
+      cardEl,
+      {
+        id: task.sourceTask.id,
+        did: task.ownerDid,
+        rkey: task.rkey,
+        columnId: task.effectiveColumnId,
+      },
+      () => {
+        wasDragged = true;
+      },
+    );
+  }
+
   function handleClick() {
     if (wasDragged) {
       wasDragged = false;
@@ -274,6 +299,7 @@
   draggable={readonly ? "false" : "true"}
   ondragstart={handleDragStart}
   ondragend={handleDragEnd}
+  ontouchstart={handleTouchStartLocal}
   onclick={handleClick}
   bind:this={cardEl}
 >
@@ -387,6 +413,8 @@
     cursor: grab;
     position: relative;
     scroll-margin: 6px;
+    -webkit-user-select: none;
+    user-select: none;
     transition:
       box-shadow 0.15s,
       border-color 0.15s;
@@ -449,6 +477,11 @@
     font-weight: 500;
     word-break: break-word;
     outline: none;
+  }
+
+  .task-title[contenteditable] {
+    -webkit-user-select: text;
+    user-select: text;
   }
 
 

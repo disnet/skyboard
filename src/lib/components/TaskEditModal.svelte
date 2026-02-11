@@ -1,7 +1,7 @@
 <script lang="ts">
   import { untrack } from "svelte";
   import { db } from "$lib/db.js";
-  import type { MaterializedTask, Comment, Label } from "$lib/types.js";
+  import type { MaterializedTask, Comment, Label, Column } from "$lib/types.js";
   import { createOp } from "$lib/ops.js";
   import { createComment, deleteComment } from "$lib/comments.js";
   import { getActionStatus, isContentVisible } from "$lib/permissions.js";
@@ -39,8 +39,10 @@
     reactions,
     boardLabels = [],
     boardUri = "",
+    columns = [],
     onclose,
     onreact,
+    onmove,
     readonly = false,
   }: {
     task: MaterializedTask;
@@ -53,8 +55,10 @@
     reactions?: Map<string, { count: number; userReacted: boolean }>;
     boardLabels?: Label[];
     boardUri?: string;
+    columns?: Column[];
     onclose: () => void;
     onreact?: (taskUri: string, emoji: string) => void;
+    onmove?: (task: MaterializedTask, columnId: string) => void;
     readonly?: boolean;
   } = $props();
 
@@ -223,6 +227,39 @@
       );
     });
   });
+
+  const moveStatus: PermissionStatus = $derived(
+    getActionStatus(
+      currentUserDid,
+      boardOwnerDid,
+      ownerTrustedDids,
+      boardOpen,
+      "move",
+    ),
+  );
+
+  let showMoveMenu = $state(false);
+
+  function handleMove(columnId: string) {
+    showMoveMenu = false;
+    onmove?.(task, columnId);
+  }
+
+  function handleMoveKeydown(e: KeyboardEvent) {
+    if (!showMoveMenu) return;
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      showMoveMenu = false;
+      return;
+    }
+    const num = parseInt(e.key, 10);
+    if (num >= 1 && num <= 9 && num <= columns.length) {
+      e.preventDefault();
+      e.stopPropagation();
+      handleMove(columns[num - 1].id);
+    }
+  }
 
   let commentText = $state("");
   let submittingComment = $state(false);
@@ -434,6 +471,19 @@
   }
 
   function handleKeydown(e: KeyboardEvent) {
+    if (showMoveMenu) {
+      handleMoveKeydown(e);
+      return;
+    }
+    if (e.key === "m" && !readonly && onmove && moveStatus !== "denied" && columns.length > 0) {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if ((e.target as HTMLElement)?.isContentEditable) return;
+      if (editorView?.hasFocus) return;
+      e.preventDefault();
+      showMoveMenu = true;
+      return;
+    }
     if (e.key === "Escape") {
       if (editorView?.hasFocus) {
         editorView.contentDOM.blur();
@@ -680,6 +730,34 @@
         {/if}
       </div>
       <div class="footer-right">
+        {#if !readonly && onmove && moveStatus !== "denied" && columns.length > 0}
+          <div class="move-wrapper">
+            <button class="move-btn" onclick={() => (showMoveMenu = !showMoveMenu)}>
+              Move
+            </button>
+            {#if showMoveMenu}
+              <div class="move-menu">
+                {#each columns as col, i (col.id)}
+                  <button
+                    class="move-option"
+                    class:current={col.id === task.effectiveColumnId}
+                    onclick={() => handleMove(col.id)}
+                  >
+                    {#if i < 9}
+                      <kbd class="move-key">{i + 1}</kbd>
+                    {:else}
+                      <span class="move-key-spacer"></span>
+                    {/if}
+                    {col.name}
+                    {#if col.id === task.effectiveColumnId}
+                      <span class="current-indicator">(current)</span>
+                    {/if}
+                  </button>
+                {/each}
+              </div>
+            {/if}
+          </div>
+        {/if}
         {#if !readonly && isOwned}
           <button class="delete-btn" onclick={deleteTask}>Delete</button>
         {/if}
@@ -951,6 +1029,93 @@
   .footer-right {
     display: flex;
     gap: 0.5rem;
+  }
+
+  .move-wrapper {
+    position: relative;
+  }
+
+  .move-btn {
+    padding: 0.5rem 1rem;
+    background: var(--color-surface);
+    color: var(--color-text-secondary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition:
+      background 0.15s,
+      color 0.15s;
+  }
+
+  .move-btn:hover {
+    background: var(--color-bg);
+    color: var(--color-text);
+  }
+
+  .move-menu {
+    position: absolute;
+    bottom: calc(100% + 4px);
+    right: 0;
+    min-width: 160px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    z-index: 10;
+    padding: 0.25rem 0;
+  }
+
+  .move-option {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    width: 100%;
+    padding: 0.4375rem 0.75rem;
+    border: none;
+    background: none;
+    color: var(--color-text);
+    font-size: 0.8125rem;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+
+  .move-option:hover {
+    background: var(--color-bg);
+  }
+
+  .move-option.current {
+    font-weight: 600;
+    color: var(--color-primary);
+  }
+
+  .move-key {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    font-size: 0.6875rem;
+    font-family: inherit;
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    flex-shrink: 0;
+    line-height: 1;
+  }
+
+  .move-key-spacer {
+    width: 18px;
+    flex-shrink: 0;
+  }
+
+  .current-indicator {
+    font-weight: 400;
+    font-size: 0.6875rem;
+    color: var(--color-text-secondary);
   }
 
   .delete-btn {

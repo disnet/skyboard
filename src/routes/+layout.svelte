@@ -489,4 +489,29 @@
     flex: 1;
     overflow: auto;
   }
+
+  @media (max-width: 600px) {
+    .app-header {
+      padding: 0 0.75rem;
+    }
+
+    .header-right {
+      gap: 0.5rem;
+    }
+
+    .user-did {
+      max-width: none;
+      font-size: 0;
+    }
+
+    .user-avatar {
+      width: 22px;
+      height: 22px;
+    }
+
+    .sign-out-btn {
+      padding: 0.3125rem 0.5rem;
+      font-size: 0.75rem;
+    }
+  }
 </style>
