@@ -64,8 +64,103 @@
       : [],
   );
 
+  const totalReactionCount = $derived(
+    reactions
+      ? [...reactions.values()].reduce((sum, v) => sum + v.count, 0)
+      : 0,
+  );
+
+  const topEmoji = $derived.by(() => {
+    if (!reactions) return null;
+    let best: { emoji: string; count: number } | null = null;
+    for (const [emoji, data] of reactions) {
+      if (data.count > 0 && (!best || data.count > best.count)) {
+        best = { emoji, count: data.count };
+      }
+    }
+    return best;
+  });
+
+  function getReactionCount(emoji: string): number {
+    return reactions?.get(emoji)?.count ?? 0;
+  }
+
+  function isUserReacted(emoji: string): boolean {
+    return reactions?.get(emoji)?.userReacted ?? false;
+  }
+
   function handleReactionClick(emoji: string) {
     onreact?.(taskUri, emoji);
+  }
+
+  function handleReactionSelect(e: MouseEvent, emoji: string) {
+    e.stopPropagation();
+    onreact?.(taskUri, emoji);
+  }
+
+  let showReactionPopover = $state(false);
+  let popoverStyle = $state("");
+  let reactionTriggerEl: HTMLButtonElement | undefined = $state();
+  let popoverEl: HTMLDivElement | undefined = $state();
+
+  function positionPopover() {
+    if (!reactionTriggerEl || !popoverEl) return;
+    const btn = reactionTriggerEl.getBoundingClientRect();
+    const pw = popoverEl.offsetWidth;
+    const ph = popoverEl.offsetHeight;
+    const margin = 4;
+
+    let left = btn.right - pw;
+    if (left < margin) left = btn.left;
+    left = Math.max(margin, Math.min(left, window.innerWidth - pw - margin));
+
+    let top = btn.bottom + margin;
+    if (top + ph > window.innerHeight - margin) {
+      top = btn.top - ph - margin;
+    }
+
+    popoverStyle = `top: ${top}px; left: ${left}px;`;
+  }
+
+  $effect(() => {
+    if (showReactionPopover && popoverEl) {
+      positionPopover();
+    }
+  });
+
+  let closeTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function cancelClose() {
+    if (closeTimer) {
+      clearTimeout(closeTimer);
+      closeTimer = null;
+    }
+  }
+
+  function scheduleClose() {
+    cancelClose();
+    closeTimer = setTimeout(() => {
+      showReactionPopover = false;
+      closeTimer = null;
+    }, 150);
+  }
+
+  function handleTriggerEnter(e: MouseEvent) {
+    e.stopPropagation();
+    cancelClose();
+    showReactionPopover = true;
+  }
+
+  function handleTriggerLeave() {
+    scheduleClose();
+  }
+
+  function handlePopoverEnter() {
+    cancelClose();
+  }
+
+  function handlePopoverLeave() {
+    scheduleClose();
   }
 
   const renderedDescription = $derived(
@@ -367,35 +462,24 @@
             <span class="field-status denied">Trusted users only</span>
           {/if}
         {/if}
+        {#if totalReactionCount > 0 || (!readonly && onreact)}
+          <button
+            class="modal-reaction-trigger"
+            class:has-reactions={totalReactionCount > 0}
+            bind:this={reactionTriggerEl}
+            onmouseenter={handleTriggerEnter}
+            onmouseleave={handleTriggerLeave}
+            title="{totalReactionCount} reaction{totalReactionCount === 1 ? '' : 's'}"
+          >
+            {#if topEmoji}
+              {topEmoji.emoji} {topEmoji.count}
+            {:else}
+              <span class="reaction-trigger-icon">+</span>
+            {/if}
+          </button>
+        {/if}
         <button class="close-btn" onclick={closeModal}>&times;</button>
       </div>
-      {#if activeReactions.length > 0 || (!readonly && onreact)}
-        <div class="modal-reactions">
-          {#each activeReactions as [emoji, data] (emoji)}
-            <button
-              class="modal-reaction-pill"
-              class:reacted={data.userReacted}
-              onclick={() => handleReactionClick(emoji)}
-              title="{emoji} {data.count}"
-            >
-              {emoji} {data.count}
-            </button>
-          {/each}
-          {#if !readonly && onreact}
-            {#each EMOJI_OPTIONS as emoji (emoji)}
-              {#if !reactions?.has(emoji) || reactions.get(emoji)!.count === 0}
-                <button
-                  class="modal-reaction-pill add"
-                  onclick={() => handleReactionClick(emoji)}
-                  title="React with {emoji}"
-                >
-                  {emoji}
-                </button>
-              {/if}
-            {/each}
-          {/if}
-        </div>
-      {/if}
     </div>
 
     <div class="modal-body">
@@ -596,6 +680,27 @@
       </div>
     </div>
   </div>
+  {#if showReactionPopover}
+    <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
+    <div
+      class="reaction-popover"
+      bind:this={popoverEl}
+      style={popoverStyle}
+      onmouseenter={handlePopoverEnter}
+      onmouseleave={handlePopoverLeave}
+    >
+      {#each EMOJI_OPTIONS as emoji (emoji)}
+        <button
+          class="popover-emoji"
+          class:reacted={isUserReacted(emoji)}
+          onclick={(e) => handleReactionSelect(e, emoji)}
+        >
+          <span class="popover-emoji-icon">{emoji}</span>
+          <span class="popover-emoji-count">{getReactionCount(emoji)}</span>
+        </button>
+      {/each}
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -636,47 +741,89 @@
     gap: 0.5rem;
   }
 
-  .modal-reactions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.25rem;
-    align-items: center;
-  }
-
-  .modal-reaction-pill {
+  .modal-reaction-trigger {
     display: inline-flex;
     align-items: center;
-    gap: 0.1875rem;
-    padding: 0.125rem 0.5rem;
+    gap: 0.125rem;
+    padding: 0.125rem 0.375rem;
     border-radius: var(--radius-sm);
-    border: 1px solid var(--color-border-light);
-    background: var(--color-surface);
+    border: none;
+    background: none;
     font-size: 0.8125rem;
     cursor: pointer;
+    color: var(--color-text-secondary);
     line-height: 1.4;
+    transition:
+      background 0.15s,
+      color 0.15s;
+  }
+
+  .modal-reaction-trigger:hover {
+    background: var(--color-border-light);
+  }
+
+  .modal-reaction-trigger.has-reactions {
+    background: var(--color-border-light);
+    font-weight: 600;
+  }
+
+  .reaction-trigger-icon {
+    font-size: 0.875rem;
+    opacity: 0.5;
+  }
+
+  .reaction-popover {
+    position: fixed;
+    display: flex;
+    gap: 0.125rem;
+    padding: 0.3rem;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+    z-index: 200;
+  }
+
+  .popover-emoji {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.375rem;
+    border: 1px solid transparent;
+    background: none;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
     transition:
       background 0.15s,
       border-color 0.15s;
   }
 
-  .modal-reaction-pill:hover {
+  .popover-emoji:hover {
     background: var(--color-bg);
-    border-color: var(--color-border);
+    border-color: var(--color-border-light);
   }
 
-  .modal-reaction-pill.reacted {
+  .popover-emoji.reacted {
     background: var(--color-primary-alpha, rgba(0, 102, 204, 0.1));
     border-color: var(--color-primary);
+  }
+
+  .popover-emoji-icon {
+    font-size: 1rem;
+    line-height: 1;
+  }
+
+  .popover-emoji-count {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    line-height: 1;
+    min-width: 0.75rem;
+    text-align: center;
+  }
+
+  .popover-emoji.reacted .popover-emoji-count {
     color: var(--color-primary);
-  }
-
-  .modal-reaction-pill.add {
-    opacity: 0.4;
-    border-style: dashed;
-  }
-
-  .modal-reaction-pill.add:hover {
-    opacity: 1;
   }
 
   .edit-title {
