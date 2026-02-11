@@ -32,6 +32,7 @@
   import SyncStatus from "$lib/components/SyncStatus.svelte";
   import NotificationPanel from "$lib/components/NotificationPanel.svelte";
   import KeyboardShortcutsModal from "$lib/components/KeyboardShortcutsModal.svelte";
+  import BoardSwitcherModal from "$lib/components/BoardSwitcherModal.svelte";
   import "../app.css";
 
   const auth = getAuth();
@@ -43,6 +44,7 @@
 
   let showNotifications = $state(false);
   let showShortcuts = $state(false);
+  let showBoardSwitcher = $state(false);
   let globalJetstream: JetstreamClient | null = null;
 
   const unreadCount = useLiveQuery<number>(() => {
@@ -129,13 +131,17 @@
   });
 
   function handleGlobalKeydown(e: KeyboardEvent) {
-    if (showShortcuts || showNotifications) return;
+    if (showShortcuts || showNotifications || showBoardSwitcher) return;
     const tag = (e.target as HTMLElement)?.tagName;
     if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
     if ((e.target as HTMLElement)?.isContentEditable) return;
     if (e.key === "?") {
       e.preventDefault();
       showShortcuts = true;
+    }
+    if (e.key === "b") {
+      e.preventDefault();
+      showBoardSwitcher = true;
     }
   }
 
@@ -228,6 +234,10 @@
 
   {#if showShortcuts}
     <KeyboardShortcutsModal onclose={() => (showShortcuts = false)} />
+  {/if}
+
+  {#if showBoardSwitcher}
+    <BoardSwitcherModal onclose={() => (showBoardSwitcher = false)} />
   {/if}
 {/if}
 

@@ -40,6 +40,7 @@
     {
       title: "General",
       shortcuts: [
+        { keys: ["b"], description: "Switch board" },
         { keys: ["?"], description: "Show this help" },
       ],
     },

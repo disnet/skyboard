@@ -607,6 +607,7 @@
   function openEditView(view: FilterView) {
     viewName = view.name;
     editingViewId = view.id!;
+    activeViewId = view.id!;
     filterTitle = view.titleFilter;
     filterLabelIds = [...view.labelIds];
     showViewDropdown = false;
