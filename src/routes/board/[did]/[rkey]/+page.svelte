@@ -60,6 +60,8 @@
   import { getProfile } from "$lib/profile-cache.svelte.js";
   import { generateNotificationFromEvent } from "$lib/notifications.js";
   import { toggleReaction } from "$lib/reactions.js";
+  import { createOp } from "$lib/ops.js";
+  import { generateKeyBetween } from "fractional-indexing";
 
   const auth = getAuth();
 
@@ -389,20 +391,42 @@
         break;
       }
       case "ArrowUp":
-      case "k": {
+      case "k":
+      case "K": {
         e.preventDefault();
         if (!pos) {
           setSelectedPos({ col: 0, row: 0 });
+        } else if (e.shiftKey && auth.did) {
+          const colTasks = sortedTasksByColumn[pos.col] ?? [];
+          const task = colTasks[pos.row];
+          if (task && pos.row > 0) {
+            const before = colTasks[pos.row - 2]?.effectivePosition ?? null;
+            const after = colTasks[pos.row - 1].effectivePosition;
+            const newPos = generateKeyBetween(before, after);
+            createOp(auth.did, task.sourceTask, boardUri, { position: newPos });
+            setSelectedPos({ col: pos.col, row: pos.row - 1 });
+          }
         } else {
           setSelectedPos({ col: pos.col, row: Math.max(0, pos.row - 1) });
         }
         break;
       }
       case "ArrowDown":
-      case "j": {
+      case "j":
+      case "J": {
         e.preventDefault();
         if (!pos) {
           setSelectedPos({ col: 0, row: 0 });
+        } else if (e.shiftKey && auth.did) {
+          const colTasks = sortedTasksByColumn[pos.col] ?? [];
+          const task = colTasks[pos.row];
+          if (task && pos.row < colTasks.length - 1) {
+            const before = colTasks[pos.row + 1].effectivePosition;
+            const after = colTasks[pos.row + 2]?.effectivePosition ?? null;
+            const newPos = generateKeyBetween(before, after);
+            createOp(auth.did, task.sourceTask, boardUri, { position: newPos });
+            setSelectedPos({ col: pos.col, row: pos.row + 1 });
+          }
         } else {
           const maxRow = Math.max(0, (sortedTasksByColumn[pos.col]?.length ?? 1) - 1);
           setSelectedPos({ col: pos.col, row: Math.min(maxRow, pos.row + 1) });
@@ -416,6 +440,51 @@
           e.preventDefault();
           openTaskEditor(task);
         }
+        break;
+      }
+      case "e": {
+        if (!pos || !auth.did) break;
+        e.preventDefault();
+        inlineEditPos = { col: pos.col, row: pos.row };
+        break;
+      }
+      case ",":
+      case ".": {
+        if (!pos || !auth.did) break;
+        const task = sortedTasksByColumn[pos.col]?.[pos.row];
+        if (!task) break;
+        const destCol = e.key === "," ? pos.col - 1 : pos.col + 1;
+        if (destCol < 0 || destCol >= numCols) break;
+        e.preventDefault();
+        const destTasks = sortedTasksByColumn[destCol] ?? [];
+        const lastPos = destTasks.length > 0 ? destTasks[destTasks.length - 1].effectivePosition : null;
+        const newPosition = generateKeyBetween(lastPos, null);
+        createOp(auth.did, task.sourceTask, boardUri, {
+          columnId: sortedColumns[destCol].id,
+          position: newPosition,
+        });
+        const maxRow = Math.max(0, destTasks.length);
+        setSelectedPos({ col: destCol, row: maxRow });
+        break;
+      }
+      case "<":
+      case ">":
+      case "H":
+      case "L": {
+        if (!pos || !auth.did) break;
+        const taskTop = sortedTasksByColumn[pos.col]?.[pos.row];
+        if (!taskTop) break;
+        const destColTop = e.key === "<" || e.key === "H" ? pos.col - 1 : pos.col + 1;
+        if (destColTop < 0 || destColTop >= numCols) break;
+        e.preventDefault();
+        const destTasksTop = sortedTasksByColumn[destColTop] ?? [];
+        const firstPos = destTasksTop.length > 0 ? destTasksTop[0].effectivePosition : null;
+        const newPosTop = generateKeyBetween(null, firstPos);
+        createOp(auth.did, taskTop.sourceTask, boardUri, {
+          columnId: sortedColumns[destColTop].id,
+          position: newPosTop,
+        });
+        setSelectedPos({ col: destColTop, row: 0 });
         break;
       }
       case "Escape": {
@@ -433,6 +502,14 @@
   let showProposals = $state(false);
   let showOpsPanel = $state(false);
   let editingTask = $state<MaterializedTask | null>(null);
+  let inlineEditPos = $state<{ col: number; row: number } | null>(null);
+
+  function handleSaveTitle(task: MaterializedTask, title: string) {
+    if (auth.did && title !== task.effectiveTitle) {
+      createOp(auth.did, task.sourceTask, boardUri, { title });
+    }
+    inlineEditPos = null;
+  }
 
   function openTaskEditor(task: MaterializedTask) {
     editingTask = task;
@@ -684,6 +761,8 @@
           onreact={handleReact}
           readonly={!auth.isLoggedIn}
           selectedTaskIndex={getSelectedPos()?.col === colIdx ? getSelectedPos()?.row ?? null : null}
+          editingTaskIndex={inlineEditPos?.col === colIdx ? inlineEditPos.row : null}
+          onsavetitle={handleSaveTitle}
         />
       {/each}
     </div>

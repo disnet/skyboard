@@ -28,6 +28,8 @@
     onedit,
     readonly = false,
     selected = false,
+    editing = false,
+    onsavetitle,
   }: {
     task: MaterializedTask;
     currentUserDid: string;
@@ -40,15 +42,39 @@
     onedit: (task: MaterializedTask) => void;
     readonly?: boolean;
     selected?: boolean;
+    editing?: boolean;
+    onsavetitle?: (task: MaterializedTask, title: string) => void;
   } = $props();
 
   let cardEl: HTMLDivElement | undefined = $state();
+  let titleEl: HTMLDivElement | undefined = $state();
 
   $effect(() => {
     if (selected && cardEl) {
       cardEl.scrollIntoView({ block: "nearest" });
     }
   });
+
+  $effect(() => {
+    if (editing && titleEl) {
+      titleEl.focus();
+      const sel = window.getSelection();
+      const range = document.createRange();
+      range.selectNodeContents(titleEl);
+      sel?.removeAllRanges();
+      sel?.addRange(range);
+    }
+  });
+
+  function commitEdit() {
+    if (!titleEl) return;
+    const trimmed = (titleEl.textContent ?? "").trim();
+    if (trimmed && trimmed !== task.effectiveTitle) {
+      onsavetitle?.(task, trimmed);
+    } else {
+      onsavetitle?.(task, task.effectiveTitle);
+    }
+  }
 
   let showReactionPopover = $state(false);
   let popoverStyle = $state("");
@@ -221,7 +247,19 @@
       <span>Pending approval</span>
     </div>
   {/if}
-  <div class="task-title">{task.effectiveTitle}</div>
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div
+    class="task-title"
+    contenteditable={editing ? "plaintext-only" : false}
+    bind:this={titleEl}
+    onkeydown={editing ? (e) => {
+      if (e.key === "Enter") { e.preventDefault(); commitEdit(); }
+      if (e.key === "Escape") { e.preventDefault(); onsavetitle?.(task, task.effectiveTitle); }
+      e.stopPropagation();
+    } : undefined}
+    onblur={editing ? commitEdit : undefined}
+    onclick={editing ? (e) => e.stopPropagation() : undefined}
+  >{task.effectiveTitle}</div>
   {#if taskLabels.length > 0}
     <div class="task-labels">
       {#each taskLabels as label (label.id)}
@@ -370,7 +408,9 @@
     font-size: 0.875rem;
     font-weight: 500;
     word-break: break-word;
+    outline: none;
   }
+
 
   .task-labels {
     display: flex;

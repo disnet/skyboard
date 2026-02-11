@@ -26,6 +26,8 @@
     onreact,
     readonly = false,
     selectedTaskIndex = null,
+    editingTaskIndex = null,
+    onsavetitle,
   }: {
     column: Column;
     tasks: MaterializedTask[];
@@ -42,6 +44,8 @@
     onreact?: (taskUri: string, emoji: string) => void;
     readonly?: boolean;
     selectedTaskIndex?: number | null;
+    editingTaskIndex?: number | null;
+    onsavetitle?: (task: MaterializedTask, title: string) => void;
   } = $props();
 
   const createStatus: PermissionStatus = $derived(
@@ -242,6 +246,8 @@
           {onedit}
           {readonly}
           selected={selectedTaskIndex === i}
+          editing={editingTaskIndex === i}
+          {onsavetitle}
         />
       </div>
     {/each}
@@ -323,6 +329,8 @@
     flex-direction: column;
     gap: 0.375rem;
     min-height: 40px;
+    padding: 4px;
+    margin: -4px;
   }
 
   .card-slot {
