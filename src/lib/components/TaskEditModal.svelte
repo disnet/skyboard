@@ -4,6 +4,8 @@
   import type { MaterializedTask, Comment, Label, Column } from "$lib/types.js";
   import { createOp } from "$lib/ops.js";
   import { createComment, deleteComment } from "$lib/comments.js";
+  import { getAuth } from "$lib/auth.svelte.js";
+  import { deleteTaskFromPDS } from "$lib/sync.js";
   import { getActionStatus, isContentVisible } from "$lib/permissions.js";
   import type { PermissionStatus } from "$lib/permissions.js";
   import { COMMENT_COLLECTION, buildAtUri, generateTID } from "$lib/tid.js";
@@ -455,6 +457,14 @@
   async function deleteTask() {
     if (!isOwned || !task.sourceTask.id) return;
     if (!confirm("Delete this task?")) return;
+
+    if (task.sourceTask.syncStatus === "synced") {
+      const auth = getAuth();
+      if (auth.agent && auth.did) {
+        await deleteTaskFromPDS(auth.agent, auth.did, task.sourceTask);
+      }
+    }
+
     await db.tasks.delete(task.sourceTask.id);
     onclose();
   }

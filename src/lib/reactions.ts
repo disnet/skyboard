@@ -1,5 +1,6 @@
 import { db } from "./db.js";
-import { generateTID } from "./tid.js";
+import { generateTID, REACTION_COLLECTION } from "./tid.js";
+import { getAuth } from "./auth.svelte.js";
 import type { Reaction, ReactionRecord } from "./types.js";
 
 export async function toggleReaction(
@@ -30,6 +31,22 @@ export async function toggleReaction(
 
 export async function deleteReaction(reaction: Reaction): Promise<void> {
   if (!reaction.id) return;
+
+  if (reaction.syncStatus === "synced") {
+    const auth = getAuth();
+    if (auth.agent) {
+      try {
+        await auth.agent.com.atproto.repo.deleteRecord({
+          repo: reaction.did,
+          collection: REACTION_COLLECTION,
+          rkey: reaction.rkey,
+        });
+      } catch (err) {
+        console.error("Failed to delete reaction from PDS:", err);
+      }
+    }
+  }
+
   await db.reactions.delete(reaction.id);
 }
 

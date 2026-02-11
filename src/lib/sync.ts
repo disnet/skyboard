@@ -758,6 +758,24 @@ export async function deleteTrustFromPDS(
   }
 }
 
+export async function deleteApprovalFromPDS(
+  agent: Agent,
+  did: string,
+  approval: Approval,
+): Promise<void> {
+  if (approval.syncStatus === "synced") {
+    try {
+      await agent.com.atproto.repo.deleteRecord({
+        repo: did,
+        collection: APPROVAL_COLLECTION,
+        rkey: approval.rkey,
+      });
+    } catch (err) {
+      console.error("Failed to delete approval from PDS:", err);
+    }
+  }
+}
+
 export async function deleteReactionFromPDS(
   agent: Agent,
   did: string,

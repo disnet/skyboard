@@ -1,5 +1,6 @@
 import { db } from "./db.js";
-import { generateTID } from "./tid.js";
+import { generateTID, COMMENT_COLLECTION } from "./tid.js";
+import { getAuth } from "./auth.svelte.js";
 import type { Comment, CommentRecord } from "./types.js";
 
 export async function createComment(
@@ -21,6 +22,22 @@ export async function createComment(
 
 export async function deleteComment(comment: Comment): Promise<void> {
   if (!comment.id) return;
+
+  if (comment.syncStatus === "synced") {
+    const auth = getAuth();
+    if (auth.agent) {
+      try {
+        await auth.agent.com.atproto.repo.deleteRecord({
+          repo: comment.did,
+          collection: COMMENT_COLLECTION,
+          rkey: comment.rkey,
+        });
+      } catch (err) {
+        console.error("Failed to delete comment from PDS:", err);
+      }
+    }
+  }
+
   await db.comments.delete(comment.id);
 }
 

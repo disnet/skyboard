@@ -1,5 +1,6 @@
 import { db } from "./db.js";
-import { generateTID } from "./tid.js";
+import { generateTID, APPROVAL_COLLECTION } from "./tid.js";
+import { getAuth } from "./auth.svelte.js";
 import type { Approval, ApprovalRecord } from "./types.js";
 
 export async function createApproval(
@@ -18,9 +19,24 @@ export async function createApproval(
 }
 
 export async function deleteApproval(approval: Approval): Promise<void> {
-  if (approval.id) {
-    await db.approvals.delete(approval.id);
+  if (!approval.id) return;
+
+  if (approval.syncStatus === "synced") {
+    const auth = getAuth();
+    if (auth.agent) {
+      try {
+        await auth.agent.com.atproto.repo.deleteRecord({
+          repo: approval.did,
+          collection: APPROVAL_COLLECTION,
+          rkey: approval.rkey,
+        });
+      } catch (err) {
+        console.error("Failed to delete approval from PDS:", err);
+      }
+    }
   }
+
+  await db.approvals.delete(approval.id);
 }
 
 export function approvalToRecord(approval: Approval): ApprovalRecord {

@@ -9,7 +9,6 @@ import {
 } from "./tid.js";
 import {
   safeParse,
-  JetstreamCommitEventSchema,
   TaskRecordSchema,
   OpRecordSchema,
   TrustRecordSchema,
@@ -115,10 +114,8 @@ export class JetstreamClient {
 
   private handleMessage(event: MessageEvent): void {
     try {
-      const raw = JSON.parse(event.data as string);
-      if (raw.kind !== "commit") return;
-      const data = safeParse(JetstreamCommitEventSchema, raw, "JetstreamCommitEvent");
-      if (!data) return;
+      const data = JSON.parse(event.data as string) as JetstreamCommitEvent;
+      if (data.kind !== "commit") return;
       if (data.time_us) {
         this.lastCursor = data.time_us;
         this.options.onEvent(data);

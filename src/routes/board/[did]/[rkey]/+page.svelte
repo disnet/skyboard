@@ -22,6 +22,7 @@
     loadJetstreamCursor,
     processJetstreamEvent,
   } from "$lib/jetstream.js";
+  import { deleteBoardFromPDS } from "$lib/sync.js";
   import {
     fetchRemoteBoard,
     fetchRemoteTasks,
@@ -690,6 +691,11 @@
     }
     if (auth.did && title !== task.effectiveTitle) {
       createOp(auth.did, task.sourceTask, boardUri, { title });
+      // Update the task record's title so it passes the sync filter
+      // (tasks with empty titles are excluded from PDS sync)
+      if (!task.sourceTask.title && task.sourceTask.id) {
+        db.tasks.update(task.sourceTask.id, { title, syncStatus: "pending" });
+      }
     }
     inlineEditPos = null;
     if (andContinue && pos) {
@@ -722,8 +728,10 @@
         createdAt: new Date().toISOString(),
         syncStatus: "pending" as const,
       };
-      db.tasks.add(taskData).then(() => {
+      db.tasks.add(taskData).then((id) => {
         createOp(auth.did!, taskData as Task, boardUri, { title: line });
+        // Update the task record's title so it passes the sync filter
+        db.tasks.update(id, { title: line, syncStatus: "pending" });
       });
       prevPos = newPosition;
     }
@@ -956,6 +964,10 @@
 
     const boardId = board.current.id;
     const uri = boardUri;
+
+    if (auth.agent && auth.did) {
+      await deleteBoardFromPDS(auth.agent, auth.did, board.current);
+    }
 
     await db.tasks.where("boardUri").equals(uri).delete();
     await db.ops.where("boardUri").equals(uri).delete();

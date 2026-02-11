@@ -83,19 +83,6 @@ export const ReactionRecordSchema = z.object({
   createdAt: z.string().max(MAX_STRING),
 });
 
-export const JetstreamCommitEventSchema = z.object({
-  did: z.string().max(MAX_STRING),
-  time_us: z.number(),
-  kind: z.literal("commit"),
-  commit: z.object({
-    rev: z.string().max(MAX_STRING),
-    operation: z.enum(["create", "update", "delete"]),
-    collection: z.string().max(MAX_STRING),
-    rkey: z.string().max(MAX_STRING),
-    record: z.record(z.string(), z.unknown()).optional(),
-  }),
-});
-
 export function safeParse<T>(
   schema: z.ZodType<T>,
   data: unknown,
