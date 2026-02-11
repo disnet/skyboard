@@ -483,16 +483,15 @@
                   : "Add a comment..."}
                 maxlength={10240}
                 disabled={submittingComment}
+                onsubmit={submitComment}
               />
-              {#if commentText.trim()}
-                <button
-                  class="comment-submit-btn"
-                  type="submit"
-                  disabled={submittingComment}
-                >
-                  Comment
-                </button>
-              {/if}
+              <button
+                class="comment-submit-btn"
+                type="submit"
+                disabled={!commentText.trim() || submittingComment}
+              >
+                Comment
+              </button>
             </form>
           {/if}
           {#if taskComments.length > 0}
@@ -524,7 +523,7 @@
                       >
                     {/if}
                   </div>
-                  <div class="comment-text"><MentionText text={comment.text} /></div>
+                  <div class="comment-text rendered-description">{@html DOMPurify.sanitize(markedInstance.parse(comment.text) as string)}</div>
                 </div>
               {/each}
             </div>
@@ -1031,7 +1030,6 @@
     font-size: 0.8125rem;
     line-height: 1.5;
     color: var(--color-text);
-    white-space: pre-wrap;
     word-break: break-word;
   }
 

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { untrack } from "svelte";
   import { EditorView, basicSetup } from "codemirror";
-  import { EditorState, Compartment } from "@codemirror/state";
+  import { EditorState, Compartment, Prec } from "@codemirror/state";
   import { markdown } from "@codemirror/lang-markdown";
   import { languages } from "@codemirror/language-data";
   import { indentWithTab } from "@codemirror/commands";
@@ -9,17 +9,20 @@
   import { autocompletion } from "@codemirror/autocomplete";
   import { mentionCompletionSource } from "$lib/mention-completions.js";
   import { markdownLivePreview } from "$lib/markdown-live-preview.js";
+  import { formattingToolbar } from "$lib/editor-formatting-toolbar.js";
 
   let {
     value = $bindable(""),
     placeholder = "",
     maxlength,
     disabled = false,
+    onsubmit,
   }: {
     value?: string;
     placeholder?: string;
     maxlength?: number;
     disabled?: boolean;
+    onsubmit?: () => void;
   } = $props();
 
   let container: HTMLDivElement | undefined = $state();
@@ -39,9 +42,13 @@
         markdown({ codeLanguages: languages }),
         EditorView.lineWrapping,
         keymap.of([indentWithTab]),
+        Prec.high(keymap.of([
+          { key: "Mod-Enter", run: () => { onsubmit?.(); return true; } },
+        ])),
         cmPlaceholder(placeholder),
         autocompletion({ override: [mentionCompletionSource] }),
         markdownLivePreview,
+        formattingToolbar,
         editableCompartment.of(EditorView.editable.of(!isDisabled)),
         EditorView.updateListener.of((update) => {
           if (update.docChanged && !updatingFromProp) {
@@ -59,7 +66,7 @@
           },
           ".cm-content": {
             caretColor: "var(--color-primary)",
-            padding: "0.375rem 0",
+            padding: "0.5rem 0",
           },
           "&.cm-focused": {
             outline: "none",
@@ -126,7 +133,6 @@
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
     overflow: hidden;
-    min-height: 2.5rem;
     background: var(--color-surface);
   }
 

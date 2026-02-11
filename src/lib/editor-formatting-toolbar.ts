@@ -1,5 +1,8 @@
-import { EditorView, showTooltip, type Tooltip } from "@codemirror/view";
-import { StateField } from "@codemirror/state";
+import { EditorView, showTooltip, keymap, type Tooltip } from "@codemirror/view";
+import { StateField, Prec } from "@codemirror/state";
+
+const isMac = typeof navigator !== "undefined" && /Mac/.test(navigator.platform);
+const mod = isMac ? "\u2318" : "Ctrl+";
 
 interface FormatAction {
   label: string;
@@ -9,26 +12,57 @@ interface FormatAction {
 }
 
 const FORMAT_ACTIONS: FormatAction[] = [
-  { label: "B", title: "Bold", marker: "**", kind: "wrap" },
-  { label: "I", title: "Italic", marker: "*", kind: "wrap" },
-  { label: "<>", title: "Code", marker: "`", kind: "wrap" },
-  { label: "S", title: "Strikethrough", marker: "~~", kind: "wrap" },
-  { label: "Link", title: "Link", marker: "", kind: "link" },
+  { label: "B", title: `Bold (${mod}B)`, marker: "**", kind: "wrap" },
+  { label: "I", title: `Italic (${mod}I)`, marker: "*", kind: "wrap" },
+  { label: "<>", title: `Code (${mod}E)`, marker: "`", kind: "wrap" },
+  { label: "S", title: `Strikethrough (${mod}Shift+X)`, marker: "~~", kind: "wrap" },
+  { label: "Link", title: `Link (${mod}K)`, marker: "", kind: "link" },
 ];
 
+/** Find the word boundaries around the cursor position. */
+function wordAt(view: EditorView, pos: number): { from: number; to: number } | null {
+  const line = view.state.doc.lineAt(pos);
+  const text = line.text;
+  const offset = pos - line.from;
+  if (offset > 0 && /\w/.test(text[offset - 1]) || offset < text.length && /\w/.test(text[offset])) {
+    let start = offset;
+    let end = offset;
+    while (start > 0 && /\w/.test(text[start - 1])) start--;
+    while (end < text.length && /\w/.test(text[end])) end++;
+    return { from: line.from + start, to: line.from + end };
+  }
+  return null;
+}
+
 function applyFormat(view: EditorView, action: FormatAction) {
-  const { from, to } = view.state.selection.main;
-  if (from === to) return;
+  let { from, to } = view.state.selection.main;
+  const hasSelection = from !== to;
+
+  // No selection: expand to the word at cursor
+  if (!hasSelection) {
+    const word = wordAt(view, from);
+    if (word) {
+      from = word.from;
+      to = word.to;
+    }
+  }
 
   const selected = view.state.doc.sliceString(from, to);
+  const isEmpty = from === to;
 
   if (action.kind === "link") {
-    const replacement = `[${selected}](url)`;
-    view.dispatch({
-      changes: { from, to, insert: replacement },
-      // Place cursor selecting "url" inside the parens
-      selection: { anchor: from + selected.length + 3, head: from + selected.length + 6 },
-    });
+    if (!isEmpty) {
+      const replacement = `[${selected}](url)`;
+      view.dispatch({
+        changes: { from, to, insert: replacement },
+        selection: { anchor: from + selected.length + 3, head: from + selected.length + 6 },
+      });
+    } else {
+      view.dispatch({
+        changes: { from, to: from, insert: "[](url)" },
+        selection: { anchor: from + 1 },
+      });
+    }
     view.focus();
     return;
   }
@@ -47,14 +81,19 @@ function applyFormat(view: EditorView, action: FormatAction) {
         { from: from - len, to: from, insert: "" },
         { from: to, to: to + len, insert: "" },
       ],
-      selection: { anchor: from - len, head: to - len },
+      selection: { anchor: from - len, head: isEmpty ? from - len : to - len },
     });
-  } else {
-    // Wrap selection with markers
+  } else if (!isEmpty) {
     const replacement = `${m}${selected}${m}`;
     view.dispatch({
       changes: { from, to, insert: replacement },
       selection: { anchor: from + len, head: to + len },
+    });
+  } else {
+    // Cursor not near a word: insert markers and place cursor between them
+    view.dispatch({
+      changes: { from, to: from, insert: `${m}${m}` },
+      selection: { anchor: from + len },
     });
   }
   view.focus();
@@ -148,4 +187,13 @@ const toolbarTheme = EditorView.baseTheme({
   },
 });
 
-export const formattingToolbar = [toolbarTooltip, toolbarTheme];
+const formatKeymap = Prec.high(keymap.of([
+  { key: "Mod-b", run: (view) => { applyFormat(view, FORMAT_ACTIONS[0]); return true; } },
+  { key: "Mod-i", run: (view) => { applyFormat(view, FORMAT_ACTIONS[1]); return true; } },
+  { key: "Mod-e", run: (view) => { applyFormat(view, FORMAT_ACTIONS[2]); return true; } },
+  { key: "Mod-Shift-x", run: (view) => { applyFormat(view, FORMAT_ACTIONS[3]); return true; } },
+  { key: "Mod-k", run: (view) => { applyFormat(view, FORMAT_ACTIONS[4]); return true; } },
+]));
+
+export { formatKeymap as formattingKeymap };
+export const formattingToolbar = [toolbarTooltip, toolbarTheme, formatKeymap];
