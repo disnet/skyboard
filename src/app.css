@@ -19,9 +19,44 @@
   --radius-md: 8px;
   --radius-lg: 12px;
 
+  --color-warning-bg: #fff8e6;
+  --color-success-alpha: rgba(34, 197, 94, 0.1);
+  --color-warning-alpha: rgba(245, 158, 11, 0.08);
+
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
   --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.08);
   --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.1);
+
+  --color-backdrop: rgba(0, 0, 0, 0.4);
+  --color-overlay-light: rgba(0, 0, 0, 0.3);
+}
+
+[data-theme="dark"] {
+  --color-bg: #1a1a1e;
+  --color-surface: #2c2c30;
+  --color-text: #e5e5e7;
+  --color-text-secondary: #a0a0a5;
+  --color-primary: #3b8eed;
+  --color-primary-hover: #5aa3f5;
+  --color-primary-alpha: rgba(59, 142, 237, 0.2);
+  --color-border: #3e3e44;
+  --color-border-light: #353539;
+  --color-error: #e55555;
+  --color-error-bg: #3a2020;
+  --color-success: #34d058;
+  --color-warning: #f0ad4e;
+  --color-warning-bg: #3a3020;
+  --color-column-bg: #222226;
+  --color-drag-over: #1e2a3a;
+  --color-success-alpha: rgba(52, 208, 88, 0.15);
+  --color-warning-alpha: rgba(240, 173, 78, 0.12);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.4);
+
+  --color-backdrop: rgba(0, 0, 0, 0.6);
+  --color-overlay-light: rgba(0, 0, 0, 0.5);
 }
 
 *,
@@ -48,4 +83,39 @@ a {
 
 a:hover {
   text-decoration: underline;
+}
+
+[data-theme="dark"] .cm-editor .cm-selectionBackground,
+[data-theme="dark"] .cm-editor.cm-focused .cm-selectionBackground,
+[data-theme="dark"] .cm-editor ::selection {
+  background: rgba(59, 142, 237, 0.35) !important;
+}
+
+[data-theme="dark"] .cm-editor .cm-cursor {
+  border-left-color: var(--color-text) !important;
+}
+
+[data-theme="dark"] .cm-editor .cm-content {
+  color: var(--color-text);
+}
+
+[data-theme="dark"] .cm-editor .cm-line {
+  color: var(--color-text);
+}
+
+[data-theme="dark"] .cm-editor .cm-activeLineGutter,
+[data-theme="dark"] .cm-editor .cm-gutters {
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  border-color: var(--color-border);
+}
+
+[data-theme="dark"] .cm-editor .cm-tooltip {
+  background: var(--color-surface);
+  color: var(--color-text);
+  border-color: var(--color-border);
+}
+
+[data-theme="dark"] .cm-editor .cm-tooltip-autocomplete ul li[aria-selected] {
+  background: var(--color-primary-alpha);
 }

@@ -75,7 +75,7 @@
   }
 
   .sync-badge.pending {
-    background: #fff8e6;
+    background: var(--color-warning-bg);
     color: var(--color-warning);
   }
 

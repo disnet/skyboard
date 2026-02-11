@@ -158,7 +158,7 @@
   .panel-backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.3);
+    background: var(--color-overlay-light);
     z-index: 100;
     display: flex;
     justify-content: flex-end;

@@ -1124,7 +1124,7 @@
 
   .open-badge {
     font-size: 0.6875rem;
-    background: rgba(34, 197, 94, 0.1);
+    background: var(--color-success-alpha);
     color: rgb(22, 163, 74);
     padding: 0.125rem 0.5rem;
     border-radius: var(--radius-sm);
@@ -1355,7 +1355,7 @@
     padding: 0.5rem 1.5rem;
     font-size: 0.8125rem;
     color: var(--color-warning);
-    background: rgba(245, 158, 11, 0.08);
+    background: var(--color-warning-alpha);
     border-bottom: 1px solid var(--color-border-light);
     flex-shrink: 0;
     display: flex;

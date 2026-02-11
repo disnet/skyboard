@@ -41,6 +41,7 @@
       title: "General",
       shortcuts: [
         { keys: ["b"], description: "Switch board" },
+        { keys: ["t"], description: "Toggle theme" },
         { keys: ["?"], description: "Show this help" },
       ],
     },
@@ -82,7 +83,7 @@
   .modal-backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.4);
+    background: var(--color-backdrop);
     display: flex;
     align-items: center;
     justify-content: center;
