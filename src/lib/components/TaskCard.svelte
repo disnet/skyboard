@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { MaterializedTask } from "$lib/types.js";
+  import type { MaterializedTask, Label } from "$lib/types.js";
   import { Marked } from "marked";
   import { getDraggedCard, setDraggedCard } from "$lib/drag-state.svelte.js";
   import DOMPurify from "dompurify";
@@ -19,6 +19,7 @@
     currentUserDid,
     pending = false,
     commentCount = 0,
+    boardLabels = [],
     onedit,
     readonly = false,
   }: {
@@ -26,9 +27,16 @@
     currentUserDid: string;
     pending?: boolean;
     commentCount?: number;
+    boardLabels?: Label[];
     onedit: (task: MaterializedTask) => void;
     readonly?: boolean;
   } = $props();
+
+  const taskLabels = $derived(
+    task.effectiveLabelIds
+      .map((id) => boardLabels.find((l) => l.id === id))
+      .filter((l): l is Label => l !== undefined),
+  );
 
   const renderedDescription = $derived(
     task.effectiveDescription
@@ -97,6 +105,18 @@
     </div>
   {/if}
   <div class="task-title">{task.effectiveTitle}</div>
+  {#if taskLabels.length > 0}
+    <div class="task-labels">
+      {#each taskLabels as label (label.id)}
+        <span
+          class="label-pill"
+          style="background: {label.color}20; color: {label.color}; border-color: {label.color}40;"
+        >
+          {label.name}
+        </span>
+      {/each}
+    </div>
+  {/if}
   {#if task.effectiveDescription}
     <div class="task-desc">{@html renderedDescription}</div>
   {/if}
@@ -188,6 +208,22 @@
     font-size: 0.8125rem;
     font-weight: 500;
     word-break: break-word;
+  }
+
+  .task-labels {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    margin-top: 0.25rem;
+  }
+
+  .label-pill {
+    font-size: 0.625rem;
+    font-weight: 600;
+    padding: 0.0625rem 0.375rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid;
+    line-height: 1.4;
   }
 
   .task-desc {

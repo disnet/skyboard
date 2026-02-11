@@ -1,12 +1,12 @@
 <script lang="ts">
   import { untrack } from "svelte";
   import { db } from "$lib/db.js";
-  import type { MaterializedTask, Comment } from "$lib/types.js";
+  import type { MaterializedTask, Comment, Label } from "$lib/types.js";
   import { createOp } from "$lib/ops.js";
   import { createComment, deleteComment } from "$lib/comments.js";
   import { getActionStatus, isContentVisible } from "$lib/permissions.js";
   import type { PermissionStatus } from "$lib/permissions.js";
-  import { COMMENT_COLLECTION, buildAtUri } from "$lib/tid.js";
+  import { COMMENT_COLLECTION, buildAtUri, generateTID } from "$lib/tid.js";
   import AuthorBadge from "./AuthorBadge.svelte";
   import MentionText from "./MentionText.svelte";
   import MentionTextarea from "./MentionTextarea.svelte";
@@ -32,6 +32,7 @@
     ownerTrustedDids,
     approvedUris,
     comments = [],
+    boardLabels = [],
     boardUri = "",
     onclose,
     readonly = false,
@@ -43,6 +44,7 @@
     ownerTrustedDids: Set<string>;
     approvedUris: Set<string>;
     comments?: Comment[];
+    boardLabels?: Label[];
     boardUri?: string;
     onclose: () => void;
     readonly?: boolean;
@@ -90,7 +92,7 @@
   const allTaskComments = $derived(
     comments
       .filter((c) => c.targetTaskUri === taskUri)
-      .sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
   );
 
   // Only show comments from visible users
@@ -128,10 +130,82 @@
     await deleteComment(comment);
   }
 
+  function relativeTime(iso: string): string {
+    const seconds = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+    if (seconds < 60) return "just now";
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}m`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h`;
+    const days = Math.floor(hours / 24);
+    if (days < 30) return `${days}d`;
+    const months = Math.floor(days / 30);
+    if (months < 12) return `${months}mo`;
+    return `${Math.floor(months / 12)}y`;
+  }
+
   // We intentionally capture initial values for editing a copy
   /* eslint-disable svelte/state-referenced-locally */
   let editTitle = $state(task.effectiveTitle);
   let editDescription = $state(task.effectiveDescription ?? "");
+  let editLabelIds = $state<string[]>([...task.effectiveLabelIds]);
+
+  function toggleLabel(id: string) {
+    if (editLabelIds.includes(id)) {
+      editLabelIds = editLabelIds.filter((l) => l !== id);
+    } else {
+      editLabelIds = [...editLabelIds, id];
+    }
+  }
+
+  const isBoardOwner = $derived(currentUserDid === boardOwnerDid);
+
+  const LABEL_COLORS = [
+    { name: "Red", value: "#ef4444" },
+    { name: "Orange", value: "#f97316" },
+    { name: "Amber", value: "#f59e0b" },
+    { name: "Green", value: "#22c55e" },
+    { name: "Teal", value: "#14b8a6" },
+    { name: "Blue", value: "#3b82f6" },
+    { name: "Indigo", value: "#6366f1" },
+    { name: "Violet", value: "#8b5cf6" },
+    { name: "Pink", value: "#ec4899" },
+    { name: "Gray", value: "#6b7280" },
+  ];
+
+  let showAddLabel = $state(false);
+  let newLabelName = $state("");
+  let newLabelColor = $state("#ef4444");
+
+  async function addBoardLabel() {
+    const labelName = newLabelName.trim();
+    if (!labelName || !boardUri) return;
+
+    // Find the board by rkey from boardUri
+    const parts = boardUri.split("/");
+    const boardRkey = parts[parts.length - 1];
+    const board = await db.boards.where("rkey").equals(boardRkey).first();
+    if (!board?.id) return;
+
+    const newLabel: Label = { id: generateTID(), name: labelName, color: newLabelColor };
+    const existingLabels = board.labels ?? [];
+    await db.boards.update(board.id, {
+      labels: [...existingLabels, newLabel],
+      syncStatus: "pending",
+    });
+
+    // Auto-select the newly created label
+    editLabelIds = [...editLabelIds, newLabel.id];
+
+    newLabelName = "";
+    showAddLabel = false;
+  }
+
+  const taskLabelsForDisplay = $derived(
+    task.effectiveLabelIds
+      .map((id) => boardLabels.find((l) => l.id === id))
+      .filter((l): l is Label => l !== undefined),
+  );
 
   let editorContainer: HTMLDivElement | undefined = $state();
   let editorView: EditorView | undefined;
@@ -198,6 +272,10 @@
     if (title !== task.effectiveTitle) fields.title = title;
     if (description !== task.effectiveDescription)
       fields.description = description;
+    const sortedEditLabelIds = [...editLabelIds].sort();
+    const sortedEffectiveLabelIds = [...task.effectiveLabelIds].sort();
+    if (JSON.stringify(sortedEditLabelIds) !== JSON.stringify(sortedEffectiveLabelIds))
+      fields.labelIds = [...editLabelIds];
     if (Object.keys(fields).length > 0) {
       await createOp(currentUserDid, task.sourceTask, task.boardUri, fields);
     }
@@ -260,7 +338,97 @@
         {:else}
           <p class="no-description">No description</p>
         {/if}
+
+        {#if taskLabelsForDisplay.length > 0}
+          <div class="labels-section">
+            <div class="labels-header">
+              <label>Labels</label>
+            </div>
+            <div class="label-pills">
+              {#each taskLabelsForDisplay as lbl (lbl.id)}
+                <span
+                  class="label-pill"
+                  style="background: {lbl.color}20; color: {lbl.color}; border-color: {lbl.color}40;"
+                >
+                  {lbl.name}
+                </span>
+              {/each}
+            </div>
+          </div>
+        {/if}
       {:else}
+        <div class="labels-section">
+          <div class="labels-header">
+            <!-- svelte-ignore a11y_label_has_associated_control -->
+            <label>Labels</label>
+            {#if editStatus === "denied"}
+              <span class="field-status denied">Trusted users only</span>
+            {/if}
+          </div>
+          <div class="label-picker" class:disabled={editStatus === "denied"}>
+            {#each boardLabels as lbl (lbl.id)}
+              <button
+                class="label-toggle"
+                class:selected={editLabelIds.includes(lbl.id)}
+                style="--label-color: {lbl.color};"
+                onclick={() => toggleLabel(lbl.id)}
+                disabled={editStatus === "denied"}
+              >
+                <span
+                  class="label-dot"
+                  style="background: {lbl.color};"
+                ></span>
+                {lbl.name}
+              </button>
+            {/each}
+            {#if isBoardOwner && editStatus !== "denied" && !showAddLabel}
+              <button
+                class="label-toggle add-new-label"
+                onclick={() => (showAddLabel = true)}
+              >+</button>
+            {/if}
+          </div>
+          {#if showAddLabel && isBoardOwner}
+            <div class="add-label-form">
+              <span
+                class="add-label-dot"
+                style="background: {newLabelColor};"
+              ></span>
+              <input
+                class="add-label-input"
+                type="text"
+                bind:value={newLabelName}
+                placeholder="Label name"
+                onkeydown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    addBoardLabel();
+                  }
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    showAddLabel = false;
+                    newLabelName = "";
+                  }
+                }}
+              />
+              <select bind:value={newLabelColor} class="add-label-color">
+                {#each LABEL_COLORS as c}
+                  <option value={c.value}>{c.name}</option>
+                {/each}
+              </select>
+              <button
+                class="add-label-confirm"
+                onclick={addBoardLabel}
+                disabled={!newLabelName.trim()}
+              >Add</button>
+              <button
+                class="add-label-cancel"
+                onclick={() => { showAddLabel = false; newLabelName = ""; }}
+              >&times;</button>
+            </div>
+          {/if}
+        </div>
+
         <div class="field">
           <div class="field-header">
             <label>Description</label>
@@ -287,40 +455,6 @@
           <div class="comments-header">
             <label>Comments ({taskComments.length})</label>
           </div>
-          {#if taskComments.length > 0}
-            <div class="comments-list">
-              {#each taskComments as comment (comment.id)}
-                <div class="comment">
-                  <div class="comment-header">
-                    <AuthorBadge
-                      did={comment.did}
-                      isCurrentUser={comment.did === currentUserDid}
-                    />
-                    <span class="comment-time"
-                      >{new Date(comment.createdAt).toLocaleString()}</span
-                    >
-                    {#if comment.syncStatus === "pending"}
-                      <span
-                        class="comment-sync-dot pending"
-                        title="Pending sync"
-                      ></span>
-                    {:else if comment.syncStatus === "error"}
-                      <span class="comment-sync-dot error" title="Sync error"
-                      ></span>
-                    {/if}
-                    {#if comment.did === currentUserDid}
-                      <button
-                        class="comment-delete-btn"
-                        onclick={() => handleDeleteComment(comment)}
-                        title="Delete comment">&times;</button
-                      >
-                    {/if}
-                  </div>
-                  <div class="comment-text"><MentionText text={comment.text} /></div>
-                </div>
-              {/each}
-            </div>
-          {/if}
           {#if !readonly && commentStatus !== "denied"}
             <form
               class="comment-form"
@@ -348,6 +482,40 @@
                 </button>
               {/if}
             </form>
+          {/if}
+          {#if taskComments.length > 0}
+            <div class="comments-list">
+              {#each taskComments as comment (comment.id)}
+                <div class="comment">
+                  <div class="comment-header">
+                    <AuthorBadge
+                      did={comment.did}
+                      isCurrentUser={comment.did === currentUserDid}
+                    />
+                    <span class="comment-time" title={new Date(comment.createdAt).toLocaleString()}
+                      >{relativeTime(comment.createdAt)}</span
+                    >
+                    {#if comment.syncStatus === "pending"}
+                      <span
+                        class="comment-sync-dot pending"
+                        title="Pending sync"
+                      ></span>
+                    {:else if comment.syncStatus === "error"}
+                      <span class="comment-sync-dot error" title="Sync error"
+                      ></span>
+                    {/if}
+                    {#if comment.did === currentUserDid}
+                      <button
+                        class="comment-delete-btn"
+                        onclick={() => handleDeleteComment(comment)}
+                        title="Delete comment">&times;</button
+                      >
+                    {/if}
+                  </div>
+                  <div class="comment-text"><MentionText text={comment.text} /></div>
+                </div>
+              {/each}
+            </div>
           {/if}
         </div>
       {/if}
@@ -663,6 +831,157 @@
     font-size: 0.875rem;
     color: var(--color-text-secondary);
     font-style: italic;
+  }
+
+  .labels-section {
+    margin-top: 1rem;
+  }
+
+  .labels-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.375rem;
+  }
+
+  .labels-header label {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--color-text-secondary);
+  }
+
+  .label-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+  }
+
+  .label-pill {
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.125rem 0.5rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid;
+    line-height: 1.4;
+  }
+
+  .add-new-label {
+    color: var(--color-text-secondary) !important;
+    border-style: dashed !important;
+    padding: 0.25rem 0.5rem !important;
+    font-size: 0.875rem !important;
+  }
+
+  .add-new-label:hover {
+    color: var(--color-primary) !important;
+    border-color: var(--color-primary) !important;
+  }
+
+  .add-label-form {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    margin-top: 0.375rem;
+  }
+
+  .add-label-dot {
+    width: 0.75rem;
+    height: 0.75rem;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .add-label-input {
+    flex: 1;
+    padding: 0.3rem 0.5rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    font-size: 0.8125rem;
+    background: var(--color-bg);
+    color: var(--color-text);
+  }
+
+  .add-label-input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+  }
+
+  .add-label-color {
+    padding: 0.3rem 0.25rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    background: var(--color-surface);
+    color: var(--color-text);
+    cursor: pointer;
+  }
+
+  .add-label-confirm {
+    padding: 0.3rem 0.625rem;
+    background: var(--color-primary);
+    color: white;
+    border: none;
+    border-radius: var(--radius-md);
+    font-size: 0.8125rem;
+    cursor: pointer;
+  }
+
+  .add-label-confirm:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .add-label-cancel {
+    background: none;
+    border: none;
+    font-size: 1rem;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    padding: 0 0.25rem;
+    line-height: 1;
+  }
+
+  .label-picker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+  }
+
+  .label-picker.disabled {
+    opacity: 0.6;
+    pointer-events: none;
+  }
+
+  .label-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.25rem 0.625rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+    color: var(--color-text);
+    font-size: 0.8125rem;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .label-toggle:hover:not(:disabled) {
+    border-color: var(--label-color);
+  }
+
+  .label-toggle.selected {
+    background: color-mix(in srgb, var(--label-color) 12%, transparent);
+    border-color: color-mix(in srgb, var(--label-color) 40%, transparent);
+    color: var(--label-color);
+    font-weight: 500;
+  }
+
+  .label-dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    flex-shrink: 0;
   }
 
   .comments-section {

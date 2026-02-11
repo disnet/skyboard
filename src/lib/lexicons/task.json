@@ -34,6 +34,12 @@
             "maxLength": 256,
             "description": "Fractional index position for sort ordering within a column"
           },
+          "labelIds": {
+            "type": "array",
+            "maxLength": 50,
+            "items": { "type": "string" },
+            "description": "IDs of labels assigned to this task"
+          },
           "order": {
             "type": "integer",
             "minimum": 0,

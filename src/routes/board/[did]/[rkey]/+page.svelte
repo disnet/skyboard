@@ -91,6 +91,7 @@
             name: boardData.name,
             description: boardData.description,
             columns: boardData.columns,
+            labels: boardData.labels,
             open: boardData.open,
             createdAt: boardData.createdAt,
             syncStatus: boardData.syncStatus,
@@ -519,6 +520,7 @@
           {ownerTrustedDids}
           {approvedUris}
           commentCounts={commentCountsByTask}
+          boardLabels={board.current.labels ?? []}
           onedit={openTaskEditor}
           readonly={!auth.isLoggedIn}
         />
@@ -570,6 +572,7 @@
       {ownerTrustedDids}
       {approvedUris}
       comments={allComments.current ?? []}
+      boardLabels={board.current.labels ?? []}
       {boardUri}
       onclose={closeTaskEditor}
       readonly={!auth.isLoggedIn}

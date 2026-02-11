@@ -27,6 +27,12 @@
             "items": { "type": "ref", "ref": "#column" },
             "description": "Columns in this board"
           },
+          "labels": {
+            "type": "array",
+            "maxLength": 50,
+            "items": { "type": "ref", "ref": "#label" },
+            "description": "Labels available on this board"
+          },
           "open": {
             "type": "boolean",
             "description": "Whether the board is open (anyone can propose tasks/comments) or closed (trusted only)"
@@ -56,6 +62,31 @@
           "type": "integer",
           "minimum": 0,
           "description": "Sort order of the column"
+        }
+      }
+    },
+    "label": {
+      "type": "object",
+      "required": ["id", "name", "color"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "TID identifier for the label"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 256,
+          "description": "Name of the label"
+        },
+        "color": {
+          "type": "string",
+          "maxLength": 32,
+          "description": "Color of the label (hex code)"
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 1024,
+          "description": "Optional description of the label"
         }
       }
     }

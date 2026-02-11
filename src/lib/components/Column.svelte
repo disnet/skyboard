@@ -2,7 +2,7 @@
   import { db } from "$lib/db.js";
   import { generateTID } from "$lib/tid.js";
   import { generateKeyBetween } from "fractional-indexing";
-  import type { Column, MaterializedTask } from "$lib/types.js";
+  import type { Column, Label, MaterializedTask } from "$lib/types.js";
   import { createOp } from "$lib/ops.js";
   import { getActionStatus } from "$lib/permissions.js";
   import type { PermissionStatus } from "$lib/permissions.js";
@@ -20,6 +20,7 @@
     ownerTrustedDids,
     approvedUris,
     commentCounts = new Map(),
+    boardLabels = [],
     onedit,
     readonly = false,
   }: {
@@ -32,6 +33,7 @@
     ownerTrustedDids: Set<string>;
     approvedUris: Set<string>;
     commentCounts?: Map<string, number>;
+    boardLabels?: Label[];
     onedit: (task: MaterializedTask) => void;
     readonly?: boolean;
   } = $props();
@@ -225,6 +227,7 @@
           commentCount={commentCounts.get(
             `at://${task.ownerDid}/dev.skyboard.task/${task.rkey}`,
           ) ?? 0}
+          {boardLabels}
           {onedit}
           {readonly}
         />

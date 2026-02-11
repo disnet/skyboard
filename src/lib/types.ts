@@ -6,6 +6,13 @@ export interface Column {
   order: number;
 }
 
+export interface Label {
+  id: string;
+  name: string;
+  color: string;
+  description?: string;
+}
+
 export interface Board {
   id?: number; // Dexie auto-increment
   rkey: string;
@@ -13,6 +20,7 @@ export interface Board {
   name: string;
   description?: string;
   columns: Column[];
+  labels?: Label[];
   open?: boolean;
   createdAt: string;
   syncStatus: SyncStatus;
@@ -27,6 +35,7 @@ export interface Task {
   columnId: string;
   boardUri: string;
   position?: string;
+  labelIds?: string[];
   order?: number; // Deprecated: use position
   createdAt: string;
   updatedAt?: string;
@@ -38,6 +47,7 @@ export interface BoardRecord {
   name: string;
   description?: string;
   columns: Column[];
+  labels?: Label[];
   open?: boolean;
   createdAt: string;
 }
@@ -49,6 +59,7 @@ export interface TaskRecord {
   columnId: string;
   boardUri: string;
   position?: string;
+  labelIds?: string[];
   order?: number; // Deprecated: use position
   createdAt: string;
   updatedAt?: string;
@@ -61,6 +72,7 @@ export interface OpFields {
   description?: string;
   columnId?: string;
   position?: string;
+  labelIds?: string[];
   order?: number; // Deprecated: use position
 }
 
@@ -163,6 +175,8 @@ export interface MaterializedTask {
   effectiveDescription?: string;
   effectiveColumnId: string;
   effectivePosition: string;
+  labelIds?: string[];
+  effectiveLabelIds: string[];
   ownerDid: string;
   lastModifiedBy: string;
   lastModifiedAt: string;

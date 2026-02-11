@@ -291,6 +291,7 @@ export async function processJetstreamEvent(
       columnId: (record.columnId as string) ?? "",
       boardUri,
       position: record.position as string | undefined,
+      labelIds: (record.labelIds as string[]) ?? undefined,
       order: (record.order as number) ?? 0,
       createdAt: (record.createdAt as string) ?? new Date().toISOString(),
       updatedAt: record.updatedAt as string | undefined,
