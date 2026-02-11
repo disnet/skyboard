@@ -116,6 +116,7 @@ export class JetstreamClient {
   private handleMessage(event: MessageEvent): void {
     try {
       const raw = JSON.parse(event.data as string);
+      if (raw.kind !== "commit") return;
       const data = safeParse(JetstreamCommitEventSchema, raw, "JetstreamCommitEvent");
       if (!data) return;
       if (data.time_us) {
