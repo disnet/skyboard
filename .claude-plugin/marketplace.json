@@ -1,0 +1,15 @@
+{
+  "name": "at-kanban",
+  "description": "Skyboard plugins",
+  "owner": {
+    "name": "disnet"
+  },
+  "plugins": [
+    {
+      "name": "sb",
+      "version": "0.1.0",
+      "description": "Skyboard kanban board CLI — manage boards, columns, and cards on AT Protocol",
+      "source": "./"
+    }
+  ]
+}

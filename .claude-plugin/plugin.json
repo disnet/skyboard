@@ -1,0 +1,9 @@
+{
+  "name": "sb",
+  "version": "0.1.0",
+  "description": "Skyboard kanban board CLI — manage boards, columns, and cards on AT Protocol",
+  "author": {
+    "name": "disnet"
+  },
+  "keywords": ["kanban", "atproto", "skyboard", "cli"]
+}

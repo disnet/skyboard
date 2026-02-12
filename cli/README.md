@@ -104,6 +104,29 @@ sb boards --json
 sb whoami --json
 ```
 
+## Claude Code plugin
+
+The `sb` CLI includes a [Claude Code](https://claude.ai/code) plugin so you can manage boards directly from a Claude Code conversation using `/sb:cards`, `/sb:new`, `/sb:mv`, etc.
+
+### Install the plugin
+
+```bash
+# Add the marketplace (once)
+/plugin marketplace add /path/to/skyboard
+
+# Install the plugin
+/plugin install sb@skyboard
+```
+
+Or from the terminal:
+
+```bash
+claude plugin marketplace add /path/to/skyboard
+claude plugin install sb@skyboard --scope user
+```
+
+Restart Claude Code after installing. All 15 `sb` commands are available as skills (e.g. `/sb:status`, `/sb:cards`, `/sb:new`).
+
 ## How it works
 
 The CLI authenticates via OAuth and talks directly to AT Protocol PDS endpoints — there is no local database. Each command fetches fresh data from the board owner's PDS and all trusted participants, runs the same `materializeTasks()` per-field LWW merge logic as the web app, and displays the result.
