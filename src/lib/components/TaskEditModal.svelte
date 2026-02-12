@@ -16,7 +16,6 @@
   import { EditorState, Prec } from "@codemirror/state";
   import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
   import { languages } from "@codemirror/language-data";
-  import { indentWithTab } from "@codemirror/commands";
   import { keymap, placeholder } from "@codemirror/view";
   import { autocompletion } from "@codemirror/autocomplete";
   import { mentionCompletionSource } from "$lib/mention-completions.js";
@@ -388,7 +387,6 @@
             },
           },
         ])),
-        keymap.of([indentWithTab]),
         placeholder("Write a description..."),
         autocompletion({ override: [mentionCompletionSource] }),
         markdownLivePreview,
@@ -476,6 +474,23 @@
     onclose();
   }
 
+  let modalEl: HTMLDivElement | undefined = $state();
+  let titleInputEl: HTMLInputElement | undefined = $state();
+
+  $effect(() => {
+    if (titleInputEl) {
+      titleInputEl.focus();
+    }
+  });
+
+  function getFocusableElements(): HTMLElement[] {
+    if (!modalEl) return [];
+    const els = modalEl.querySelectorAll<HTMLElement>(
+      'input:not([disabled]):not([tabindex="-1"]), textarea:not([disabled]):not([tabindex="-1"]), button:not([disabled]):not([tabindex="-1"]), select:not([disabled]):not([tabindex="-1"]), [contenteditable="true"], [tabindex]:not([tabindex="-1"]):not([disabled])'
+    );
+    return Array.from(els).filter(el => el.offsetParent !== null);
+  }
+
   let mouseDownOnBackdrop = false;
 
   function handleBackdropMouseDown(e: MouseEvent) {
@@ -488,6 +503,24 @@
   }
 
   function handleKeydown(e: KeyboardEvent) {
+    if (e.key === "Tab") {
+      const focusable = getFocusableElements();
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey) {
+        if (document.activeElement === first || !modalEl?.contains(document.activeElement)) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else {
+        if (document.activeElement === last || !modalEl?.contains(document.activeElement)) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+      return;
+    }
     if (showMoveMenu) {
       handleMoveKeydown(e);
       return;
@@ -519,6 +552,8 @@
     class="modal"
     role="dialog"
     aria-label={readonly ? "View Task" : "Edit Task"}
+    aria-modal="true"
+    bind:this={modalEl}
   >
     <div class="modal-header">
       <div class="modal-header-top">
@@ -529,6 +564,7 @@
             class="edit-title"
             type="text"
             bind:value={editTitle}
+            bind:this={titleInputEl}
             placeholder="Task title"
             disabled={editStatus === "denied"}
           />
@@ -544,6 +580,7 @@
             onmouseenter={handleTriggerEnter}
             onmouseleave={handleTriggerLeave}
             title="{totalReactionCount} reaction{totalReactionCount === 1 ? '' : 's'}"
+            tabindex="-1"
           >
             {#if topEmoji}
               {topEmoji.emoji} {topEmoji.count}
@@ -552,7 +589,7 @@
             {/if}
           </button>
         {/if}
-        <button class="close-btn" onclick={closeModal}>&times;</button>
+        <button class="close-btn" onclick={closeModal} tabindex="-1">&times;</button>
       </div>
     </div>
 

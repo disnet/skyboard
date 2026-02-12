@@ -4,7 +4,6 @@
   import { EditorState, Compartment, Prec } from "@codemirror/state";
   import { markdown } from "@codemirror/lang-markdown";
   import { languages } from "@codemirror/language-data";
-  import { indentWithTab } from "@codemirror/commands";
   import { keymap, placeholder as cmPlaceholder } from "@codemirror/view";
   import { autocompletion } from "@codemirror/autocomplete";
   import { mentionCompletionSource } from "$lib/mention-completions.js";
@@ -41,7 +40,6 @@
         basicSetup,
         markdown({ codeLanguages: languages }),
         EditorView.lineWrapping,
-        keymap.of([indentWithTab]),
         Prec.high(keymap.of([
           { key: "Mod-Enter", run: () => { onsubmit?.(); return true; } },
         ])),
