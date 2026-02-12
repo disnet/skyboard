@@ -48,8 +48,8 @@ import { rmCommand } from "../commands/rm.js";
 import { showCommand } from "../commands/show.js";
 import { cardsCommand } from "../commands/cards.js";
 
-const mockPutRecord = vi.fn(async () => ({ uri: "at://fake", cid: "fakecid" }));
-const mockDeleteRecord = vi.fn(async () => ({}));
+const mockPutRecord = vi.fn(async (_input: any) => ({ uri: "at://fake", cid: "fakecid" }));
+const mockDeleteRecord = vi.fn(async (_input: any) => ({}));
 const mockAgent = {
   com: {
     atproto: {
