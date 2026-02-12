@@ -5,8 +5,15 @@
   import { handleTouchStart } from "$lib/touch-drag.svelte.js";
   import DOMPurify from "dompurify";
   import AuthorBadge from "./AuthorBadge.svelte";
+  import { createOp } from "$lib/ops.js";
 
-  const marked = new Marked();
+  const marked = new Marked({
+    renderer: {
+      checkbox({ checked }: { checked: boolean }) {
+        return `<input ${checked ? 'checked="" ' : ''}type="checkbox"> `;
+      },
+    },
+  });
 
   DOMPurify.addHook("afterSanitizeAttributes", (node) => {
     if (node.tagName === "A") {
@@ -220,9 +227,59 @@
 
   const renderedDescription = $derived(
     task.effectiveDescription
-      ? DOMPurify.sanitize(marked.parse(task.effectiveDescription) as string)
+      ? DOMPurify.sanitize(
+          marked.parse(task.effectiveDescription) as string,
+          { ADD_TAGS: ["input"], ADD_ATTR: ["type", "checked"] },
+        )
       : "",
   );
+
+  const TASK_LIST_RE = /\[([ xX])\]/g;
+
+  function handleCheckboxClick(e: MouseEvent) {
+    const target = e.target as HTMLElement;
+    if (target.tagName !== "INPUT" || (target as HTMLInputElement).type !== "checkbox") return;
+    if (readonly || !currentUserDid || !task.effectiveDescription) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    const container = target.closest(".task-desc");
+    if (!container) return;
+    const checkboxes = container.querySelectorAll('input[type="checkbox"]');
+    const index = Array.from(checkboxes).indexOf(target as HTMLInputElement);
+    if (index === -1) return;
+
+    const desc = task.effectiveDescription;
+    let count = 0;
+    let match: RegExpExecArray | null;
+    TASK_LIST_RE.lastIndex = 0;
+    while ((match = TASK_LIST_RE.exec(desc)) !== null) {
+      if (count === index) {
+        const isChecked = match[1] !== " ";
+        const newChar = isChecked ? " " : "x";
+        const newDesc =
+          desc.slice(0, match.index + 1) + newChar + desc.slice(match.index + 2);
+        createOp(currentUserDid, task.sourceTask, task.boardUri, {
+          description: newDesc,
+        });
+        break;
+      }
+      count++;
+    }
+  }
+
+  const todoStats = $derived.by(() => {
+    const desc = task.effectiveDescription;
+    if (!desc) return null;
+    let total = 0;
+    let checked = 0;
+    for (const m of desc.matchAll(/\[([ xX])\]/g)) {
+      total++;
+      if (m[1] !== " ") checked++;
+    }
+    return total > 0 ? { checked, total } : null;
+  });
 
   const isOwned = $derived(task.ownerDid === currentUserDid);
 
@@ -338,7 +395,8 @@
     </div>
   {/if}
   {#if task.effectiveDescription}
-    <div class="task-desc">{@html renderedDescription}</div>
+    <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
+    <div class="task-desc" onclick={handleCheckboxClick}>{@html renderedDescription}</div>
   {/if}
   <div class="task-meta">
     <AuthorBadge did={task.ownerDid} isCurrentUser={isOwned} />
@@ -348,6 +406,19 @@
         title="{commentCount} comment{commentCount === 1 ? '' : 's'}"
       >
         {commentCount}
+      </span>
+    {/if}
+    {#if todoStats}
+      <span
+        class="todo-badge"
+        class:todo-done={todoStats.checked === todoStats.total}
+        title="{todoStats.checked} of {todoStats.total} completed"
+      >
+        <svg class="todo-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="1.5" y="1.5" width="13" height="13" rx="2" />
+          <path d="M4.5 8.5l2.5 2.5 4.5-5" />
+        </svg>
+        {todoStats.checked}/{todoStats.total}
       </span>
     {/if}
     {#if task.pendingOps.length > 0}
@@ -574,11 +645,38 @@
     margin-bottom: 0;
   }
 
+  .task-desc :global(input[type="checkbox"]) {
+    cursor: pointer;
+    margin: 0 4px 0 0;
+    vertical-align: middle;
+    position: relative;
+    top: -1px;
+  }
+
   .task-meta {
     display: flex;
     align-items: center;
     gap: 0.375rem;
     margin-top: 0.375rem;
+  }
+
+  .todo-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.125rem;
+    font-size: 0.75rem;
+    color: var(--color-text-secondary);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .todo-icon {
+    width: 0.75rem;
+    height: 0.75rem;
+  }
+
+  .todo-badge.todo-done {
+    color: var(--color-success, #22c55e);
   }
 
   .comment-badge {

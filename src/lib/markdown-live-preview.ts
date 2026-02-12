@@ -4,8 +4,43 @@ import {
   type DecorationSet,
   ViewPlugin,
   type ViewUpdate,
+  WidgetType,
 } from "@codemirror/view";
 import { syntaxTree } from "@codemirror/language";
+
+class CheckboxWidget extends WidgetType {
+  constructor(readonly checked: boolean) {
+    super();
+  }
+
+  toDOM(view: EditorView) {
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = this.checked;
+    cb.className = "cm-task-checkbox";
+    cb.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      const pos = view.posAtDOM(cb);
+      const line = view.state.doc.lineAt(pos);
+      const match = line.text.match(/\[([ xX])\]/);
+      if (match && match.index !== undefined) {
+        const from = line.from + match.index;
+        const to = from + match[0].length;
+        const newText = this.checked ? "[ ]" : "[x]";
+        view.dispatch({ changes: { from, to, insert: newText } });
+      }
+    });
+    return cb;
+  }
+
+  eq(other: CheckboxWidget) {
+    return this.checked === other.checked;
+  }
+
+  ignoreEvent() {
+    return false;
+  }
+}
 
 function buildDecorations(view: EditorView): DecorationSet {
   const decs: ReturnType<Decoration["range"]>[] = [];
@@ -128,6 +163,17 @@ function buildDecorations(view: EditorView): DecorationSet {
             return false;
           }
 
+          case "TaskMarker": {
+            const text = view.state.doc.sliceString(from, to);
+            const checked = text.includes("x") || text.includes("X");
+            decs.push(
+              Decoration.replace({
+                widget: new CheckboxWidget(checked),
+              }).range(from, to),
+            );
+            return false;
+          }
+
           case "Link": {
             const linkMarks = nodeRef.node.getChildren("LinkMark");
             const urls = nodeRef.node.getChildren("URL");
@@ -197,6 +243,13 @@ const theme = EditorView.baseTheme({
   ".cm-md-link": {
     color: "var(--color-primary, #3b82f6)",
     textDecoration: "underline",
+  },
+  ".cm-task-checkbox": {
+    cursor: "pointer",
+    margin: "0 2px 0 0",
+    verticalAlign: "middle",
+    position: "relative",
+    top: "-1px",
   },
 });
 

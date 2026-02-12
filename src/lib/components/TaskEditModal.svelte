@@ -14,7 +14,7 @@
   import MentionTextarea from "./MentionTextarea.svelte";
   import { EditorView, basicSetup } from "codemirror";
   import { EditorState, Prec } from "@codemirror/state";
-  import { markdown } from "@codemirror/lang-markdown";
+  import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
   import { languages } from "@codemirror/language-data";
   import { indentWithTab } from "@codemirror/commands";
   import { keymap, placeholder } from "@codemirror/view";
@@ -26,7 +26,13 @@
   import { mentionExtension } from "$lib/mention-markdown.js";
   import DOMPurify from "dompurify";
 
-  const markedInstance = new Marked(mentionExtension());
+  const markedInstance = new Marked(mentionExtension(), {
+    renderer: {
+      checkbox({ checked }: { checked: boolean }) {
+        return `<input ${checked ? 'checked="" ' : ''}type="checkbox"> `;
+      },
+    },
+  });
 
   const EMOJI_OPTIONS = ["\u{1F44D}", "\u{1F44E}", "\u{2764}\u{FE0F}", "\u{1F389}", "\u{1F680}"];
 
@@ -173,6 +179,7 @@
     task.effectiveDescription
       ? DOMPurify.sanitize(
           markedInstance.parse(task.effectiveDescription) as string,
+          { ADD_TAGS: ["input"], ADD_ATTR: ["type", "checked"] },
         )
       : "",
   );
@@ -370,7 +377,7 @@
       doc: initialDoc,
       extensions: [
         basicSetup,
-        markdown({ codeLanguages: languages }),
+        markdown({ codeLanguages: languages, base: markdownLanguage }),
         EditorView.lineWrapping,
         Prec.highest(keymap.of([
           {
@@ -1198,6 +1205,13 @@
 
   .rendered-description :global(:last-child) {
     margin-bottom: 0;
+  }
+
+  .rendered-description :global(input[type="checkbox"]) {
+    margin: 0 4px 0 0;
+    vertical-align: middle;
+    position: relative;
+    top: -1px;
   }
 
   .rendered-description :global(.mention) {
