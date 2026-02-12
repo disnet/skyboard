@@ -23,6 +23,7 @@
   import { formattingToolbar } from "$lib/editor-formatting-toolbar.js";
   import { Marked } from "marked";
   import { mentionExtension } from "$lib/mention-markdown.js";
+  import BlockInsertMenu from "./BlockInsertMenu.svelte";
   import DOMPurify from "dompurify";
 
   const markedInstance = new Marked(mentionExtension(), {
@@ -378,7 +379,7 @@
   );
 
   let editorContainer: HTMLDivElement | undefined = $state();
-  let editorView: EditorView | undefined;
+  let editorView: EditorView | undefined = $state();
 
   $effect(() => {
     if (!editorContainer) return;
@@ -399,7 +400,7 @@
             },
           },
         ])),
-        placeholder("Write a description..."),
+        placeholder("Write a description… Type @ to mention, / for commands"),
         autocompletion({ override: [mentionCompletionSource] }),
         markdownLivePreview,
         formattingToolbar,
@@ -637,11 +638,16 @@
               <span class="field-status denied">Trusted users only</span>
           </div>
           {/if}
-          <div
-            class="editor-wrapper"
-            class:disabled={editStatus === "denied"}
-            bind:this={editorContainer}
-          ></div>
+          <div class="editor-area">
+            {#if editStatus !== "denied"}
+              <BlockInsertMenu {editorView} />
+            {/if}
+            <div
+              class="editor-wrapper"
+              class:disabled={editStatus === "denied"}
+              bind:this={editorContainer}
+            ></div>
+          </div>
         </div>
 
         <div class="labels-section">
@@ -1027,7 +1033,7 @@
   }
 
   .modal-body {
-    padding: 1.25rem;
+    padding: 1.25rem 0;
     flex: 1;
     overflow-y: auto;
   }
@@ -1036,12 +1042,23 @@
     display: flex;
     flex-direction: column;
     gap: 0.375rem;
+    padding: 0 0.75rem 0 0.5rem;
   }
 
   .field label {
     font-size: 0.8125rem;
     font-weight: 500;
     color: var(--color-text-secondary);
+  }
+
+  .editor-area {
+    display: flex;
+    position: relative;
+  }
+
+  .editor-area .editor-wrapper {
+    flex: 1;
+    min-width: 0;
   }
 
   .editor-wrapper {
@@ -1237,6 +1254,10 @@
     word-break: break-word;
   }
 
+  .modal-body > .rendered-description {
+    padding: 0 1.25rem;
+  }
+
   .rendered-description :global(p) {
     margin: 0 0 0.75em;
   }
@@ -1307,10 +1328,12 @@
     font-size: 0.875rem;
     color: var(--color-text-secondary);
     font-style: italic;
+    padding: 0 1.25rem;
   }
 
   .labels-section {
     margin-top: 1rem;
+    padding: 0 1.25rem;
   }
 
   .labels-header {
@@ -1463,7 +1486,7 @@
   .comments-section {
     margin-top: 0.75rem;
     border-top: 1px solid var(--color-border-light);
-    padding-top: 0.75rem;
+    padding: 0.75rem 1.25rem 0;
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
