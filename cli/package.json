@@ -2,6 +2,9 @@
   "name": "skyboard-cli",
   "version": "0.1.0",
   "description": "CLI for Skyboard – a collaborative kanban board on AT Protocol",
+  "author": {
+    "name": "Tim Disney"
+  },
   "type": "module",
   "bin": {
     "sb": "./bin/sb.js"
