@@ -254,6 +254,71 @@ On reconnect or stale cursor (>48h offline), the app backfills by fetching direc
 - [CodeMirror](https://codemirror.net/) for markdown card editing
 - Static build via [@sveltejs/adapter-static](https://www.npmjs.com/package/@sveltejs/adapter-static)
 
+## CLI
+
+Skyboard includes a command-line interface (`sb`) for managing boards and tasks from the terminal. It lives in the `cli/` directory as a standalone package.
+
+### Install
+
+```bash
+cd cli
+npm install
+npm run build
+npm link        # makes `sb` available globally
+```
+
+### Auth
+
+The CLI uses AT Protocol OAuth with a loopback redirect — `sb login` opens your browser, you authorize with your Bluesky account, and the session is stored locally in `~/.config/skyboard/`.
+
+```bash
+sb login alice.bsky.social    # opens browser for OAuth
+sb whoami                     # show current user
+sb logout
+```
+
+### Board navigation
+
+```bash
+sb boards                     # list your boards + joined boards
+sb use "Sprint Board"         # set default board (by name, rkey, AT URI, or URL)
+sb add at://did:plc:xxx/dev.skyboard.board/rkey   # join a board
+sb cols                       # show columns with task counts
+```
+
+### Cards
+
+```bash
+sb cards                      # list all cards grouped by column
+sb cards -c "In Progress"     # filter by column (name, prefix, or number)
+sb cards -s "login"           # search titles and descriptions
+
+sb new "Fix login bug"                    # create card in first column
+sb new "Update docs" -c done -d "..."     # create in specific column with description
+
+sb show 3labc12               # show card details (rkey prefix, min 4 chars)
+sb mv 3lab done               # move card to column
+sb edit 3lab -t "New title"   # edit title
+sb edit 3lab -d "Details"     # edit description
+sb comment 3lab "Looks good"  # add comment
+sb rm 3lab                    # delete card (owner only, with confirmation)
+```
+
+Cards are referenced by **TID rkey prefix** (like git short hashes). `sb cards` shows 7-character truncated rkeys. Columns can be matched by name, prefix (`in` matches `In Progress`), or 1-based index.
+
+### JSON output
+
+All commands support `--json` for machine-readable output, useful for scripting:
+
+```bash
+sb cards --json | jq '.[].cards[].title'
+sb whoami --json
+```
+
+### How it works
+
+The CLI authenticates via OAuth and talks directly to PDS endpoints — no local database. Each command fetches fresh data from the board owner's PDS and all trusted participants, runs the same `materializeTasks()` merge logic as the web app, and displays the result. Write commands (`new`, `mv`, `edit`, `comment`) create AT Protocol records (tasks, ops, comments) in your PDS, which the web app picks up in real time via Jetstream.
+
 ## Development
 
 ```bash

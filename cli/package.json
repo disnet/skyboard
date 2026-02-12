@@ -1,0 +1,27 @@
+{
+  "name": "skyboard-cli",
+  "version": "0.1.0",
+  "description": "CLI for Skyboard – a collaborative kanban board on AT Protocol",
+  "type": "module",
+  "bin": {
+    "sb": "./bin/sb.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@atproto/api": "^0.13.20",
+    "@atproto/common-web": "^0.4.0",
+    "@atproto/oauth-client-node": "^0.3.7",
+    "chalk": "^5.4.1",
+    "commander": "^13.1.0",
+    "fractional-indexing": "^3.2.0",
+    "open": "^10.1.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.3"
+  }
+}
