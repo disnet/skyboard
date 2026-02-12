@@ -183,6 +183,18 @@
       : "",
   );
 
+  const todoStats = $derived.by(() => {
+    const desc = readonly ? task.effectiveDescription : editDescription;
+    if (!desc) return null;
+    let total = 0;
+    let checked = 0;
+    for (const m of desc.matchAll(/\[([ xX])\]/g)) {
+      total++;
+      if (m[1] !== " ") checked++;
+    }
+    return total > 0 ? { checked, total } : null;
+  });
+
   const isOwned = $derived(task.ownerDid === currentUserDid);
 
   const editStatus: PermissionStatus = $derived(
@@ -777,6 +789,19 @@
     <div class="modal-footer">
       <div class="footer-left">
         <AuthorBadge did={task.ownerDid} isCurrentUser={isOwned} />
+        {#if todoStats}
+          <span
+            class="todo-badge"
+            class:todo-done={todoStats.checked === todoStats.total}
+            title="{todoStats.checked} of {todoStats.total} completed"
+          >
+            <svg class="todo-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+              <rect x="1.5" y="1.5" width="13" height="13" rx="2" />
+              <path d="M4.5 8.5l2.5 2.5 4.5-5" />
+            </svg>
+            {todoStats.checked}/{todoStats.total}
+          </span>
+        {/if}
         {#if !readonly && !isOwned && editStatus === "allowed"}
           <span class="op-notice">Changes will be proposed</span>
         {:else if !readonly && !isOwned && editStatus === "denied"}
@@ -1057,6 +1082,25 @@
   .field-status.denied {
     color: var(--color-text-secondary);
     font-style: italic;
+  }
+
+  .todo-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.125rem;
+    font-size: 0.75rem;
+    color: var(--color-text-secondary);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .todo-icon {
+    width: 0.75rem;
+    height: 0.75rem;
+  }
+
+  .todo-badge.todo-done {
+    color: var(--color-success, #22c55e);
   }
 
   .op-notice {
