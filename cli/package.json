@@ -11,7 +11,7 @@
     "bin"
   ],
   "bin": {
-    "sb": "./bin/sb.js"
+    "sb": "bin/sb.js"
   },
   "scripts": {
     "build": "tsc",
