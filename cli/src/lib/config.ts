@@ -77,6 +77,12 @@ export function getDefaultBoard(): BoardRef | undefined {
   return loadConfig().defaultBoard;
 }
 
+export function clearDefaultBoard(): void {
+  const config = loadConfig();
+  delete config.defaultBoard;
+  saveConfig(config);
+}
+
 export function addKnownBoard(board: BoardRef): void {
   const config = loadConfig();
   if (!config.knownBoards.some((b) => b.did === board.did && b.rkey === board.rkey)) {

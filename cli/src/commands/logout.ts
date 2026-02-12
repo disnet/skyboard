@@ -1,5 +1,5 @@
 import { logout } from "../lib/auth.js";
-import { loadAuthInfo } from "../lib/config.js";
+import { loadAuthInfo, clearDefaultBoard } from "../lib/config.js";
 import chalk from "chalk";
 
 export function logoutCommand(): void {
@@ -9,5 +9,6 @@ export function logoutCommand(): void {
     return;
   }
   logout();
+  clearDefaultBoard();
   console.log(chalk.green(`Logged out (was ${info.handle}).`));
 }
