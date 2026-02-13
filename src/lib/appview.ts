@@ -1,12 +1,24 @@
 import { db } from "./db.js";
-import type { Board, Task, Op, Trust, Comment, Approval, Reaction } from "./types.js";
+import type {
+  Board,
+  Task,
+  Op,
+  Trust,
+  Comment,
+  Approval,
+  Reaction,
+} from "./types.js";
 import { addKnownParticipant } from "./remote-sync.js";
 
 const APPVIEW_URL =
   typeof window !== "undefined" &&
   (window as unknown as Record<string, unknown>).__SKYBOARD_APPVIEW_URL__
-    ? String((window as unknown as Record<string, unknown>).__SKYBOARD_APPVIEW_URL__)
-    : "https://appview.skyboard.dev";
+    ? String(
+        (window as unknown as Record<string, unknown>).__SKYBOARD_APPVIEW_URL__,
+      )
+    : "https://skyboard-appview.fly.dev";
+
+const APPVIEW_WS_URL = APPVIEW_URL.replace(/^http/, "ws");
 
 /**
  * Compare two records on the given fields. Uses JSON.stringify for
@@ -24,9 +36,11 @@ function recordsEqual(
     const vb = eb[f];
     if (va === vb) continue;
     if (
-      typeof va === "object" && typeof vb === "object" &&
+      typeof va === "object" &&
+      typeof vb === "object" &&
       JSON.stringify(va) === JSON.stringify(vb)
-    ) continue;
+    )
+      continue;
     return false;
   }
   return true;
@@ -60,7 +74,15 @@ export async function loadBoardFromAppview(
 
     await db.transaction(
       "rw",
-      [db.boards, db.tasks, db.ops, db.trusts, db.comments, db.approvals, db.reactions],
+      [
+        db.boards,
+        db.tasks,
+        db.ops,
+        db.trusts,
+        db.comments,
+        db.approvals,
+        db.reactions,
+      ],
       async () => {
         // Store board
         const boardData: Omit<Board, "id"> = {
@@ -75,13 +97,21 @@ export async function loadBoardFromAppview(
           syncStatus: "synced",
         };
 
-        const existingBoard = await db.boards.where("rkey").equals(rkey).first();
+        const existingBoard = await db.boards
+          .where("rkey")
+          .equals(rkey)
+          .first();
         if (existingBoard?.id) {
           if (existingBoard.syncStatus === "pending") {
             // Local pending wins — skip
           } else if (
             !recordsEqual(existingBoard, boardData, [
-              "name", "description", "columns", "labels", "open", "createdAt",
+              "name",
+              "description",
+              "columns",
+              "labels",
+              "open",
+              "createdAt",
             ])
           ) {
             await db.boards.update(existingBoard.id, boardData);
@@ -115,7 +145,14 @@ export async function loadBoardFromAppview(
             if (existing.syncStatus === "pending") continue;
             if (
               !recordsEqual(existing, taskData, [
-                "title", "description", "columnId", "position", "labelIds", "order", "createdAt", "updatedAt",
+                "title",
+                "description",
+                "columnId",
+                "position",
+                "labelIds",
+                "order",
+                "createdAt",
+                "updatedAt",
               ])
             ) {
               await db.tasks.update(existing.id, taskData);
@@ -146,7 +183,9 @@ export async function loadBoardFromAppview(
             if (existing.syncStatus === "pending") continue;
             if (
               !recordsEqual(existing, opData, [
-                "targetTaskUri", "fields", "createdAt",
+                "targetTaskUri",
+                "fields",
+                "createdAt",
               ])
             ) {
               await db.ops.update(existing.id, opData);
@@ -175,9 +214,7 @@ export async function loadBoardFromAppview(
           if (existing?.id) {
             if (existing.syncStatus === "pending") continue;
             if (
-              !recordsEqual(existing, trustData, [
-                "trustedDid", "createdAt",
-              ])
+              !recordsEqual(existing, trustData, ["trustedDid", "createdAt"])
             ) {
               await db.trusts.update(existing.id, trustData);
             }
@@ -207,7 +244,9 @@ export async function loadBoardFromAppview(
             if (existing.syncStatus === "pending") continue;
             if (
               !recordsEqual(existing, commentData, [
-                "targetTaskUri", "text", "createdAt",
+                "targetTaskUri",
+                "text",
+                "createdAt",
               ])
             ) {
               await db.comments.update(existing.id, commentData);
@@ -235,9 +274,7 @@ export async function loadBoardFromAppview(
           if (existing?.id) {
             if (existing.syncStatus === "pending") continue;
             if (
-              !recordsEqual(existing, approvalData, [
-                "targetUri", "createdAt",
-              ])
+              !recordsEqual(existing, approvalData, ["targetUri", "createdAt"])
             ) {
               await db.approvals.update(existing.id, approvalData);
             }
@@ -266,7 +303,9 @@ export async function loadBoardFromAppview(
             if (existing.syncStatus === "pending") continue;
             if (
               !recordsEqual(existing, reactionData, [
-                "targetTaskUri", "emoji", "createdAt",
+                "targetTaskUri",
+                "emoji",
+                "createdAt",
               ])
             ) {
               await db.reactions.update(existing.id, reactionData);
@@ -286,5 +325,88 @@ export async function loadBoardFromAppview(
     return true;
   } catch {
     return false;
+  }
+}
+
+/**
+ * Subscribe to real-time updates for a board via the appview WebSocket.
+ * On each "update" message, calls the provided callback.
+ * Handles reconnection with exponential backoff.
+ */
+export class AppviewSubscription {
+  private ws: WebSocket | null = null;
+  private shouldReconnect = true;
+  private reconnectDelay = 1000;
+  private maxReconnectDelay = 30000;
+  private onlineListener: (() => void) | null = null;
+
+  constructor(
+    private boardUri: string,
+    private onUpdate: () => void,
+  ) {}
+
+  connect(): void {
+    if (typeof window !== "undefined" && !navigator.onLine) {
+      this.onlineListener = () => {
+        this.onlineListener = null;
+        if (this.shouldReconnect) this.connect();
+      };
+      window.addEventListener("online", this.onlineListener, { once: true });
+      return;
+    }
+
+    const url = `${APPVIEW_WS_URL}/ws?boardUri=${encodeURIComponent(this.boardUri)}`;
+    this.ws = new WebSocket(url);
+
+    this.ws.onopen = () => {
+      this.reconnectDelay = 1000;
+    };
+
+    this.ws.onmessage = (event: MessageEvent) => {
+      try {
+        const data = JSON.parse(event.data as string);
+        if (data.type === "update") {
+          this.onUpdate();
+        }
+      } catch {
+        // Ignore malformed messages
+      }
+    };
+
+    this.ws.onclose = () => {
+      if (!this.shouldReconnect) return;
+
+      if (typeof window !== "undefined" && !navigator.onLine) {
+        this.onlineListener = () => {
+          this.onlineListener = null;
+          if (this.shouldReconnect) {
+            this.reconnectDelay = 1000;
+            this.connect();
+          }
+        };
+        window.addEventListener("online", this.onlineListener, { once: true });
+        return;
+      }
+
+      setTimeout(() => {
+        if (this.shouldReconnect) {
+          this.reconnectDelay = Math.min(
+            this.reconnectDelay * 2,
+            this.maxReconnectDelay,
+          );
+          this.connect();
+        }
+      }, this.reconnectDelay);
+    };
+  }
+
+  disconnect(): void {
+    this.shouldReconnect = false;
+    if (this.onlineListener) {
+      window.removeEventListener("online", this.onlineListener);
+      this.onlineListener = null;
+    }
+    this.ws?.close();
+    this.ws = null;
   }
 }

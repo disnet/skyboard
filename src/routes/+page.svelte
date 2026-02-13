@@ -5,7 +5,8 @@
   import { getAuth } from "$lib/auth.svelte.js";
   import { generateTID, BOARD_COLLECTION, buildAtUri } from "$lib/tid.js";
   import type { Board, Column } from "$lib/types.js";
-  import { fetchRemoteBoard, addKnownParticipant } from "$lib/remote-sync.js";
+  import { addKnownParticipant } from "$lib/remote-sync.js";
+  import { loadBoardFromAppview } from "$lib/appview.js";
   import { grantTrust } from "$lib/trust.js";
   import BoardCard from "$lib/components/BoardCard.svelte";
 
@@ -88,7 +89,6 @@
       }
 
       const { ownerDid, rkey } = parsed;
-      const collection = BOARD_COLLECTION;
 
       // Check if we already have this board
       const existing = await db.boards.where("rkey").equals(rkey).first();
@@ -97,15 +97,14 @@
         return;
       }
 
-      // Fetch the board from the owner's PDS
-      const boardData = await fetchRemoteBoard(ownerDid, collection, rkey);
-      if (!boardData) {
+      // Fetch the board from the appview
+      const boardAtUri = buildAtUri(ownerDid, BOARD_COLLECTION, rkey);
+      const ok = await loadBoardFromAppview(ownerDid, rkey, boardAtUri);
+      if (!ok) {
         joinError = "Could not fetch board. Check the URI and try again.";
         return;
       }
 
-      await db.boards.add(boardData as Board);
-      const boardAtUri = buildAtUri(ownerDid, collection, rkey);
       await addKnownParticipant(ownerDid, boardAtUri);
 
       // Auto-trust the board owner
