@@ -166,16 +166,6 @@ export interface Block {
   createdAt: string;
 }
 
-// --- Known participants ---
-
-export interface KnownParticipant {
-  id?: number;
-  did: string;
-  boardUri: string;
-  discoveredAt: string;
-  lastFetchedAt?: string;
-}
-
 // --- Materialized collaborative task view ---
 
 export interface MaterializedTask {

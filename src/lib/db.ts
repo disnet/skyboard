@@ -8,7 +8,6 @@ import type {
   Approval,
   Reaction,
   Block,
-  KnownParticipant,
   Notification,
   FilterView,
 } from "./types.js";
@@ -22,7 +21,6 @@ type SkyboardDb = Dexie & {
   approvals: EntityTable<Approval, "id">;
   reactions: EntityTable<Reaction, "id">;
   blocks: EntityTable<Block, "id">;
-  knownParticipants: EntityTable<KnownParticipant, "id">;
   notifications: EntityTable<Notification, "id">;
   filterViews: EntityTable<FilterView, "id">;
 };
@@ -170,6 +168,11 @@ function createDb(name: string): SkyboardDb {
     notifications:
       "++id, type, boardUri, read, createdAt, dedupeKey, [read+createdAt]",
     filterViews: "++id, boardUri",
+  });
+
+  // Drop the knownParticipants table (no longer needed with the appview)
+  d.version(10).stores({
+    knownParticipants: null,
   });
 
   return d;

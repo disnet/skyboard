@@ -1,13 +1,6 @@
 import { db } from "./db.js";
-import { TASK_COLLECTION, COMMENT_COLLECTION, OP_COLLECTION } from "./tid.js";
-import type { JetstreamCommitEvent } from "./jetstream.js";
+import { TASK_COLLECTION } from "./tid.js";
 import type { NotificationType } from "./types.js";
-import {
-  safeParse,
-  TaskRecordSchema,
-  CommentRecordSchema,
-  OpRecordSchema,
-} from "./schemas.js";
 
 const MENTION_RE =
   /@((?:[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?\.)+[a-zA-Z]{2,})/g;
@@ -51,78 +44,6 @@ async function dedupeInsert(
     read: 0,
     createdAt: data.createdAt,
   });
-}
-
-export async function generateNotificationFromEvent(
-  event: JetstreamCommitEvent,
-  currentUserDid: string,
-  currentUserHandle: string | undefined,
-): Promise<void> {
-  const { did, commit } = event;
-  if (did === currentUserDid) return;
-  if (commit.operation !== "create" || !commit.record) return;
-
-  const record = commit.record;
-  const boardUri = record.boardUri as string | undefined;
-  if (!boardUri) return;
-
-  // Only generate notifications for boards the user has locally
-  const boardRkey = boardUri.split("/").pop();
-  if (!boardRkey) return;
-  const localBoard = await db.boards.where("rkey").equals(boardRkey).first();
-  if (!localBoard) return;
-
-  if (commit.collection === TASK_COLLECTION) {
-    const validated = safeParse(TaskRecordSchema, record, "TaskRecord (notification)");
-    if (!validated) return;
-    await dedupeInsert("task_created", `task:${did}:${commit.rkey}`, {
-      actorDid: did,
-      boardUri,
-      taskUri: `at://${did}/${TASK_COLLECTION}/${commit.rkey}`,
-      text: validated.title.slice(0, 100),
-      createdAt: validated.createdAt,
-    });
-  } else if (commit.collection === COMMENT_COLLECTION) {
-    const validated = safeParse(CommentRecordSchema, record, "CommentRecord (notification)");
-    if (!validated) return;
-    const mentions = parseMentions(validated.text);
-    const handle = currentUserHandle?.toLowerCase();
-    const isMentioned = handle ? mentions.includes(handle) : false;
-
-    // Single notification: mention takes priority over comment_added
-    const type: NotificationType = isMentioned ? "mention" : "comment_added";
-    const key = isMentioned
-      ? `mention:${did}:${commit.rkey}`
-      : `comment:${did}:${commit.rkey}`;
-
-    await dedupeInsert(type, key, {
-      actorDid: did,
-      boardUri,
-      taskUri: validated.targetTaskUri,
-      commentRkey: commit.rkey,
-      text: validated.text.slice(0, 100),
-      createdAt: validated.createdAt,
-    });
-  } else if (commit.collection === OP_COLLECTION) {
-    const validated = safeParse(OpRecordSchema, record, "OpRecord (notification)");
-    if (!validated) return;
-
-    // Check for mentions in description updates
-    const desc = validated.fields.description ?? "";
-    const title = validated.fields.title ?? "";
-    const combined = `${desc} ${title}`;
-    const mentions = parseMentions(combined);
-    const handle = currentUserHandle?.toLowerCase();
-    if (!handle || !mentions.includes(handle)) return;
-
-    await dedupeInsert("mention", `mention:op:${did}:${commit.rkey}`, {
-      actorDid: did,
-      boardUri,
-      taskUri: validated.targetTaskUri,
-      text: (desc || title).slice(0, 100),
-      createdAt: validated.createdAt,
-    });
-  }
 }
 
 export async function generateCatchUpNotifications(

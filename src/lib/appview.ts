@@ -8,8 +8,6 @@ import type {
   Approval,
   Reaction,
 } from "./types.js";
-import { addKnownParticipant } from "./remote-sync.js";
-
 const APPVIEW_URL =
   typeof window !== "undefined" &&
   (window as unknown as Record<string, unknown>).__SKYBOARD_APPVIEW_URL__
@@ -68,9 +66,6 @@ export async function loadBoardFromAppview(
     if (!res.ok) return false;
 
     const data = await res.json();
-
-    // Collect participants to register after the transaction
-    const participantDids: string[] = [];
 
     await db.transaction(
       "rw",
@@ -160,7 +155,6 @@ export async function loadBoardFromAppview(
           } else {
             await db.tasks.add(taskData as Task);
           }
-          participantDids.push(t.did);
         }
 
         // Store raw ops
@@ -193,7 +187,6 @@ export async function loadBoardFromAppview(
           } else {
             await db.ops.add(opData as Op);
           }
-          participantDids.push(o.did);
         }
 
         // Store trusts
@@ -221,7 +214,6 @@ export async function loadBoardFromAppview(
           } else {
             await db.trusts.add(trustData as Trust);
           }
-          participantDids.push(t.trustedDid);
         }
 
         // Store comments
@@ -316,11 +308,6 @@ export async function loadBoardFromAppview(
         }
       },
     );
-
-    // Register participants outside the transaction
-    for (const did of participantDids) {
-      await addKnownParticipant(did, boardUri);
-    }
 
     return true;
   } catch {

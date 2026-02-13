@@ -5,7 +5,6 @@
   import { getAuth } from "$lib/auth.svelte.js";
   import { generateTID, BOARD_COLLECTION, buildAtUri } from "$lib/tid.js";
   import type { Board, Column } from "$lib/types.js";
-  import { addKnownParticipant } from "$lib/remote-sync.js";
   import { loadBoardFromAppview } from "$lib/appview.js";
   import { grantTrust } from "$lib/trust.js";
   import BoardCard from "$lib/components/BoardCard.svelte";
@@ -104,8 +103,6 @@
         joinError = "Could not fetch board. Check the URI and try again.";
         return;
       }
-
-      await addKnownParticipant(ownerDid, boardAtUri);
 
       // Auto-trust the board owner
       if (auth.did && ownerDid !== auth.did) {
