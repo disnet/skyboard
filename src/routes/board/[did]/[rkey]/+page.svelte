@@ -35,6 +35,7 @@
     fetchAllKnownParticipants,
     addKnownParticipant,
   } from "$lib/remote-sync.js";
+  import { loadBoardFromAppview } from "$lib/appview.js";
   import type {
     Board,
     Task,
@@ -80,7 +81,7 @@
   let loading = $state(true);
   let error = $state<string | null>(null);
 
-  // Fetch board data from PDS on load (for share links / first visit)
+  // Fetch board data: try appview first, fall back to direct PDS fetch
   $effect(() => {
     if (!ownerDid || !rkey) return;
 
@@ -89,7 +90,14 @@
 
     (async () => {
       try {
-        // Fetch the board record
+        // Try appview first (single request, cached data)
+        const appviewOk = await loadBoardFromAppview(ownerDid, rkey, boardUri);
+        if (appviewOk) {
+          loading = false;
+          return;
+        }
+
+        // Appview unavailable — fall back to direct PDS fetch
         const boardData = await fetchRemoteBoard(
           ownerDid,
           BOARD_COLLECTION,

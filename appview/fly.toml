@@ -1,0 +1,19 @@
+app = "skyboard-appview"
+primary_region = "sjc"
+
+[build]
+
+[env]
+  PORT = "3002"
+  DB_PATH = "/data/skyboard.db"
+
+[http_service]
+  internal_port = 3002
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[mounts]]
+  source = "skyboard_data"
+  destination = "/data"
