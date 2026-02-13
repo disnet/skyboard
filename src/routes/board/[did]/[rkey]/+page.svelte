@@ -872,6 +872,29 @@
     toggleReaction(auth.did, taskUri, boardUri, emoji);
   }
 
+  async function handleDiscardErrors(task: MaterializedTask) {
+    // Delete ops with sync errors targeting this task
+    const taskUri = buildAtUri(task.ownerDid, TASK_COLLECTION, task.rkey);
+    for (const op of task.appliedOps) {
+      if (op.syncStatus === "error" && op.id) {
+        await db.ops.delete(op.id);
+      }
+    }
+    // Also check all ops in case some aren't in appliedOps
+    const errorOps = await db.ops
+      .where("targetTaskUri")
+      .equals(taskUri)
+      .filter((op) => op.syncStatus === "error")
+      .toArray();
+    for (const op of errorOps) {
+      if (op.id) await db.ops.delete(op.id);
+    }
+    // Delete the base task if it also has a sync error
+    if (task.sourceTask.syncStatus === "error" && task.sourceTask.id) {
+      await db.tasks.delete(task.sourceTask.id);
+    }
+  }
+
   const quickLabelTask = $derived.by(() => {
     if (!showQuickLabel) return null;
     const pos = getSelectedPos();
@@ -1175,6 +1198,7 @@
           onpastelines={handlePasteLines}
           onaddtask={() => addNewCard(colIdx)}
           onhover={(taskIndex) => setSelectedPos({ col: colIdx, row: taskIndex })}
+          ondiscarderrors={handleDiscardErrors}
         />
       {/each}
     </div>

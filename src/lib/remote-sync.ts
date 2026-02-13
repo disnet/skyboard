@@ -146,6 +146,7 @@ export async function fetchRemoteTasks(
     };
 
     if (existing?.id) {
+      if (existing.syncStatus === "pending") continue;
       await db.tasks.update(existing.id, taskData);
     } else {
       await db.tasks.add(taskData as Task);
@@ -183,6 +184,7 @@ export async function fetchRemoteOps(
     };
 
     if (existing?.id) {
+      if (existing.syncStatus === "pending") continue;
       await db.ops.update(existing.id, opData);
     } else {
       await db.ops.add(opData as Op);
@@ -260,6 +262,7 @@ export async function fetchRemoteTrusts(
     };
 
     if (existing?.id) {
+      if (existing.syncStatus === "pending") continue;
       await db.trusts.update(existing.id, trustData);
     } else {
       await db.trusts.add(trustData as Trust);
@@ -300,6 +303,7 @@ export async function fetchRemoteComments(
     };
 
     if (existing?.id) {
+      if (existing.syncStatus === "pending") continue;
       await db.comments.update(existing.id, commentData);
     } else {
       await db.comments.add(commentData as Comment);
@@ -336,6 +340,7 @@ export async function fetchRemoteApprovals(
     };
 
     if (existing?.id) {
+      if (existing.syncStatus === "pending") continue;
       await db.approvals.update(existing.id, approvalData);
     } else {
       await db.approvals.add(approvalData as Approval);
@@ -376,6 +381,7 @@ export async function fetchRemoteReactions(
     };
 
     if (existing?.id) {
+      if (existing.syncStatus === "pending") continue;
       await db.reactions.update(existing.id, reactionData);
     } else {
       await db.reactions.add(reactionData as Reaction);
