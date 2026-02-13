@@ -39,6 +39,7 @@
     editing = false,
     onsavetitle,
     onpastelines,
+    ondiscarderrors,
   }: {
     task: MaterializedTask;
     currentUserDid: string;
@@ -54,6 +55,7 @@
     editing?: boolean;
     onsavetitle?: (task: MaterializedTask, title: string, andContinue?: boolean) => void;
     onpastelines?: (task: MaterializedTask, lines: string[]) => void;
+    ondiscarderrors?: (task: MaterializedTask) => void;
   } = $props();
 
   let cardEl: HTMLDivElement | undefined = $state();
@@ -281,6 +283,11 @@
     return total > 0 ? { checked, total } : null;
   });
 
+  const hasSyncErrors = $derived(
+    task.sourceTask.syncStatus === "error" ||
+    task.appliedOps.some((op) => op.syncStatus === "error"),
+  );
+
   const isOwned = $derived(task.ownerDid === currentUserDid);
 
   const isDragging = $derived(
@@ -445,10 +452,18 @@
     {/if}
   </div>
   {#if !readonly}
-    {#if task.sourceTask.syncStatus === "pending"}
+    {#if hasSyncErrors}
+      <div class="sync-error-bar">
+        <span>Sync failed</span>
+        {#if ondiscarderrors}
+          <button
+            class="discard-btn"
+            onclick={(e) => { e.stopPropagation(); ondiscarderrors(task); }}
+          >Discard</button>
+        {/if}
+      </div>
+    {:else if task.sourceTask.syncStatus === "pending"}
       <span class="sync-dot pending" title="Pending sync"></span>
-    {:else if task.sourceTask.syncStatus === "error"}
-      <span class="sync-dot error" title="Sync error"></span>
     {/if}
   {/if}
 </div>
@@ -697,6 +712,36 @@
     font-weight: 600;
   }
 
+  .sync-error-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-size: 0.625rem;
+    color: var(--color-error);
+    margin-top: 0.375rem;
+    padding: 0.1875rem 0.375rem;
+    background: var(--color-error-bg, rgba(239, 68, 68, 0.08));
+    border-radius: var(--radius-sm);
+  }
+
+  .discard-btn {
+    margin-left: auto;
+    padding: 0.0625rem 0.375rem;
+    border: 1px solid var(--color-error);
+    border-radius: var(--radius-sm);
+    background: none;
+    color: var(--color-error);
+    font-size: 0.625rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  .discard-btn:hover {
+    background: var(--color-error);
+    color: white;
+  }
+
   .sync-dot {
     position: absolute;
     top: 0.5rem;
@@ -708,10 +753,6 @@
 
   .sync-dot.pending {
     background: var(--color-warning);
-  }
-
-  .sync-dot.error {
-    background: var(--color-error);
   }
 
   .reaction-trigger {

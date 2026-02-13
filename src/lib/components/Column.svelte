@@ -34,6 +34,7 @@
     onpastelines,
     onaddtask,
     onhover,
+    ondiscarderrors,
   }: {
     column: Column;
     tasks: MaterializedTask[];
@@ -55,6 +56,7 @@
     onpastelines?: (task: MaterializedTask, lines: string[]) => void;
     onaddtask?: () => void;
     onhover?: (taskIndex: number) => void;
+    ondiscarderrors?: (task: MaterializedTask) => void;
   } = $props();
 
   const createStatus: PermissionStatus = $derived(
@@ -281,6 +283,7 @@
           editing={editingTaskIndex === i}
           {onsavetitle}
           {onpastelines}
+          {ondiscarderrors}
         />
       </div>
     {/each}

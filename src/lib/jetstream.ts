@@ -323,6 +323,7 @@ export async function processJetstreamEvent(
     };
 
     if (existing?.id) {
+      if (existing.syncStatus === "pending") return { did, boardUri };
       await db.tasks.update(existing.id, taskData);
     } else {
       await db.tasks.add(taskData);
@@ -350,6 +351,7 @@ export async function processJetstreamEvent(
     };
 
     if (existing?.id) {
+      if (existing.syncStatus === "pending") return { did, boardUri };
       await db.ops.update(existing.id, opData);
     } else {
       await db.ops.add(opData);
@@ -376,6 +378,7 @@ export async function processJetstreamEvent(
     };
 
     if (existing?.id) {
+      if (existing.syncStatus === "pending") return { did, boardUri };
       await db.trusts.update(existing.id, trustData);
     } else {
       await db.trusts.add(trustData);
@@ -403,6 +406,7 @@ export async function processJetstreamEvent(
     };
 
     if (existing?.id) {
+      if (existing.syncStatus === "pending") return { did, boardUri };
       await db.comments.update(existing.id, commentData);
     } else {
       await db.comments.add(commentData);
@@ -429,6 +433,7 @@ export async function processJetstreamEvent(
     };
 
     if (existing?.id) {
+      if (existing.syncStatus === "pending") return { did, boardUri };
       await db.approvals.update(existing.id, approvalData);
     } else {
       await db.approvals.add(approvalData);
@@ -456,6 +461,7 @@ export async function processJetstreamEvent(
     };
 
     if (existing?.id) {
+      if (existing.syncStatus === "pending") return { did, boardUri };
       await db.reactions.update(existing.id, reactionData);
     } else {
       await db.reactions.add(reactionData);
