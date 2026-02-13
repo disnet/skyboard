@@ -3,31 +3,15 @@
   import { page } from "$app/stores";
   import { initAuth, getAuth, logout } from "$lib/auth.svelte.js";
   import {
-    pullFromPDS,
     startBackgroundSync,
     stopBackgroundSync,
   } from "$lib/sync.js";
   import { getProfile, ensureProfile } from "$lib/profile-cache.svelte.js";
   import { db } from "$lib/db.js";
   import { useLiveQuery } from "$lib/db.svelte.js";
-  import {
-    generateCatchUpNotifications,
-    generateNotificationFromEvent,
-  } from "$lib/notifications.js";
-  import {
-    JetstreamClient,
-    loadJetstreamCursor,
-    processJetstreamEvent,
-  } from "$lib/jetstream.js";
-  import {
-    TASK_COLLECTION,
-    COMMENT_COLLECTION,
-    OP_COLLECTION,
-  } from "$lib/tid.js";
-  import {
-    fetchAllKnownParticipants,
-    addKnownParticipant,
-  } from "$lib/remote-sync.js";
+  import { generateCatchUpNotifications } from "$lib/notifications.js";
+  import { loadBoardFromAppview, AppviewSubscription } from "$lib/appview.js";
+  import type { Board } from "$lib/types.js";
   import { initTheme, getTheme, cycleTheme } from "$lib/theme.svelte.js";
   import LandingPage from "$lib/components/LandingPage.svelte";
   import SyncStatus from "$lib/components/SyncStatus.svelte";
@@ -47,7 +31,7 @@
   let showNotifications = $state(false);
   let showShortcuts = $state(false);
   let showBoardSwitcher = $state(false);
-  let globalJetstream: JetstreamClient | null = null;
+  let boardSubs: AppviewSubscription[] = [];
 
   const unreadCount = useLiveQuery<number>(() => {
     if (!auth.did) return 0;
@@ -64,73 +48,53 @@
 
     return () => {
       stopBackgroundSync();
-      globalJetstream?.disconnect();
-      globalJetstream = null;
+      disconnectAllSubs();
     };
   });
 
-  // Fetch participants for all local boards, then generate catch-up notifications
+  // Refresh all local boards via appview, then generate catch-up notifications
   async function catchUpAllBoards(userDid: string, handle: string | undefined) {
     const boards = await db.boards.toArray();
-    const boardUris = boards.map(
-      (b) => `at://${b.did}/dev.skyboard.board/${b.rkey}`,
-    );
-    // Fetch known participants' data for each board
     await Promise.allSettled(
-      boardUris.map((uri) => fetchAllKnownParticipants(uri)),
+      boards.map(async (b) => {
+        const boardUri = `at://${b.did}/dev.skyboard.board/${b.rkey}`;
+        await loadBoardFromAppview(b.did, b.rkey, boardUri);
+      }),
     );
     await generateCatchUpNotifications(userDid, handle);
+  }
+
+  function disconnectAllSubs() {
+    for (const sub of boardSubs) sub.disconnect();
+    boardSubs = [];
+  }
+
+  function connectBoardSubs(boards: Board[], userDid: string) {
+    disconnectAllSubs();
+    for (const b of boards) {
+      const boardUri = `at://${b.did}/dev.skyboard.board/${b.rkey}`;
+      const sub = new AppviewSubscription(boardUri, async () => {
+        await loadBoardFromAppview(b.did, b.rkey, boardUri);
+        const handle = getProfile(userDid)?.data?.handle;
+        await generateCatchUpNotifications(userDid, handle);
+      });
+      sub.connect();
+      boardSubs.push(sub);
+    }
   }
 
   $effect(() => {
     if (auth.agent && auth.did) {
       const userDid = auth.did;
       const handle = currentProfile?.data?.handle;
-      pullFromPDS(auth.agent, userDid)
-        .then(() => catchUpAllBoards(userDid, handle))
+      catchUpAllBoards(userDid, handle)
+        .then(async () => {
+          const boards = await db.boards.toArray();
+          connectBoardSubs(boards, userDid);
+        })
         .catch(console.error);
       startBackgroundSync(auth.agent, userDid);
     }
-  });
-
-  // Global Jetstream for real-time notifications on any page
-  $effect(() => {
-    if (!auth.did) return;
-    const userDid = auth.did;
-
-    loadJetstreamCursor().then((cursor) => {
-      globalJetstream = new JetstreamClient({
-        wantedCollections: [TASK_COLLECTION, COMMENT_COLLECTION, OP_COLLECTION],
-        cursor,
-        onEvent: async (event) => {
-          if (event.did === userDid) return;
-          // Store the record into Dexie so catch-up and board views stay current
-          const result = await processJetstreamEvent(event);
-          if (result) {
-            addKnownParticipant(result.did, result.boardUri).catch(
-              console.error,
-            );
-            if (event.commit.operation === "create") {
-              const handle = getProfile(userDid)?.data?.handle;
-              generateNotificationFromEvent(event, userDid, handle).catch(
-                console.error,
-              );
-            }
-          }
-        },
-        onReconnect: () => {
-          catchUpAllBoards(userDid, getProfile(userDid)?.data?.handle).catch(
-            console.error,
-          );
-        },
-      });
-      globalJetstream.connect();
-    });
-
-    return () => {
-      globalJetstream?.disconnect();
-      globalJetstream = null;
-    };
   });
 
   function handleGlobalKeydown(e: KeyboardEvent) {
@@ -150,8 +114,7 @@
 
   async function handleLogout() {
     stopBackgroundSync();
-    globalJetstream?.disconnect();
-    globalJetstream = null;
+    disconnectAllSubs();
     await logout();
   }
 </script>

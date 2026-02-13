@@ -9,32 +9,11 @@
     generateTID,
     BOARD_COLLECTION,
     TASK_COLLECTION,
-    OP_COLLECTION,
-    TRUST_COLLECTION,
     COMMENT_COLLECTION,
-    APPROVAL_COLLECTION,
-    REACTION_COLLECTION,
   } from "$lib/tid.js";
   import { materializeTasks } from "$lib/materialize.js";
   import { isTrusted, isContentVisible } from "$lib/permissions.js";
-  import {
-    JetstreamClient,
-    loadJetstreamCursor,
-    processJetstreamEvent,
-  } from "$lib/jetstream.js";
   import { deleteBoardFromPDS } from "$lib/sync.js";
-  import {
-    fetchRemoteBoard,
-    fetchRemoteTasks,
-    fetchRemoteOps,
-    fetchRemoteTrusts,
-    fetchRemoteComments,
-    fetchRemoteApprovals,
-    fetchRemoteReactions,
-    seedParticipantsFromTrusts,
-    fetchAllKnownParticipants,
-    addKnownParticipant,
-  } from "$lib/remote-sync.js";
   import { loadBoardFromAppview } from "$lib/appview.js";
   import type {
     Board,
@@ -64,8 +43,6 @@
   import QuickMovePicker from "$lib/components/QuickMovePicker.svelte";
   import { goto, replaceState } from "$app/navigation";
   import { logout } from "$lib/auth.svelte.js";
-  import { getProfile } from "$lib/profile-cache.svelte.js";
-  import { generateNotificationFromEvent } from "$lib/notifications.js";
   import { toggleReaction } from "$lib/reactions.js";
   import { createOp } from "$lib/ops.js";
   import { generateKeyBetween } from "fractional-indexing";
@@ -81,7 +58,7 @@
   let loading = $state(true);
   let error = $state<string | null>(null);
 
-  // Fetch board data: try appview first, fall back to direct PDS fetch
+  // Fetch board data from appview
   $effect(() => {
     if (!ownerDid || !rkey) return;
 
@@ -90,57 +67,10 @@
 
     (async () => {
       try {
-        // Try appview first (single request, cached data)
-        const appviewOk = await loadBoardFromAppview(ownerDid, rkey, boardUri);
-        if (appviewOk) {
-          loading = false;
-          return;
-        }
-
-        // Appview unavailable — fall back to direct PDS fetch
-        const boardData = await fetchRemoteBoard(
-          ownerDid,
-          BOARD_COLLECTION,
-          rkey,
-        );
-        if (!boardData) {
+        const ok = await loadBoardFromAppview(ownerDid, rkey, boardUri);
+        if (!ok) {
           error = "Board not found";
-          loading = false;
-          return;
         }
-
-        // Store board in Dexie
-        const existing = await db.boards.where("rkey").equals(rkey).first();
-        if (existing?.id) {
-          await db.boards.update(existing.id, {
-            name: boardData.name,
-            description: boardData.description,
-            columns: boardData.columns,
-            labels: boardData.labels,
-            open: boardData.open,
-            createdAt: boardData.createdAt,
-            syncStatus: boardData.syncStatus,
-          });
-        } else {
-          await db.boards.add(boardData as Board);
-        }
-
-        // Fetch trusts, then seed participants from them
-        await fetchRemoteTrusts(ownerDid, boardUri);
-        await seedParticipantsFromTrusts(boardUri);
-
-        // Fetch owner's tasks, ops, comments, approvals, and reactions
-        await Promise.all([
-          fetchRemoteTasks(ownerDid, boardUri),
-          fetchRemoteOps(ownerDid, boardUri),
-          fetchRemoteComments(ownerDid, boardUri),
-          fetchRemoteApprovals(ownerDid, boardUri),
-          fetchRemoteReactions(ownerDid, boardUri),
-        ]);
-
-        // Fetch all known participants' data
-        await fetchAllKnownParticipants(boardUri);
-
         loading = false;
       } catch (err) {
         console.error("Failed to load board:", err);
@@ -785,72 +715,6 @@
 
     window.addEventListener("skyboard:open-task", handler);
     return () => window.removeEventListener("skyboard:open-task", handler);
-  });
-
-  // --- Jetstream lifecycle ---
-  let jetstreamClient: JetstreamClient | null = null;
-
-  $effect(() => {
-    if (!boardUri) return;
-
-    // Cold start: fetch from known participants
-    fetchAllKnownParticipants(boardUri).catch(console.error);
-
-    loadJetstreamCursor().then((cursor) => {
-      if (!cursor) {
-        fetchAllKnownParticipants(boardUri).catch(console.error);
-      }
-
-      jetstreamClient = new JetstreamClient({
-        wantedCollections: [
-          TASK_COLLECTION,
-          OP_COLLECTION,
-          TRUST_COLLECTION,
-          COMMENT_COLLECTION,
-          APPROVAL_COLLECTION,
-          REACTION_COLLECTION,
-        ],
-        cursor,
-        onEvent: async (event) => {
-          if (event.did === auth.did) return;
-          const result = await processJetstreamEvent(event);
-          if (result) {
-            addKnownParticipant(result.did, result.boardUri).catch(
-              console.error,
-            );
-            // Generate notification for new tasks and comments
-            if (event.commit.operation === "create" && auth.did) {
-              const handle = getProfile(auth.did)?.data?.handle;
-              generateNotificationFromEvent(event, auth.did, handle).catch(
-                console.error,
-              );
-            }
-          }
-        },
-        onConnect: () => {
-          console.log("Jetstream connected");
-        },
-        onReconnect: () => {
-          console.log("Jetstream reconnected, backfilling from PDS");
-          fetchAllKnownParticipants(boardUri).catch(console.error);
-        },
-        onError: (err) => {
-          console.warn("Jetstream error:", err);
-        },
-      });
-      jetstreamClient.connect();
-    });
-
-    const handleBeforeUnload = () => {
-      jetstreamClient?.disconnect();
-    };
-    window.addEventListener("beforeunload", handleBeforeUnload);
-
-    return () => {
-      window.removeEventListener("beforeunload", handleBeforeUnload);
-      jetstreamClient?.disconnect();
-      jetstreamClient = null;
-    };
   });
 
   function handleMoveTask(task: MaterializedTask, columnId: string) {
