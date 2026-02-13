@@ -17,3 +17,9 @@ primary_region = "sjc"
 [[mounts]]
   source = "skyboard_data"
   destination = "/data"
+  initial_size = "1gb"
+
+[[vm]]
+  memory = "256mb"
+  cpu_kind = "shared"
+  cpus = 1
