@@ -1,5 +1,5 @@
 import { requireAgent } from "../lib/auth.js";
-import { fetchBoard } from "../lib/pds.js";
+import { fetchBoardFromAppview } from "../lib/pds.js";
 import { addKnownBoard } from "../lib/config.js";
 import { BOARD_COLLECTION } from "../lib/tid.js";
 import chalk from "chalk";
@@ -36,7 +36,7 @@ export async function addCommand(link: string): Promise<void> {
     process.exit(1);
   }
 
-  const board = await fetchBoard(boardDid, boardRkey);
+  const board = await fetchBoardFromAppview(boardDid, boardRkey);
   if (!board) {
     console.error(chalk.red("Board not found."));
     process.exit(1);
