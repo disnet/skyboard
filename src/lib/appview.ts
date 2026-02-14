@@ -14,7 +14,7 @@ const APPVIEW_URL =
     ? String(
         (window as unknown as Record<string, unknown>).__SKYBOARD_APPVIEW_URL__,
       )
-    : "https://skyboard-appview.fly.dev";
+    : "https://appview.skyboard.dev";
 
 const APPVIEW_WS_URL = APPVIEW_URL.replace(/^http/, "ws");
 

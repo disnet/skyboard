@@ -14,7 +14,7 @@ import {
 import { materializeTasks } from "./materialize.js";
 import type { MaterializedTask } from "./types.js";
 
-const APPVIEW_URL = "https://skyboard-appview.fly.dev";
+const APPVIEW_URL = "https://appview.skyboard.dev";
 
 interface AppviewBoardResponse {
   board: {
