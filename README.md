@@ -1,16 +1,16 @@
 # Skyboard
 
-A collaborative kanban board built on [AT Protocol](https://atproto.com/) (Bluesky's decentralized data layer). No central server — each user's data lives in their own AT Protocol repository, synced in real time via Jetstream.
+A collaborative kanban board built on [AT Protocol](https://atproto.com/) (Bluesky's decentralized data layer). Each user's data lives in their own AT Protocol repository. An **appview** server aggregates board data and provides real-time updates, while writes go directly to each user's PDS.
 
 ## How it works
 
-Users sign in with their Bluesky account and create boards. Each board gets an AT URI (e.g. `at://did:plc:abc.../dev.skyboard.board/3k...`) that can be shared with collaborators. Joining a board fetches it from the owner's PDS (Personal Data Server) and subscribes to real-time updates through [Jetstream](https://docs.bsky.app/blog/jetstream), Bluesky's WebSocket event stream.
+Users sign in with their Bluesky account and create boards. Each board gets an AT URI (e.g. `at://did:plc:abc.../dev.skyboard.board/3k...`) that can be shared with collaborators. The browser fetches the full board state from the appview in a single request and subscribes to real-time updates via WebSocket.
 
-All data is stored locally in IndexedDB (via Dexie) and synced to each user's PDS in the background. The app works offline and catches up when reconnected.
+All data is stored locally in IndexedDB (via Dexie). Writes (creating tasks, editing, commenting) go to Dexie first, then background sync pushes them to the user's PDS. The appview picks up PDS commits via Jetstream and notifies connected clients.
 
 ## Architecture
 
-Each user runs the full stack in their browser. There is no central server — data syncs through AT Protocol personal data servers, with real-time updates relayed via Jetstream.
+The appview sits between clients and the AT Protocol network. It subscribes to Jetstream for real-time ingestion and backfills from PDS endpoints on demand, caching everything in SQLite. Clients read from the appview and write to their own PDS.
 
 ```
  ┌─ Browser (per user) ────────────────────────────────────────────┐
@@ -31,37 +31,35 @@ Each user runs the full stack in their browser. There is no central server — d
  │   │                   │          │  → MaterializedTask[]    │   │
  │   │  (syncStatus:     │          └──────────────────────────┘   │
  │   │   pending/synced) │                                         │
- │   └─────────┬─────────┘                                         │
- │             │                            ▲ Jetstream events     │
- └─────────────┼────────────────────────────┼──────────────────────┘
-               │ background sync            │
-               │ putRecord / deleteRecord   │
-               ▼                            │
- ┌──────────────────────────────┐           │
- │        User's PDS            │           │
- │   (Personal Data Server)     │           │
- │                              │           │
- │   at://did:plc:xxx/          │           │
- │     dev.skyboard.board/*     │           │
- │     dev.skyboard.task/*      │           │
- │     dev.skyboard.op/*        │           │
- │     dev.skyboard.trust/*     │           │
- └──────────────┬───────────────┘           │
-                │ commit events             │
-                ▼                           │
- ┌──────────────────────────────┐           │
- │          Jetstream           │───────────┘
- │    (WebSocket event relay)   │  real-time events
- └──────────────┬───────────────┘  to subscribed browsers
-                │
-                ▼
-     Other users' browsers
-     (same stack as above)
+ │   └──┬──────────▲─────┘                                         │
+ │      │          │ populate from appview response                │
+ └──────┼──────────┼───────────────────────────────────────────────┘
+        │          │
+        │ background sync              ┌───────────────────────┐
+        │ putRecord / deleteRecord     │      Appview          │
+        │                              │  (Bun + SQLite)       │
+        ▼                              │                       │
+ ┌──────────────────────────────┐      │  GET /board/:did/:rk  │◄── REST
+ │        User's PDS            │      │  WS  /ws?boardUri=... │◄── WebSocket
+ │   (Personal Data Server)     │      │                       │
+ │                              │      │  Jetstream consumer   │
+ │   at://did:plc:xxx/          │      │  PDS backfill         │
+ │     dev.skyboard.board/*     │      │  SQLite cache         │
+ │     dev.skyboard.task/*      │      └───────────┬───────────┘
+ │     dev.skyboard.op/*        │                  │
+ │     dev.skyboard.trust/*     │                  │ subscribes
+ └──────────────┬───────────────┘                  │
+                │ commit events                    │
+                ▼                                  │
+ ┌──────────────────────────────┐                  │
+ │          Jetstream           │──────────────────┘
+ │    (AT Protocol firehose)    │
+ └──────────────────────────────┘
 ```
 
 ### Multi-user coordination
 
-When multiple users collaborate on a board, each writes only to their own PDS. The board owner's PDS is the source of truth for board configuration and trust grants. Ops in any PDS can reference tasks in any other PDS via AT URI.
+When multiple users collaborate on a board, each writes only to their own PDS. The appview aggregates records from all participants — the board owner's PDS has board configuration and trust grants, while tasks and ops can live in any participant's PDS. Ops reference tasks in any repo via AT URI.
 
 ```
  ┌─ Alice's PDS ─────────────┐  ┌─ Bob's PDS ────────────┐  ┌─ Carol's PDS ──────────┐
@@ -92,20 +90,21 @@ When multiple users collaborate on a board, each writes only to their own PDS. T
                   commit events
                         │
                         ▼
-              ┌───────────────────┐
-              │     Jetstream     │
-              │  (WebSocket relay)│
-              └─────────┬─────────┘
-                        │
-                  real-time events
-                        │
-                        ▼
+              ┌───────────────────┐           ┌───────────────────────┐
+              │     Jetstream     │──────────▶│       Appview         │
+              │  (AT Proto relay) │           │  (aggregates + caches │
+              └───────────────────┘           │   all participants)   │
+                                              └───────────┬───────────┘
+                                                          │
+                                                    REST + WebSocket
+                                                          │
+                                                          ▼
  ┌─────────────────────────────────────────────────────────────────────────────┐
  │                           Each User's Browser                               │
  │                                                                             │
- │  Fetch all        Filter by          Merge via           Render             │
- │  participants ──▶ trust + ────────▶ per-field ────────▶ board               │
- │  records          permissions        LWW                 view               │
+ │  Fetch board      Filter by          Merge via           Render             │
+ │  from appview ──▶ trust + ────────▶ per-field ────────▶ board               │
+ │  (one request)    permissions        LWW                 view               │
  │                                                                             │
  │  Bob's ops → applied ✓         Carol's ops → pending proposals              │
  └─────────────────────────────────────────────────────────────────────────────┘
@@ -229,30 +228,51 @@ When a user performs an action they don't have full permission for (e.g. scope i
 ## Sync architecture
 
 ```
-Task creation
-  → db.tasks.add() in IndexedDB (syncStatus: 'pending')
-  → Background sync pushes task record to user's PDS
+Reading board data
+  → Browser fetches GET /board/:did/:rkey from appview
+  → Appview returns board + all tasks, ops, trusts, comments, etc.
+  → Response upserted into Dexie (local pending records take priority)
+  → Browser subscribes to appview WebSocket for real-time updates
+  → On update notification, re-fetches board from appview
 
-Task edit (own or others')
-  → db.ops.add() in IndexedDB (syncStatus: 'pending')
+Writing (task creation, edits, comments, etc.)
+  → db.tasks.add() / db.ops.add() in IndexedDB (syncStatus: 'pending')
   → materializeTasks merges base task + ops via per-field LWW
   → UI updates immediately from local state
-  → Background sync pushes op record to user's PDS
-  → PDS commit broadcast via Jetstream WebSocket
-  → Other clients receive event and upsert into their local DB
-  → Live queries re-execute, materializeTasks runs, UI updates
+  → Background sync pushes record to user's PDS via putRecord
+  → PDS commit picked up by Jetstream → appview → WebSocket notification
+  → Other clients re-fetch from appview, UI updates
 ```
 
-On reconnect or stale cursor (>48h offline), the app backfills by fetching directly from all known participants' PDS endpoints.
+The appview handles all cross-PDS aggregation server-side. On startup with a stale Jetstream cursor (>48h), the appview serves existing cached data immediately while backfilling in the background.
+
+## Appview
+
+The appview (`appview/`) is a caching aggregation server that sits between clients and the AT Protocol network. It runs on Bun with SQLite and deploys to Fly.io.
+
+- Subscribes to Jetstream for real-time ingestion of all `dev.skyboard.*` records
+- Backfills from PDS endpoints on demand when a board is first requested
+- Serves full board state via `GET /board/:did/:rkey` (one request replaces many PDS fetches)
+- Pushes real-time update notifications via WebSocket (`WS /ws?boardUri=...`)
+- Persists Jetstream cursor for graceful restart recovery
+
+See [`appview/README.md`](appview/README.md) for development and deployment details.
 
 ## Tech stack
 
+**Web app:**
 - [SvelteKit](https://kit.svelte.dev/) with Svelte 5 and TypeScript
 - [Dexie](https://dexie.org/) (IndexedDB) for local-first persistence
 - [fractional-indexing](https://www.npmjs.com/package/fractional-indexing) for CRDT-friendly task ordering
 - [@atproto/api](https://www.npmjs.com/package/@atproto/api) and [@atproto/oauth-client-browser](https://www.npmjs.com/package/@atproto/oauth-client-browser) for AT Protocol
 - [CodeMirror](https://codemirror.net/) for markdown card editing
 - Static build via [@sveltejs/adapter-static](https://www.npmjs.com/package/@sveltejs/adapter-static)
+
+**Appview:**
+- [Bun](https://bun.sh/) runtime with built-in SQLite and WebSocket support
+- [Hono](https://hono.dev/) for HTTP routing
+- SQLite (WAL mode) for data caching
+- Deploys to [Fly.io](https://fly.io/) with persistent volume
 
 ## CLI
 
@@ -317,7 +337,7 @@ sb whoami --json
 
 ### How it works
 
-The CLI authenticates via OAuth and talks directly to PDS endpoints — no local database. Each command fetches fresh data from the board owner's PDS and all trusted participants, runs the same `materializeTasks()` merge logic as the web app, and displays the result. Write commands (`new`, `mv`, `edit`, `comment`) create AT Protocol records (tasks, ops, comments) in your PDS, which the web app picks up in real time via Jetstream.
+The CLI authenticates via OAuth and fetches board data from the appview — no local database. Each read command hits the appview for the full board state, runs the same `materializeTasks()` merge logic as the web app, and displays the result. Write commands (`new`, `mv`, `edit`, `comment`) create AT Protocol records (tasks, ops, comments) in your PDS, which the appview picks up via Jetstream and serves to other clients.
 
 ## Development
 
