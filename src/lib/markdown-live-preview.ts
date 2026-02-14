@@ -6,6 +6,8 @@ import {
   type ViewUpdate,
   WidgetType,
 } from "@codemirror/view";
+import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
+import { tags } from "@lezer/highlight";
 import { syntaxTree } from "@codemirror/language";
 
 class CheckboxWidget extends WidgetType {
@@ -253,4 +255,12 @@ const theme = EditorView.baseTheme({
   },
 });
 
-export const markdownLivePreview = [plugin, theme];
+const linkHighlight = HighlightStyle.define([
+  { tag: [tags.link, tags.url], color: "var(--color-primary, #3b82f6)" },
+]);
+
+export const markdownLivePreview = [
+  plugin,
+  theme,
+  syntaxHighlighting(linkHighlight),
+];
