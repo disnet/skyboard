@@ -1,0 +1,20 @@
+name: Deploy Appview to Fly.io
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "appview/**"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: superfly/flyctl-action/setup-flyctl@master
+
+      - run: flyctl deploy
+        working-directory: appview
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
