@@ -32,6 +32,7 @@
   let showShortcuts = $state(false);
   let showBoardSwitcher = $state(false);
   let boardSubs: AppviewSubscription[] = [];
+  let effectGeneration = 0;
 
   const unreadCount = useLiveQuery<number>(() => {
     if (!auth.did) return 0;
@@ -85,10 +86,12 @@
 
   $effect(() => {
     if (auth.agent && auth.did) {
+      const generation = ++effectGeneration;
       const userDid = auth.did;
       const handle = currentProfile?.data?.handle;
       catchUpAllBoards(userDid, handle)
         .then(async () => {
+          if (generation !== effectGeneration) return;
           const boards = await db.boards.toArray();
           connectBoardSubs(boards, userDid);
         })
