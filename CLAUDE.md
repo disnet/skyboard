@@ -11,7 +11,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Architecture
 
-Skyboard is a collaborative kanban board built on the AT Protocol (atproto). It uses Svelte 5 with SvelteKit as a fully client-side SPA (SSR and prerendering are disabled in `+layout.ts`). It deploys as a static site via `@sveltejs/adapter-static` with a `200.html` fallback for SPA routing.
+Skyboard is a collaborative kanban board built on the AT Protocol (atproto). The web app uses Svelte 5 with SvelteKit as a fully client-side SPA (SSR and prerendering are disabled in `+layout.ts`). It deploys as a static site via `@sveltejs/adapter-static` with a `200.html` fallback for SPA routing.
+
+An **appview** server (`appview/`) aggregates board data from all participants and serves it to clients. Clients read from the appview and write to their own PDS.
 
 ### Data Model: Four Record Types
 
@@ -24,13 +26,24 @@ All data is stored as AT Protocol records in each user's repo. Collection consta
 
 `Board`, `Task`, `Op`, and `Trust` are the local Dexie models (with auto-increment `id` and `syncStatus`). `BoardRecord`, `TaskRecord`, `OpRecord`, and `TrustRecord` are the wire format for PDS storage (no local fields). Both sets defined in `src/lib/types.ts`.
 
-### Data Flow: Local-First with PDS Sync
+### Data Flow: Appview for Reads, PDS for Writes
 
-Data is stored locally in IndexedDB via **Dexie** (`src/lib/db.ts`) and synced to the user's AT Protocol Personal Data Server (PDS). Every record has a `syncStatus` field (`synced` | `pending` | `error`) that drives the sync engine:
+**Reading:** The browser fetches full board state from the appview (`src/lib/appview.ts`) via `GET /board/:did/:rkey`. The response includes all tasks, ops, trusts, comments, approvals, and reactions, which are upserted into Dexie. Local pending records take priority over appview data (local-wins).
 
-1. All mutations write to Dexie first with `syncStatus: 'pending'`
-2. Background sync (`src/lib/sync.ts`) pushes pending records to the PDS via `putRecord`/`deleteRecord`
-3. On login, `pullFromPDS` fetches all remote records; local pending records take priority over remote (local-wins conflict resolution)
+**Writing:** All mutations write to Dexie first with `syncStatus: 'pending'`. Background sync (`src/lib/sync.ts`) pushes pending records to the user's PDS via `putRecord`/`deleteRecord`.
+
+**Real-time:** The browser subscribes to the appview's WebSocket (`AppviewSubscription` in `src/lib/appview.ts`). When the appview detects changes (via Jetstream), it sends an update notification and the client re-fetches the board.
+
+### Appview
+
+The appview (`appview/`) is a Bun + SQLite caching server deployed on Fly.io:
+
+- Subscribes to Jetstream for real-time ingestion of all `dev.skyboard.*` records
+- Backfills from PDS endpoints on demand when a board is first requested
+- Serves full board state via REST and pushes update notifications via WebSocket
+- Persists Jetstream cursor for graceful restart recovery (safe with Fly auto-stop)
+
+See `appview/README.md` for API docs, development, and deployment.
 
 ### Materialization and Conflict Resolution
 
@@ -46,10 +59,6 @@ Data is stored locally in IndexedDB via **Dexie** (`src/lib/db.ts`) and synced t
 ### Permissions System
 
 Board owners configure per-operation permission rules with three scopes: `author_only`, `trusted`, `anyone`. Five operation types: `create_task`, `edit_title`, `edit_description`, `move_task`, `reorder`. Rules can be scoped to specific columns. Untrusted ops appear in the Proposals panel pending approval.
-
-### Real-Time Sync
-
-**Jetstream** (`src/lib/jetstream.ts`) provides real-time PDS commit events via WebSocket. Uses cursor-based reconnection with a 48-hour window. On stale cursor or reconnect, the app backfills by fetching directly from all known participants' PDS endpoints.
 
 ### AT Protocol Integration
 
