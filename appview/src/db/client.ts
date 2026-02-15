@@ -21,9 +21,7 @@ export function getDb(): Database {
     _db.exec(schema);
 
     // Additive migrations for existing databases
-    const migrations = [
-      `ALTER TABLE tasks ADD COLUMN assigneeDid TEXT`,
-    ];
+    const migrations = [`ALTER TABLE tasks ADD COLUMN assigneeDid TEXT`];
     for (const sql of migrations) {
       try {
         _db.exec(sql);

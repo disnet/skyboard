@@ -852,7 +852,10 @@
           <div class="assignee-header">
             <label>Assignee</label>
           </div>
-          <AuthorBadge did={task.effectiveAssigneeDid} isCurrentUser={task.effectiveAssigneeDid === currentUserDid} />
+          <AuthorBadge
+            did={task.effectiveAssigneeDid}
+            isCurrentUser={task.effectiveAssigneeDid === currentUserDid}
+          />
         </div>
       {/if}
 
