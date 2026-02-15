@@ -426,45 +426,6 @@
             editDescription = update.state.doc.toString();
           }
         }),
-        EditorView.domEventHandlers({
-          mousedown(e: MouseEvent, view: EditorView) {
-            if (!(e.metaKey || e.ctrlKey)) return false;
-            const pos = view.posAtCoords({ x: e.clientX, y: e.clientY });
-            if (pos === null) return false;
-            const line = view.state.doc.lineAt(pos);
-            const text = line.text;
-            const offsetInLine = pos - line.from;
-            // Try markdown link syntax first: [text](url)
-            // The raw doc text always has the full markdown even when decorations hide it
-            const mdLinkRegex = /\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g;
-            let match: RegExpExecArray | null;
-            while ((match = mdLinkRegex.exec(text)) !== null) {
-              if (
-                offsetInLine >= match.index &&
-                offsetInLine <= match.index + match[0].length
-              ) {
-                e.preventDefault();
-                e.stopPropagation();
-                window.open(match[2], "_blank", "noopener,noreferrer");
-                return true;
-              }
-            }
-            // Try plain URL
-            const urlRegex = /https?:\/\/[^\s)>\]]+/g;
-            while ((match = urlRegex.exec(text)) !== null) {
-              if (
-                offsetInLine >= match.index &&
-                offsetInLine <= match.index + match[0].length
-              ) {
-                e.preventDefault();
-                e.stopPropagation();
-                window.open(match[0], "_blank", "noopener,noreferrer");
-                return true;
-              }
-            }
-            return false;
-          },
-        }),
         EditorView.theme({
           "&": {
             fontSize: "0.875rem",
@@ -496,7 +457,51 @@
       parent: editorContainer,
     });
 
+    // Cmd/Ctrl+click to open links — use capturing listener to intercept
+    // before CodeMirror's multi-cursor handler processes the event
+    function handleEditorMousedown(e: MouseEvent) {
+      if (!(e.metaKey || e.ctrlKey) || !editorView) return;
+      const pos = editorView.posAtCoords({ x: e.clientX, y: e.clientY });
+      if (pos === null) return;
+      const line = editorView.state.doc.lineAt(pos);
+      const text = line.text;
+      const offsetInLine = pos - line.from;
+      // Try markdown link syntax first: [text](url)
+      const mdLinkRegex = /\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g;
+      let match: RegExpExecArray | null;
+      while ((match = mdLinkRegex.exec(text)) !== null) {
+        if (
+          offsetInLine >= match.index &&
+          offsetInLine <= match.index + match[0].length
+        ) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          window.open(match[2], "_blank", "noopener,noreferrer");
+          return;
+        }
+      }
+      // Try plain URL
+      const urlRegex = /https?:\/\/[^\s)>\]]+/g;
+      while ((match = urlRegex.exec(text)) !== null) {
+        if (
+          offsetInLine >= match.index &&
+          offsetInLine <= match.index + match[0].length
+        ) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          window.open(match[0], "_blank", "noopener,noreferrer");
+          return;
+        }
+      }
+    }
+    editorContainer.addEventListener("mousedown", handleEditorMousedown, true);
+
     return () => {
+      editorContainer!.removeEventListener(
+        "mousedown",
+        handleEditorMousedown,
+        true,
+      );
       editorView?.destroy();
       editorView = undefined;
     };
