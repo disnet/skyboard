@@ -128,7 +128,7 @@ function buildDefaultProtocol(config: RalphConfig): string {
 
   return `# Skyboard Loop Agent
 
-This project uses a Skyboard kanban board to drive an iterative development loop. Each invocation checks the board, picks a task, does one unit of work, updates the board, and writes a status file before exiting.
+This project uses a Skyboard kanban board to drive an iterative development loop. Each invocation performs exactly one card transition: check the board, pick one card, advance it to the next column, and exit.
 
 ## Board
 
@@ -152,7 +152,7 @@ Run \`sb cards --json\` to see the full board state. Identify which cards are in
 
 ### 2. PICK
 
-Select one card to work on using this priority order:
+Select exactly one card to work on. You will only work on this single card during this invocation. Use this priority order:
 
 ${buildPickPriority(columns)}
 
@@ -169,6 +169,8 @@ ${buildTransitionTable(columns)}
 **Never skip columns.** A card must pass through each stage in order.
 
 **Moving backwards:** If verification fails during a review stage, move the card back to the previous stage with a comment explaining what failed.
+
+**IMPORTANT: After completing one transition, proceed immediately to UPDATE (step 4) and then WRITE STATUS AND EXIT (step 5). Do not pick another card or perform additional transitions.**
 
 ### 4. UPDATE
 
