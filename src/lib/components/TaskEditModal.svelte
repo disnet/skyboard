@@ -26,6 +26,13 @@
   import BlockInsertMenu from "./BlockInsertMenu.svelte";
   import DOMPurify from "dompurify";
 
+  DOMPurify.addHook("afterSanitizeAttributes", (node) => {
+    if (node.tagName === "A") {
+      node.setAttribute("target", "_blank");
+      node.setAttribute("rel", "noopener noreferrer");
+    }
+  });
+
   const markedInstance = new Marked(mentionExtension(), {
     renderer: {
       checkbox({ checked }: { checked: boolean }) {
@@ -418,6 +425,42 @@
           if (update.docChanged) {
             editDescription = update.state.doc.toString();
           }
+        }),
+        EditorView.domEventHandlers({
+          click(e: MouseEvent, view: EditorView) {
+            if (!(e.metaKey || e.ctrlKey)) return false;
+            const pos = view.posAtCoords({ x: e.clientX, y: e.clientY });
+            if (pos === null) return false;
+            const line = view.state.doc.lineAt(pos);
+            const text = line.text;
+            // Try to find a URL at the click position
+            const urlRegex = /https?:\/\/[^\s)>\]]+/g;
+            let match: RegExpExecArray | null;
+            const offsetInLine = pos - line.from;
+            while ((match = urlRegex.exec(text)) !== null) {
+              if (
+                offsetInLine >= match.index &&
+                offsetInLine <= match.index + match[0].length
+              ) {
+                window.open(match[0], "_blank", "noopener,noreferrer");
+                e.preventDefault();
+                return true;
+              }
+            }
+            // Try markdown link syntax: [text](url)
+            const mdLinkRegex = /\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g;
+            while ((match = mdLinkRegex.exec(text)) !== null) {
+              if (
+                offsetInLine >= match.index &&
+                offsetInLine <= match.index + match[0].length
+              ) {
+                window.open(match[2], "_blank", "noopener,noreferrer");
+                e.preventDefault();
+                return true;
+              }
+            }
+            return false;
+          },
         }),
         EditorView.theme({
           "&": {
@@ -1352,6 +1395,12 @@
 
   .rendered-description :global(:last-child) {
     margin-bottom: 0;
+  }
+
+  .rendered-description :global(a) {
+    color: var(--color-primary);
+    text-decoration: underline;
+    cursor: pointer;
   }
 
   .rendered-description :global(input[type="checkbox"]) {
