@@ -18,6 +18,7 @@ import { mvCommand } from "./commands/mv.js";
 import { editCommand } from "./commands/edit.js";
 import { commentCommand } from "./commands/comment.js";
 import { rmCommand } from "./commands/rm.js";
+import { ralphCommand } from "./commands/ralph.js";
 
 const program = new Command();
 
@@ -149,5 +150,8 @@ program
   .option("--board <ref>", "Override default board")
   .option("--json", "Output as JSON")
   .action(rmCommand);
+
+// Autonomous dev loop
+ralphCommand(program);
 
 program.parse();

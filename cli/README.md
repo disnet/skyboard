@@ -104,6 +104,71 @@ sb boards --json
 sb whoami --json
 ```
 
+## Autonomous dev loop (`sb ralph`)
+
+`sb ralph` runs [Claude Code](https://claude.ai/code) in an autonomous loop driven by a Skyboard kanban board. Each iteration picks a task, does one unit of work, moves the card, and writes a status file. The loop continues until all tasks are done, all remaining tasks are blocked, or the iteration limit is reached.
+
+### Setup
+
+```bash
+sb ralph init --board "Sprint Board"   # creates .ralph.json + .ralph-protocol.md
+sb ralph start                         # run the loop
+```
+
+### Commands
+
+| Command | Description |
+|---------|-------------|
+| `sb ralph init` | Set up `.ralph.json` config and generate protocol file |
+| `sb ralph start` | Run the autonomous dev loop |
+| `sb ralph status` | Show current loop state (iteration count, last status) |
+
+### `sb ralph init` options
+
+| Option | Description |
+|--------|-------------|
+| `--board <ref>` | Board reference (rkey, AT URI, URL, name). Falls back to default board. |
+| `--max-iterations <n>` | Default max iterations (default: 50) |
+
+Creates two files:
+- **`.ralph.json`** — Config with board ref, iteration limit, and file paths
+- **`.ralph-protocol.md`** — The agent protocol template. Edit this to customize agent behavior.
+
+### `sb ralph start` options
+
+| Option | Description |
+|--------|-------------|
+| `--max-iterations <n>` | Override the max iterations from config |
+| `--interactive` | Require permission approval for each tool use (disables `--dangerously-skip-permissions`) |
+
+By default, `start` runs with `--dangerously-skip-permissions` so the agent can work autonomously. Use `--interactive` for supervised runs.
+
+Output streams to both stdout and `.claude/loop.log`. Press Ctrl-C to stop gracefully — the current iteration finishes before exiting.
+
+### `sb ralph status` options
+
+| Option | Description |
+|--------|-------------|
+| `--json` | Machine-readable JSON output |
+
+### Protocol customization
+
+The generated `.ralph-protocol.md` contains the full agent protocol with `{{placeholder}}` markers that are interpolated at runtime:
+
+- `{{iteration}}` — Current iteration number
+- `{{maxIterations}}` — Total iteration limit
+- `{{boardDid}}` — Board owner DID
+- `{{boardRkey}}` — Board record key
+
+Edit the protocol file to change how the agent picks tasks, what transitions it makes, or any other behavior.
+
+### Monitoring
+
+- **Skyboard web UI** — Watch cards move across columns in real time
+- **Card comments** — The agent logs what it did each iteration
+- **Log file** — `.claude/loop.log` has full output from every iteration
+- **Status** — `sb ralph status` shows iteration count and last status
+
 ## Claude Code plugin
 
 The `sb` CLI includes a [Claude Code](https://claude.ai/code) plugin so you can manage boards directly from a Claude Code conversation using `/sb:cards`, `/sb:new`, `/sb:mv`, etc.
