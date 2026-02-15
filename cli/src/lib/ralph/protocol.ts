@@ -120,7 +120,7 @@ function buildBranchingRule(branching: string): string {
   if (branching === "current-branch") {
     return `- **Branching:** Do not create new branches. Commit directly to the current branch.`;
   }
-  return `- **Branching:** Always create or checkout a dedicated branch for the card you are working on before making any code changes. The branch name must be \`card/<rkey>\` where \`<rkey>\` is the card's record key (e.g., \`card/3lgjasx2zws2p\`). If the branch already exists, check it out and continue from there.`;
+  return `- **Branching:** Always create or checkout a dedicated branch for the card you are working on before making any code changes. The branch name must be \`card/<rkey>\` where \`<rkey>\` is the card's record key (e.g., \`card/3lgjasx2zws2p\`). Always branch off of \`main\` (i.e., \`git checkout -b card/<rkey> main\`). If the branch already exists, check it out and continue from there.`;
 }
 
 function buildDefaultProtocol(config: RalphConfig): string {
