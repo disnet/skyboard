@@ -39,6 +39,7 @@ vi.mock("node:fs", async (importOriginal) => {
 import { requireAgent } from "../lib/auth.js";
 import { loadRalphConfig } from "../lib/ralph/config.js";
 import { runLoop } from "../lib/ralph/runner.js";
+import { fetchBoardFromAppview } from "../lib/pds.js";
 import { ralphCommand } from "../commands/ralph.js";
 import { existsSync } from "node:fs";
 
@@ -113,6 +114,7 @@ describe("ralph start", () => {
       did: "did:plc:test",
       handle: "test.user",
     });
+    vi.mocked(fetchBoardFromAppview).mockResolvedValue({ open: false } as any);
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(runLoop).mockResolvedValue("DONE");
 
@@ -129,6 +131,25 @@ describe("ralph start", () => {
     expect(exitSpy).toHaveBeenCalledWith(0);
   });
 
+  it("exits with error when board is open", async () => {
+    vi.mocked(loadRalphConfig).mockReturnValue(validConfig);
+    vi.mocked(requireAgent).mockResolvedValue({
+      agent: {} as any,
+      did: "did:plc:test",
+      handle: "test.user",
+    });
+    vi.mocked(fetchBoardFromAppview).mockResolvedValue({ open: true } as any);
+
+    const program = makeProgram();
+
+    await expect(
+      program.parseAsync(["node", "sb", "ralph", "start"]),
+    ).rejects.toThrow("process.exit");
+
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(runLoop).not.toHaveBeenCalled();
+  });
+
   it("exits with error when protocol file is missing", async () => {
     vi.mocked(loadRalphConfig).mockReturnValue(validConfig);
     vi.mocked(requireAgent).mockResolvedValue({
@@ -136,6 +157,7 @@ describe("ralph start", () => {
       did: "did:plc:test",
       handle: "test.user",
     });
+    vi.mocked(fetchBoardFromAppview).mockResolvedValue({ open: false } as any);
     vi.mocked(existsSync).mockReturnValue(false);
 
     const program = makeProgram();
