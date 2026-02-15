@@ -25,6 +25,7 @@
     "@atproto/api": "^0.13.20",
     "@atproto/common-web": "^0.4.0",
     "@atproto/oauth-client-node": "^0.3.7",
+    "@inquirer/prompts": "^8.2.1",
     "chalk": "^5.4.1",
     "commander": "^13.1.0",
     "fractional-indexing": "^3.2.0",

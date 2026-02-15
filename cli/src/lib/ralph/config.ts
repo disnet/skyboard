@@ -1,9 +1,15 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 
+export type WorkflowType = "simple" | "standard" | "custom";
+export type BranchingStrategy = "per-card" | "current-branch";
+
 export interface RalphConfig {
   board: { did: string; rkey: string };
   maxIterations: number;
+  workflow: WorkflowType;
+  columns?: string[];
+  branching: BranchingStrategy;
   statusFile: string;
   logFile: string;
   protocolFile: string;
