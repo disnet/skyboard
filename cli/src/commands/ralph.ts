@@ -348,6 +348,8 @@ export function ralphCommand(program: Command): void {
         process.exit(1);
       }
 
+      await requireAgent();
+
       const protocolPath = resolve(cwd, config.protocolFile);
       if (!existsSync(protocolPath)) {
         console.error(
