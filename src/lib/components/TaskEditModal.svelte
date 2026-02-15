@@ -480,8 +480,8 @@
           return;
         }
       }
-      // Try plain URL
-      const urlRegex = /https?:\/\/[^\s)>\]]+/g;
+      // Try plain URL (with or without protocol)
+      const urlRegex = /(?:https?:\/\/|www\.)[^\s)>\]]+/g;
       while ((match = urlRegex.exec(text)) !== null) {
         if (
           offsetInLine >= match.index &&
@@ -489,7 +489,10 @@
         ) {
           e.preventDefault();
           e.stopImmediatePropagation();
-          window.open(match[0], "_blank", "noopener,noreferrer");
+          const url = match[0].startsWith("www.")
+            ? `https://${match[0]}`
+            : match[0];
+          window.open(url, "_blank", "noopener,noreferrer");
           return;
         }
       }
