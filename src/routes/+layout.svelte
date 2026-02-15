@@ -527,7 +527,8 @@
 
   .app-main {
     flex: 1;
-    overflow: auto;
+    overflow-y: auto;
+    overflow-x: hidden;
   }
 
   @media (max-width: 600px) {
