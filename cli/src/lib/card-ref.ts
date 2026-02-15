@@ -12,7 +12,9 @@ export function resolveCardRef(
   tasks: MaterializedTask[],
 ): MaterializedTask {
   if (ref.length < MIN_PREFIX_LEN) {
-    throw new Error(`Card reference too short (min ${MIN_PREFIX_LEN} chars): ${ref}`);
+    throw new Error(
+      `Card reference too short (min ${MIN_PREFIX_LEN} chars): ${ref}`,
+    );
   }
 
   const matches = tasks.filter((t) => t.rkey.startsWith(ref));

@@ -14,14 +14,20 @@ export async function boardsCommand(opts: { json?: boolean }): Promise<void> {
   const defaultBoard = getDefaultBoard();
 
   if (opts.json) {
-    console.log(JSON.stringify(boards.map((b) => ({
-      rkey: b.rkey,
-      did: b.did,
-      name: b.name,
-      description: b.description,
-      columns: b.columns.length,
-      open: b.open ?? false,
-    })), null, 2));
+    console.log(
+      JSON.stringify(
+        boards.map((b) => ({
+          rkey: b.rkey,
+          did: b.did,
+          name: b.name,
+          description: b.description,
+          columns: b.columns.length,
+          open: b.open ?? false,
+        })),
+        null,
+        2,
+      ),
+    );
     return;
   }
 
@@ -33,12 +39,15 @@ export async function boardsCommand(opts: { json?: boolean }): Promise<void> {
   console.log(chalk.bold("Your boards:\n"));
 
   for (const board of boards) {
-    const isDefault = defaultBoard?.did === board.did && defaultBoard?.rkey === board.rkey;
+    const isDefault =
+      defaultBoard?.did === board.did && defaultBoard?.rkey === board.rkey;
     const marker = isDefault ? chalk.green(" *") : "  ";
     const cols = board.columns.sort((a, b) => a.order - b.order);
     const colSummary = cols.map((c) => c.name).join(" | ");
 
-    console.log(`${marker} ${chalk.bold(board.name)} ${chalk.dim(`(${board.rkey})`)}`);
+    console.log(
+      `${marker} ${chalk.bold(board.name)} ${chalk.dim(`(${board.rkey})`)}`,
+    );
     if (board.description) {
       console.log(`    ${chalk.dim(board.description)}`);
     }
@@ -51,9 +60,12 @@ export async function boardsCommand(opts: { json?: boolean }): Promise<void> {
   if (otherBoards.length > 0) {
     console.log(chalk.bold("Joined boards:\n"));
     for (const board of otherBoards) {
-      const isDefault = defaultBoard?.did === board.did && defaultBoard?.rkey === board.rkey;
+      const isDefault =
+        defaultBoard?.did === board.did && defaultBoard?.rkey === board.rkey;
       const marker = isDefault ? chalk.green(" *") : "  ";
-      console.log(`${marker} ${chalk.bold(board.name)} ${chalk.dim(`(${board.did.slice(0, 20)}.../${board.rkey})`)}`);
+      console.log(
+        `${marker} ${chalk.bold(board.name)} ${chalk.dim(`(${board.did.slice(0, 20)}.../${board.rkey})`)}`,
+      );
     }
     console.log();
   }

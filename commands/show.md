@@ -16,6 +16,7 @@ sb show <ref> --json
 - `<ref>` — card reference (rkey prefix, minimum 4 characters)
 
 Options:
+
 - `--board <ref>` — override default board
 
 Always use `--json`. Returns: `rkey`, `did`, `title`, `description`, `column`, `labels[]`, `createdAt`, `lastModifiedAt`, `lastModifiedBy`, `opsApplied`, `comments[]`.

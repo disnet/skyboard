@@ -60,7 +60,11 @@
 
   async function acceptComment(comment: Comment) {
     if (!auth.did) return;
-    const commentUri = buildAtUri(comment.did, COMMENT_COLLECTION, comment.rkey);
+    const commentUri = buildAtUri(
+      comment.did,
+      COMMENT_COLLECTION,
+      comment.rkey,
+    );
     await createApproval(auth.did, commentUri, boardUri);
   }
 
@@ -86,18 +90,30 @@
           <div class="proposal-header">
             <AuthorBadge did={item.did} />
             <div class="proposal-actions">
-              <button class="action-btn block-btn" onclick={() => block(item.did)}>
+              <button
+                class="action-btn block-btn"
+                onclick={() => block(item.did)}
+              >
                 Block User
               </button>
-              <button class="action-btn trust-btn" onclick={() => trustUser(item.did)}>
+              <button
+                class="action-btn trust-btn"
+                onclick={() => trustUser(item.did)}
+              >
                 Trust User
               </button>
               {#if item.kind === "task"}
-                <button class="action-btn accept-btn" onclick={() => acceptTask(item.task)}>
+                <button
+                  class="action-btn accept-btn"
+                  onclick={() => acceptTask(item.task)}
+                >
                   Accept
                 </button>
               {:else}
-                <button class="action-btn accept-btn" onclick={() => acceptComment(item.comment)}>
+                <button
+                  class="action-btn accept-btn"
+                  onclick={() => acceptComment(item.comment)}
+                >
                   Accept
                 </button>
               {/if}
@@ -110,7 +126,12 @@
             </div>
           {:else}
             <div class="proposal-body">
-              <div class="comment-context">on <strong>{taskTitleByUri.get(item.comment.targetTaskUri) ?? "unknown card"}</strong></div>
+              <div class="comment-context">
+                on <strong
+                  >{taskTitleByUri.get(item.comment.targetTaskUri) ??
+                    "unknown card"}</strong
+                >
+              </div>
               <div class="comment-box">{item.comment.text}</div>
             </div>
           {/if}

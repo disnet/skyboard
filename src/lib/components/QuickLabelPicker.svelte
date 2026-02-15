@@ -76,7 +76,11 @@
 <svelte:window onkeydown={handleKeydown} />
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="picker-backdrop" onmousedown={handleBackdropMouseDown} onclick={handleBackdropClick}>
+<div
+  class="picker-backdrop"
+  onmousedown={handleBackdropMouseDown}
+  onclick={handleBackdropClick}
+>
   <div
     class="picker"
     role="listbox"
@@ -103,8 +107,18 @@
           <span class="label-dot" style="background: {lbl.color};"></span>
           <span class="label-name">{lbl.name}</span>
           {#if activeLabelIds.includes(lbl.id)}
-            <svg class="check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="20 6 9 17 4 12"/>
+            <svg
+              class="check"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <polyline points="20 6 9 17 4 12" />
             </svg>
           {/if}
         </button>

@@ -55,7 +55,9 @@ export async function rmCommand(
   if (opts.json) {
     console.log(JSON.stringify({ deleted: task.rkey }));
   } else {
-    console.log(chalk.green(`Deleted ${shortRkey(task.rkey)} "${task.effectiveTitle}"`));
+    console.log(
+      chalk.green(`Deleted ${shortRkey(task.rkey)} "${task.effectiveTitle}"`),
+    );
   }
 }
 
@@ -72,7 +74,9 @@ function confirm(prompt: string): Promise<boolean> {
 function resolveBoard(boardOpt?: string): { did: string; rkey: string } {
   const defaultBoard = getDefaultBoard();
   if (!defaultBoard) {
-    console.error(chalk.red("No default board set. Run `sb use <board>` first."));
+    console.error(
+      chalk.red("No default board set. Run `sb use <board>` first."),
+    );
     process.exit(1);
   }
   return defaultBoard;

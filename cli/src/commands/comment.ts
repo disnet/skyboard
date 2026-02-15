@@ -2,7 +2,13 @@ import { requireAgent } from "../lib/auth.js";
 import { fetchBoardData } from "../lib/pds.js";
 import { getDefaultBoard } from "../lib/config.js";
 import { resolveCardRef } from "../lib/card-ref.js";
-import { generateTID, buildAtUri, TASK_COLLECTION, COMMENT_COLLECTION, BOARD_COLLECTION } from "../lib/tid.js";
+import {
+  generateTID,
+  buildAtUri,
+  TASK_COLLECTION,
+  COMMENT_COLLECTION,
+  BOARD_COLLECTION,
+} from "../lib/tid.js";
 import { shortRkey } from "../lib/display.js";
 import chalk from "chalk";
 
@@ -48,16 +54,24 @@ export async function commentCommand(
   });
 
   if (opts.json) {
-    console.log(JSON.stringify({ rkey: commentRkey, taskRkey: task.rkey, text }));
+    console.log(
+      JSON.stringify({ rkey: commentRkey, taskRkey: task.rkey, text }),
+    );
   } else {
-    console.log(chalk.green(`Comment added to ${shortRkey(task.rkey)} "${task.effectiveTitle}"`));
+    console.log(
+      chalk.green(
+        `Comment added to ${shortRkey(task.rkey)} "${task.effectiveTitle}"`,
+      ),
+    );
   }
 }
 
 function resolveBoard(boardOpt?: string): { did: string; rkey: string } {
   const defaultBoard = getDefaultBoard();
   if (!defaultBoard) {
-    console.error(chalk.red("No default board set. Run `sb use <board>` first."));
+    console.error(
+      chalk.red("No default board set. Run `sb use <board>` first."),
+    );
     process.exit(1);
   }
   return defaultBoard;

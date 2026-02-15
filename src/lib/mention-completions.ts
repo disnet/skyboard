@@ -1,4 +1,7 @@
-import type { CompletionContext, CompletionResult } from "@codemirror/autocomplete";
+import type {
+  CompletionContext,
+  CompletionResult,
+} from "@codemirror/autocomplete";
 
 const TYPEAHEAD_API =
   "https://public.api.bsky.app/xrpc/app.bsky.actor.searchActorsTypeahead";

@@ -16,6 +16,7 @@ sb rm <ref> --force --json
 - `<ref>` — card reference (rkey prefix, minimum 4 characters)
 
 Options:
+
 - `-f, --force` — skip interactive confirmation prompt
 - `--board <ref>` — override default board
 

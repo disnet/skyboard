@@ -1,5 +1,9 @@
 import { requireAgent } from "../lib/auth.js";
-import { fetchMyBoards, fetchBoardFromAppview, resolveHandle } from "../lib/pds.js";
+import {
+  fetchMyBoards,
+  fetchBoardFromAppview,
+  resolveHandle,
+} from "../lib/pds.js";
 import { setDefaultBoard, loadConfig } from "../lib/config.js";
 import { BOARD_COLLECTION } from "../lib/tid.js";
 import chalk from "chalk";
@@ -39,8 +43,8 @@ async function parseBoardRef(
   // Check known boards by name (fuzzy)
   const config = loadConfig();
   const lowerRef = ref.toLowerCase();
-  const nameMatch = config.knownBoards.find(
-    (b) => b.name.toLowerCase().includes(lowerRef),
+  const nameMatch = config.knownBoards.find((b) =>
+    b.name.toLowerCase().includes(lowerRef),
   );
   if (nameMatch) return { did: nameMatch.did, rkey: nameMatch.rkey };
 

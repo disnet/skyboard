@@ -65,14 +65,14 @@ function createDb(name: string): SkyboardDb {
   d.version(5)
     .stores({
       boards: "++id, rkey, did, syncStatus",
-      tasks: "++id, rkey, did, columnId, boardUri, order, syncStatus, [did+rkey]",
+      tasks:
+        "++id, rkey, did, columnId, boardUri, order, syncStatus, [did+rkey]",
       ops: "++id, rkey, did, targetTaskUri, boardUri, createdAt, syncStatus, [did+rkey]",
       trusts:
         "++id, rkey, did, trustedDid, boardUri, syncStatus, [did+boardUri+trustedDid], [did+rkey]",
       comments:
         "++id, rkey, did, targetTaskUri, boardUri, createdAt, syncStatus, [did+rkey]",
-      approvals:
-        "++id, rkey, did, targetUri, boardUri, syncStatus, [did+rkey]",
+      approvals: "++id, rkey, did, targetUri, boardUri, syncStatus, [did+rkey]",
       knownParticipants: "++id, did, boardUri, [did+boardUri]",
     })
     .upgrade((tx) => {
@@ -87,9 +87,7 @@ function createDb(name: string): SkyboardDb {
             const perms = board.permissions as {
               rules?: Array<{ scope?: string }>;
             };
-            const hadAnyone = perms.rules?.some(
-              (r) => r.scope === "anyone",
-            );
+            const hadAnyone = perms.rules?.some((r) => r.scope === "anyone");
             if (hadAnyone) {
               board.open = true;
               board.syncStatus = "pending";
@@ -107,25 +105,22 @@ function createDb(name: string): SkyboardDb {
       "++id, rkey, did, trustedDid, boardUri, syncStatus, [did+boardUri+trustedDid], [did+rkey]",
     comments:
       "++id, rkey, did, targetTaskUri, boardUri, createdAt, syncStatus, [did+rkey]",
-    approvals:
-      "++id, rkey, did, targetUri, boardUri, syncStatus, [did+rkey]",
-    blocks:
-      "++id, did, blockedDid, boardUri, [did+boardUri+blockedDid]",
+    approvals: "++id, rkey, did, targetUri, boardUri, syncStatus, [did+rkey]",
+    blocks: "++id, did, blockedDid, boardUri, [did+boardUri+blockedDid]",
     knownParticipants: "++id, did, boardUri, [did+boardUri]",
   });
 
   d.version(7).stores({
     boards: "++id, rkey, did, syncStatus",
-    tasks: "++id, rkey, did, columnId, boardUri, order, syncStatus, [did+rkey], createdAt",
+    tasks:
+      "++id, rkey, did, columnId, boardUri, order, syncStatus, [did+rkey], createdAt",
     ops: "++id, rkey, did, targetTaskUri, boardUri, createdAt, syncStatus, [did+rkey]",
     trusts:
       "++id, rkey, did, trustedDid, boardUri, syncStatus, [did+boardUri+trustedDid], [did+rkey]",
     comments:
       "++id, rkey, did, targetTaskUri, boardUri, createdAt, syncStatus, [did+rkey]",
-    approvals:
-      "++id, rkey, did, targetUri, boardUri, syncStatus, [did+rkey]",
-    blocks:
-      "++id, did, blockedDid, boardUri, [did+boardUri+blockedDid]",
+    approvals: "++id, rkey, did, targetUri, boardUri, syncStatus, [did+rkey]",
+    blocks: "++id, did, blockedDid, boardUri, [did+boardUri+blockedDid]",
     knownParticipants: "++id, did, boardUri, [did+boardUri]",
     notifications:
       "++id, type, boardUri, read, createdAt, dedupeKey, [read+createdAt]",
@@ -133,18 +128,17 @@ function createDb(name: string): SkyboardDb {
 
   d.version(8).stores({
     boards: "++id, rkey, did, syncStatus",
-    tasks: "++id, rkey, did, columnId, boardUri, order, syncStatus, [did+rkey], createdAt",
+    tasks:
+      "++id, rkey, did, columnId, boardUri, order, syncStatus, [did+rkey], createdAt",
     ops: "++id, rkey, did, targetTaskUri, boardUri, createdAt, syncStatus, [did+rkey]",
     trusts:
       "++id, rkey, did, trustedDid, boardUri, syncStatus, [did+boardUri+trustedDid], [did+rkey]",
     comments:
       "++id, rkey, did, targetTaskUri, boardUri, createdAt, syncStatus, [did+rkey]",
-    approvals:
-      "++id, rkey, did, targetUri, boardUri, syncStatus, [did+rkey]",
+    approvals: "++id, rkey, did, targetUri, boardUri, syncStatus, [did+rkey]",
     reactions:
       "++id, rkey, did, targetTaskUri, boardUri, emoji, syncStatus, [did+rkey], [did+targetTaskUri+emoji]",
-    blocks:
-      "++id, did, blockedDid, boardUri, [did+boardUri+blockedDid]",
+    blocks: "++id, did, blockedDid, boardUri, [did+boardUri+blockedDid]",
     knownParticipants: "++id, did, boardUri, [did+boardUri]",
     notifications:
       "++id, type, boardUri, read, createdAt, dedupeKey, [read+createdAt]",
@@ -152,18 +146,17 @@ function createDb(name: string): SkyboardDb {
 
   d.version(9).stores({
     boards: "++id, rkey, did, syncStatus",
-    tasks: "++id, rkey, did, columnId, boardUri, order, syncStatus, [did+rkey], createdAt",
+    tasks:
+      "++id, rkey, did, columnId, boardUri, order, syncStatus, [did+rkey], createdAt",
     ops: "++id, rkey, did, targetTaskUri, boardUri, createdAt, syncStatus, [did+rkey]",
     trusts:
       "++id, rkey, did, trustedDid, boardUri, syncStatus, [did+boardUri+trustedDid], [did+rkey]",
     comments:
       "++id, rkey, did, targetTaskUri, boardUri, createdAt, syncStatus, [did+rkey]",
-    approvals:
-      "++id, rkey, did, targetUri, boardUri, syncStatus, [did+rkey]",
+    approvals: "++id, rkey, did, targetUri, boardUri, syncStatus, [did+rkey]",
     reactions:
       "++id, rkey, did, targetTaskUri, boardUri, emoji, syncStatus, [did+rkey], [did+targetTaskUri+emoji]",
-    blocks:
-      "++id, did, blockedDid, boardUri, [did+boardUri+blockedDid]",
+    blocks: "++id, did, blockedDid, boardUri, [did+boardUri+blockedDid]",
     knownParticipants: "++id, did, boardUri, [did+boardUri]",
     notifications:
       "++id, type, boardUri, read, createdAt, dedupeKey, [read+createdAt]",

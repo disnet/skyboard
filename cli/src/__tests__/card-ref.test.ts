@@ -1,6 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { resolveCardRef } from "../lib/card-ref.js";
-import { makeMaterializedTask, TASK_RKEY_1, TASK_RKEY_2, TASK_RKEY_3 } from "./helpers.js";
+import {
+  makeMaterializedTask,
+  TASK_RKEY_1,
+  TASK_RKEY_2,
+  TASK_RKEY_3,
+} from "./helpers.js";
 
 describe("resolveCardRef", () => {
   const tasks = [
@@ -25,7 +30,7 @@ describe("resolveCardRef", () => {
   });
 
   it("throws when no task matches", () => {
-    expect(() => resolveCardRef("zzzz", tasks)).toThrow('No card found');
+    expect(() => resolveCardRef("zzzz", tasks)).toThrow("No card found");
   });
 
   it("throws on ambiguous match with list of candidates", () => {

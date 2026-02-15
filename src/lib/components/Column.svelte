@@ -45,7 +45,10 @@
     ownerTrustedDids: Set<string>;
     approvedUris: Set<string>;
     commentCounts?: Map<string, number>;
-    reactionsByTask?: Map<string, Map<string, { count: number; userReacted: boolean }>>;
+    reactionsByTask?: Map<
+      string,
+      Map<string, { count: number; userReacted: boolean }>
+    >;
     boardLabels?: Label[];
     onedit: (task: MaterializedTask) => void;
     onreact?: (taskUri: string, emoji: string) => void;
@@ -60,7 +63,13 @@
   } = $props();
 
   const createStatus: PermissionStatus = $derived(
-    getActionStatus(did, boardOwnerDid, ownerTrustedDids, boardOpen, "create_task"),
+    getActionStatus(
+      did,
+      boardOwnerDid,
+      ownerTrustedDids,
+      boardOpen,
+      "create_task",
+    ),
   );
 
   const moveStatus: PermissionStatus = $derived(
@@ -263,7 +272,11 @@
   <div class="task-list" bind:this={taskListEl}>
     {#each sortedTasks as task, i (task.rkey + task.did)}
       <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div class="card-slot" class:drop-above={dropIndex === i} onmouseenter={() => onhover?.(i)}>
+      <div
+        class="card-slot"
+        class:drop-above={dropIndex === i}
+        onmouseenter={() => onhover?.(i)}
+      >
         <TaskCard
           {task}
           currentUserDid={did}
@@ -295,7 +308,9 @@
   {#if !readonly}
     {#if createStatus !== "denied"}
       <button class="add-task-btn" onclick={() => onaddtask?.()}>
-        + {createStatus === "pending" ? "Add a task (pending approval)" : "Add a task"}
+        + {createStatus === "pending"
+          ? "Add a task (pending approval)"
+          : "Add a task"}
       </button>
     {:else}
       <div class="permission-notice denied">
@@ -397,7 +412,9 @@
     color: var(--color-text-secondary);
     cursor: pointer;
     text-align: left;
-    transition: background 0.15s, color 0.15s;
+    transition:
+      background 0.15s,
+      color 0.15s;
   }
 
   .add-task-btn:hover {

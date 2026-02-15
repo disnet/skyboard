@@ -1,7 +1,13 @@
-import { EditorView, showTooltip, keymap, type Tooltip } from "@codemirror/view";
+import {
+  EditorView,
+  showTooltip,
+  keymap,
+  type Tooltip,
+} from "@codemirror/view";
 import { StateField, Prec } from "@codemirror/state";
 
-const isMac = typeof navigator !== "undefined" && /Mac/.test(navigator.platform);
+const isMac =
+  typeof navigator !== "undefined" && /Mac/.test(navigator.platform);
 const mod = isMac ? "\u2318" : "Ctrl+";
 
 interface FormatAction {
@@ -15,16 +21,27 @@ const FORMAT_ACTIONS: FormatAction[] = [
   { label: "B", title: `Bold (${mod}B)`, marker: "**", kind: "wrap" },
   { label: "I", title: `Italic (${mod}I)`, marker: "*", kind: "wrap" },
   { label: "<>", title: `Code (${mod}E)`, marker: "`", kind: "wrap" },
-  { label: "S", title: `Strikethrough (${mod}Shift+X)`, marker: "~~", kind: "wrap" },
+  {
+    label: "S",
+    title: `Strikethrough (${mod}Shift+X)`,
+    marker: "~~",
+    kind: "wrap",
+  },
   { label: "Link", title: `Link (${mod}K)`, marker: "", kind: "link" },
 ];
 
 /** Find the word boundaries around the cursor position. */
-function wordAt(view: EditorView, pos: number): { from: number; to: number } | null {
+function wordAt(
+  view: EditorView,
+  pos: number,
+): { from: number; to: number } | null {
   const line = view.state.doc.lineAt(pos);
   const text = line.text;
   const offset = pos - line.from;
-  if (offset > 0 && /\w/.test(text[offset - 1]) || offset < text.length && /\w/.test(text[offset])) {
+  if (
+    (offset > 0 && /\w/.test(text[offset - 1])) ||
+    (offset < text.length && /\w/.test(text[offset]))
+  ) {
     let start = offset;
     let end = offset;
     while (start > 0 && /\w/.test(text[start - 1])) start--;
@@ -55,7 +72,10 @@ function applyFormat(view: EditorView, action: FormatAction) {
       const replacement = `[${selected}](url)`;
       view.dispatch({
         changes: { from, to, insert: replacement },
-        selection: { anchor: from + selected.length + 3, head: from + selected.length + 6 },
+        selection: {
+          anchor: from + selected.length + 3,
+          head: from + selected.length + 6,
+        },
       });
     } else {
       view.dispatch({
@@ -72,7 +92,10 @@ function applyFormat(view: EditorView, action: FormatAction) {
 
   // Check if already wrapped — look at surrounding text
   const before = view.state.doc.sliceString(Math.max(0, from - len), from);
-  const after = view.state.doc.sliceString(to, Math.min(view.state.doc.length, to + len));
+  const after = view.state.doc.sliceString(
+    to,
+    Math.min(view.state.doc.length, to + len),
+  );
 
   if (before === m && after === m) {
     // Toggle off: remove the surrounding markers
@@ -187,13 +210,45 @@ const toolbarTheme = EditorView.baseTheme({
   },
 });
 
-const formatKeymap = Prec.high(keymap.of([
-  { key: "Mod-b", run: (view) => { applyFormat(view, FORMAT_ACTIONS[0]); return true; } },
-  { key: "Mod-i", run: (view) => { applyFormat(view, FORMAT_ACTIONS[1]); return true; } },
-  { key: "Mod-e", run: (view) => { applyFormat(view, FORMAT_ACTIONS[2]); return true; } },
-  { key: "Mod-Shift-x", run: (view) => { applyFormat(view, FORMAT_ACTIONS[3]); return true; } },
-  { key: "Mod-k", run: (view) => { applyFormat(view, FORMAT_ACTIONS[4]); return true; } },
-]));
+const formatKeymap = Prec.high(
+  keymap.of([
+    {
+      key: "Mod-b",
+      run: (view) => {
+        applyFormat(view, FORMAT_ACTIONS[0]);
+        return true;
+      },
+    },
+    {
+      key: "Mod-i",
+      run: (view) => {
+        applyFormat(view, FORMAT_ACTIONS[1]);
+        return true;
+      },
+    },
+    {
+      key: "Mod-e",
+      run: (view) => {
+        applyFormat(view, FORMAT_ACTIONS[2]);
+        return true;
+      },
+    },
+    {
+      key: "Mod-Shift-x",
+      run: (view) => {
+        applyFormat(view, FORMAT_ACTIONS[3]);
+        return true;
+      },
+    },
+    {
+      key: "Mod-k",
+      run: (view) => {
+        applyFormat(view, FORMAT_ACTIONS[4]);
+        return true;
+      },
+    },
+  ]),
+);
 
 export { formatKeymap as formattingKeymap };
 export const formattingToolbar = [toolbarTooltip, toolbarTheme, formatKeymap];

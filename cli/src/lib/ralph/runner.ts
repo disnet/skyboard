@@ -1,5 +1,11 @@
 import { spawn } from "node:child_process";
-import { createWriteStream, readFileSync, existsSync, mkdirSync, unlinkSync } from "node:fs";
+import {
+  createWriteStream,
+  readFileSync,
+  existsSync,
+  mkdirSync,
+  unlinkSync,
+} from "node:fs";
 import { createInterface } from "node:readline";
 import { dirname, resolve } from "node:path";
 import { generateProtocol } from "./protocol.js";
@@ -67,7 +73,11 @@ export async function runLoop(opts: RunLoopOptions): Promise<LoopStatus> {
     }
 
     // Clear previous status
-    try { unlinkSync(statusFile); } catch { /* ok */ }
+    try {
+      unlinkSync(statusFile);
+    } catch {
+      /* ok */
+    }
 
     log(`=== Iteration ${iteration} / ${maxIterations} ===`);
 
@@ -133,7 +143,9 @@ export async function runLoop(opts: RunLoopOptions): Promise<LoopStatus> {
         log("Transition complete, continuing to next iteration...");
         break;
       case "UNKNOWN":
-        log("WARNING: No valid status file written. Agent may have crashed. Continuing...");
+        log(
+          "WARNING: No valid status file written. Agent may have crashed. Continuing...",
+        );
         break;
     }
   }

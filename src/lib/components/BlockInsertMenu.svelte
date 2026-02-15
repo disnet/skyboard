@@ -85,7 +85,11 @@
     if (match) {
       // Replace existing prefix
       view.dispatch({
-        changes: { from: line.from, to: line.from + match[0].length, insert: prefix },
+        changes: {
+          from: line.from,
+          to: line.from + match[0].length,
+          insert: prefix,
+        },
         selection: { anchor: line.from + prefix.length },
       });
     } else {
@@ -105,7 +109,11 @@
     const insert = `${needsNewlineBefore}\`\`\`\n\n\`\`\``;
     const cursorOffset = needsNewlineBefore.length + 4; // after ``` + newline
     view.dispatch({
-      changes: { from: line.from + line.text.length, to: line.from + line.text.length, insert },
+      changes: {
+        from: line.from + line.text.length,
+        to: line.from + line.text.length,
+        insert,
+      },
       selection: { anchor: line.from + line.text.length + cursorOffset },
     });
     view.focus();
@@ -117,7 +125,11 @@
     const needsNewlineBefore = line.text.length > 0 ? "\n" : "";
     const insert = `${needsNewlineBefore}---\n`;
     view.dispatch({
-      changes: { from: line.from + line.text.length, to: line.from + line.text.length, insert },
+      changes: {
+        from: line.from + line.text.length,
+        to: line.from + line.text.length,
+        insert,
+      },
       selection: { anchor: line.from + line.text.length + insert.length },
     });
     view.focus();
@@ -156,15 +168,19 @@
       const view = editorView!;
       const contentEl = view.contentDOM;
       const contentRect = contentEl.getBoundingClientRect();
-      const paddingTop = parseFloat(getComputedStyle(contentEl).paddingTop) || 0;
+      const paddingTop =
+        parseFloat(getComputedStyle(contentEl).paddingTop) || 0;
       // Y relative to document start (block.top=0 is first line)
-      const yInEditor = e.clientY - contentRect.top - paddingTop + view.scrollDOM.scrollTop;
+      const yInEditor =
+        e.clientY - contentRect.top - paddingTop + view.scrollDOM.scrollTop;
       const block = view.lineBlockAtHeight(yInEditor);
       // Convert block.top back to screen position relative to wrapper
       const wrapperRect = wrapper.getBoundingClientRect();
-      const blockScreenY = contentRect.top + paddingTop + block.top - view.scrollDOM.scrollTop;
+      const blockScreenY =
+        contentRect.top + paddingTop + block.top - view.scrollDOM.scrollTop;
       const buttonHeight = 24;
-      buttonTop = blockScreenY - wrapperRect.top + (block.height - buttonHeight) / 2;
+      buttonTop =
+        blockScreenY - wrapperRect.top + (block.height - buttonHeight) / 2;
       showButton();
     };
 
@@ -198,7 +214,10 @@
     return () => {
       wrapper.removeEventListener("mousemove", onMouseMove as EventListener);
       wrapper.removeEventListener("mouseleave", onMouseLeave);
-      editorView!.dom.removeEventListener("keydown", onKeyDown as EventListener);
+      editorView!.dom.removeEventListener(
+        "keydown",
+        onKeyDown as EventListener,
+      );
       if (hideTimer) clearTimeout(hideTimer);
     };
   });
@@ -238,7 +257,8 @@
     }
     if (e.key === "ArrowUp") {
       e.preventDefault();
-      selectedIndex = (selectedIndex - 1 + filteredOptions.length) % filteredOptions.length;
+      selectedIndex =
+        (selectedIndex - 1 + filteredOptions.length) % filteredOptions.length;
       return;
     }
     if (e.key === "Enter") {
@@ -308,7 +328,15 @@
     title="Insert block"
     type="button"
   >
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 14 14"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+    >
       <line x1="7" y1="2" x2="7" y2="12" />
       <line x1="2" y1="7" x2="12" y2="7" />
     </svg>
@@ -316,7 +344,12 @@
 
   {#if showMenu}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="block-menu" style="top: {buttonTop}px" bind:this={menuEl} onkeydown={handleMenuKeydown}>
+    <div
+      class="block-menu"
+      style="top: {buttonTop}px"
+      bind:this={menuEl}
+      onkeydown={handleMenuKeydown}
+    >
       <div class="block-menu-search">
         <input
           bind:this={searchInputEl}
@@ -367,7 +400,11 @@
     cursor: pointer;
     opacity: 0;
     pointer-events: none;
-    transition: opacity 0.15s, background 0.15s, color 0.15s, transform 0.2s;
+    transition:
+      opacity 0.15s,
+      background 0.15s,
+      color 0.15s,
+      transform 0.2s;
     padding: 0;
   }
 

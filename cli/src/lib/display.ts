@@ -8,7 +8,10 @@ export function formatDate(iso: string): string {
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
   if (diffDays === 0) {
-    return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+    return d.toLocaleTimeString(undefined, {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
   } else if (diffDays < 7) {
     return `${diffDays}d ago`;
   } else {
@@ -64,13 +67,16 @@ export function printBoardCards(
     let colTasks = tasks.filter((t) => t.effectiveColumnId === col.id);
 
     // Apply filters
-    if (opts.column && !matchesColumn(col, opts.column, sortedColumns)) continue;
+    if (opts.column && !matchesColumn(col, opts.column, sortedColumns))
+      continue;
     if (opts.label) {
-      const label = board.labels?.find(
-        (l) => l.name.toLowerCase().includes(opts.label!.toLowerCase()),
+      const label = board.labels?.find((l) =>
+        l.name.toLowerCase().includes(opts.label!.toLowerCase()),
       );
       if (label) {
-        colTasks = colTasks.filter((t) => t.effectiveLabelIds.includes(label.id));
+        colTasks = colTasks.filter((t) =>
+          t.effectiveLabelIds.includes(label.id),
+        );
       } else {
         colTasks = [];
       }
@@ -85,7 +91,9 @@ export function printBoardCards(
     }
 
     // Sort by position
-    colTasks.sort((a, b) => a.effectivePosition.localeCompare(b.effectivePosition));
+    colTasks.sort((a, b) =>
+      a.effectivePosition.localeCompare(b.effectivePosition),
+    );
 
     console.log(formatColumnHeader(col, colTasks.length));
     if (colTasks.length === 0) {
@@ -98,7 +106,11 @@ export function printBoardCards(
   }
 }
 
-function matchesColumn(col: Column, query: string, allColumns: Column[]): boolean {
+function matchesColumn(
+  col: Column,
+  query: string,
+  allColumns: Column[],
+): boolean {
   // Check numeric index (1-based)
   const idx = parseInt(query, 10);
   if (!isNaN(idx) && idx >= 1 && idx <= allColumns.length) {

@@ -33,26 +33,26 @@ sb logout                     # clear stored session
 
 ### Board navigation
 
-| Command | Description |
-|---------|-------------|
-| `sb boards` | List all boards (owned + joined) |
+| Command          | Description                               |
+| ---------------- | ----------------------------------------- |
+| `sb boards`      | List all boards (owned + joined)          |
 | `sb use <board>` | Set default board for subsequent commands |
-| `sb add <link>` | Join a board by AT URI or web URL |
-| `sb cols` | Show columns with task counts |
+| `sb add <link>`  | Join a board by AT URI or web URL         |
+| `sb cols`        | Show columns with task counts             |
 
 `sb use` accepts a board name (fuzzy match), rkey, AT URI, or web URL.
 
 ### Card operations
 
-| Command | Description |
-|---------|-------------|
-| `sb cards` | List cards grouped by column |
-| `sb new <title>` | Create a new card |
-| `sb show <ref>` | Show card details, comments, and history |
-| `sb mv <ref> <column>` | Move card to a different column |
-| `sb edit <ref>` | Edit card fields |
-| `sb comment <ref> <text>` | Add a comment |
-| `sb rm <ref>` | Delete a card (owner only) |
+| Command                   | Description                              |
+| ------------------------- | ---------------------------------------- |
+| `sb cards`                | List cards grouped by column             |
+| `sb new <title>`          | Create a new card                        |
+| `sb show <ref>`           | Show card details, comments, and history |
+| `sb mv <ref> <column>`    | Move card to a different column          |
+| `sb edit <ref>`           | Edit card fields                         |
+| `sb comment <ref> <text>` | Add a comment                            |
+| `sb rm <ref>`             | Delete a card (owner only)               |
 
 ### Card references
 
@@ -71,6 +71,7 @@ sb mv 3lab done       # shorter prefix, if unambiguous
 ### Column matching
 
 Columns can be referenced by:
+
 - **Exact name** (case-insensitive): `"In Progress"`
 - **Name prefix**: `in` matches `In Progress`
 - **1-based index**: `2` (from `sb cols` output)
@@ -117,29 +118,30 @@ sb ralph start                         # run the loop
 
 ### Commands
 
-| Command | Description |
-|---------|-------------|
-| `sb ralph init` | Set up `.skyboard-ralph/` config and generate protocol file |
-| `sb ralph start` | Run the autonomous dev loop |
-| `sb ralph status` | Show current loop state (iteration count, last status) |
+| Command           | Description                                                 |
+| ----------------- | ----------------------------------------------------------- |
+| `sb ralph init`   | Set up `.skyboard-ralph/` config and generate protocol file |
+| `sb ralph start`  | Run the autonomous dev loop                                 |
+| `sb ralph status` | Show current loop state (iteration count, last status)      |
 
 ### `sb ralph init` options
 
-| Option | Description |
-|--------|-------------|
-| `--board <ref>` | Board reference (rkey, AT URI, URL, name). Falls back to default board. |
-| `--max-iterations <n>` | Default max iterations (default: 50) |
+| Option                 | Description                                                             |
+| ---------------------- | ----------------------------------------------------------------------- |
+| `--board <ref>`        | Board reference (rkey, AT URI, URL, name). Falls back to default board. |
+| `--max-iterations <n>` | Default max iterations (default: 50)                                    |
 
 Creates files under `.skyboard-ralph/`:
+
 - **`config.json`** — Config with board ref, iteration limit, and file paths
 - **`protocol.md`** — The agent protocol template. Edit this to customize agent behavior.
 
 ### `sb ralph start` options
 
-| Option | Description |
-|--------|-------------|
-| `--max-iterations <n>` | Override the max iterations from config |
-| `--interactive` | Require permission approval for each tool use (disables `--dangerously-skip-permissions`) |
+| Option                 | Description                                                                               |
+| ---------------------- | ----------------------------------------------------------------------------------------- |
+| `--max-iterations <n>` | Override the max iterations from config                                                   |
+| `--interactive`        | Require permission approval for each tool use (disables `--dangerously-skip-permissions`) |
 
 By default, `start` runs with `--dangerously-skip-permissions` so the agent can work autonomously. Use `--interactive` for supervised runs.
 
@@ -147,8 +149,8 @@ Output streams to both stdout and `.skyboard-ralph/loop.log`. Press Ctrl-C to st
 
 ### `sb ralph status` options
 
-| Option | Description |
-|--------|-------------|
+| Option   | Description                  |
+| -------- | ---------------------------- |
 | `--json` | Machine-readable JSON output |
 
 ### Protocol customization
@@ -202,11 +204,11 @@ Write commands (`new`, `mv`, `edit`, `comment`) create AT Protocol records in yo
 
 Session and config are stored in `~/.config/skyboard/`:
 
-| File | Purpose |
-|------|---------|
+| File           | Purpose                                  |
+| -------------- | ---------------------------------------- |
 | `session.json` | Current user (DID, handle, PDS endpoint) |
-| `auth/` | OAuth session tokens (mode 0600) |
-| `config.json` | Default board and known boards list |
+| `auth/`        | OAuth session tokens (mode 0600)         |
+| `config.json`  | Default board and known boards list      |
 
 ## License
 

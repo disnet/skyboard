@@ -6,7 +6,10 @@ import { shortRkey, formatDate } from "../lib/display.js";
 import { buildAtUri, TASK_COLLECTION } from "../lib/tid.js";
 import chalk from "chalk";
 
-export async function showCommand(ref: string, opts: { board?: string; json?: boolean }): Promise<void> {
+export async function showCommand(
+  ref: string,
+  opts: { board?: string; json?: boolean },
+): Promise<void> {
   const { did } = await requireAgent();
 
   const boardRef = resolveBoard(opts.board);
@@ -36,36 +39,52 @@ export async function showCommand(ref: string, opts: { board?: string; json?: bo
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 
   if (opts.json) {
-    console.log(JSON.stringify({
-      rkey: task.rkey,
-      did: task.did,
-      title: task.effectiveTitle,
-      description: task.effectiveDescription,
-      column: col?.name,
-      labels: labels.map((l) => ({ id: l!.id, name: l!.name, color: l!.color })),
-      createdAt: task.createdAt,
-      lastModifiedAt: task.lastModifiedAt,
-      lastModifiedBy: task.lastModifiedBy,
-      opsApplied: task.appliedOps.length,
-      comments: comments.map((c) => ({
-        did: c.did,
-        text: c.text,
-        createdAt: c.createdAt,
-      })),
-    }, null, 2));
+    console.log(
+      JSON.stringify(
+        {
+          rkey: task.rkey,
+          did: task.did,
+          title: task.effectiveTitle,
+          description: task.effectiveDescription,
+          column: col?.name,
+          labels: labels.map((l) => ({
+            id: l!.id,
+            name: l!.name,
+            color: l!.color,
+          })),
+          createdAt: task.createdAt,
+          lastModifiedAt: task.lastModifiedAt,
+          lastModifiedBy: task.lastModifiedBy,
+          opsApplied: task.appliedOps.length,
+          comments: comments.map((c) => ({
+            did: c.did,
+            text: c.text,
+            createdAt: c.createdAt,
+          })),
+        },
+        null,
+        2,
+      ),
+    );
     return;
   }
 
   console.log();
   console.log(chalk.bold(task.effectiveTitle));
-  console.log(chalk.dim(`${shortRkey(task.rkey)}  by ${task.did.slice(0, 20)}...  ${formatDate(task.createdAt)}`));
+  console.log(
+    chalk.dim(
+      `${shortRkey(task.rkey)}  by ${task.did.slice(0, 20)}...  ${formatDate(task.createdAt)}`,
+    ),
+  );
   console.log();
 
   if (col) {
     console.log(`${chalk.bold("Column:")}  ${col.name}`);
   }
   if (labels.length > 0) {
-    const labelStr = labels.map((l) => chalk.hex(l!.color)(`[${l!.name}]`)).join(" ");
+    const labelStr = labels
+      .map((l) => chalk.hex(l!.color)(`[${l!.name}]`))
+      .join(" ");
     console.log(`${chalk.bold("Labels:")}  ${labelStr}`);
   }
   if (task.effectiveDescription) {
@@ -83,7 +102,9 @@ export async function showCommand(ref: string, opts: { board?: string; json?: bo
     console.log(chalk.bold.underline("Comments"));
     for (const comment of comments) {
       console.log();
-      console.log(`  ${chalk.dim(comment.did.slice(0, 20) + "...")}  ${chalk.dim(formatDate(comment.createdAt))}`);
+      console.log(
+        `  ${chalk.dim(comment.did.slice(0, 20) + "...")}  ${chalk.dim(formatDate(comment.createdAt))}`,
+      );
       console.log(`  ${comment.text}`);
     }
   }
@@ -93,7 +114,9 @@ export async function showCommand(ref: string, opts: { board?: string; json?: bo
 function resolveBoard(boardOpt?: string): { did: string; rkey: string } {
   const defaultBoard = getDefaultBoard();
   if (!defaultBoard) {
-    console.error(chalk.red("No default board set. Run `sb use <board>` first."));
+    console.error(
+      chalk.red("No default board set. Run `sb use <board>` first."),
+    );
     process.exit(1);
   }
   return defaultBoard;

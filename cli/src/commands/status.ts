@@ -19,11 +19,15 @@ export async function statusCommand(opts: { json?: boolean }): Promise<void> {
 
   if (!boardRef) {
     if (opts.json) {
-      console.log(JSON.stringify({ loggedIn: true, ...info, board: null }, null, 2));
+      console.log(
+        JSON.stringify({ loggedIn: true, ...info, board: null }, null, 2),
+      );
     } else {
       console.log(`${chalk.bold("Handle:")}  ${info.handle}`);
       console.log(`${chalk.bold("DID:")}     ${info.did}`);
-      console.log(`\nNo default board set. Run ${chalk.cyan("sb use <board>")} to select one.`);
+      console.log(
+        `\nNo default board set. Run ${chalk.cyan("sb use <board>")} to select one.`,
+      );
     }
     return;
   }
@@ -33,7 +37,9 @@ export async function statusCommand(opts: { json?: boolean }): Promise<void> {
 
   if (!data) {
     if (opts.json) {
-      console.log(JSON.stringify({ loggedIn: true, ...info, board: null }, null, 2));
+      console.log(
+        JSON.stringify({ loggedIn: true, ...info, board: null }, null, 2),
+      );
     } else {
       console.log(`${chalk.bold("Handle:")}  ${info.handle}`);
       console.log(`${chalk.bold("DID:")}     ${info.did}`);
@@ -42,26 +48,40 @@ export async function statusCommand(opts: { json?: boolean }): Promise<void> {
     return;
   }
 
-  const sortedColumns = [...data.board.columns].sort((a, b) => a.order - b.order);
+  const sortedColumns = [...data.board.columns].sort(
+    (a, b) => a.order - b.order,
+  );
   const columns = sortedColumns.map((col, i) => {
-    const taskCount = data.tasks.filter((t) => t.effectiveColumnId === col.id).length;
+    const taskCount = data.tasks.filter(
+      (t) => t.effectiveColumnId === col.id,
+    ).length;
     return { index: i + 1, name: col.name, id: col.id, taskCount };
   });
   const totalCards = data.tasks.length;
 
   if (opts.json) {
-    console.log(JSON.stringify({
-      loggedIn: true,
-      handle: info.handle,
-      did: info.did,
-      board: {
-        name: data.board.name,
-        rkey: boardRef.rkey,
-        did: boardRef.did,
-        columns: columns.map(({ index, name, taskCount }) => ({ index, name, taskCount })),
-        totalCards,
-      },
-    }, null, 2));
+    console.log(
+      JSON.stringify(
+        {
+          loggedIn: true,
+          handle: info.handle,
+          did: info.did,
+          board: {
+            name: data.board.name,
+            rkey: boardRef.rkey,
+            did: boardRef.did,
+            columns: columns.map(({ index, name, taskCount }) => ({
+              index,
+              name,
+              taskCount,
+            })),
+            totalCards,
+          },
+        },
+        null,
+        2,
+      ),
+    );
     return;
   }
 
@@ -71,7 +91,9 @@ export async function statusCommand(opts: { json?: boolean }): Promise<void> {
   console.log();
 
   for (const col of columns) {
-    console.log(`  ${chalk.dim(`${col.index}.`)} ${col.name} ${chalk.dim(`(${col.taskCount})`)}`);
+    console.log(
+      `  ${chalk.dim(`${col.index}.`)} ${col.name} ${chalk.dim(`(${col.taskCount})`)}`,
+    );
   }
 
   console.log(`\n  ${totalCards} cards total`);

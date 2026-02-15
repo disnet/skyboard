@@ -347,6 +347,7 @@ See [`appview/README.md`] for development and deployment details.
 [Dexie]: https://dexie.org/
 
 **Appview:**
+
 - [Bun] runtime with built-in SQLite and WebSocket support
 - [Hono] for HTTP routing
 - SQLite (WAL mode) for data caching

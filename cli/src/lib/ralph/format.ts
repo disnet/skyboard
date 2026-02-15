@@ -22,10 +22,7 @@ interface StreamEvent {
  * Processes a line of stream-json output from the Claude CLI.
  * Writes formatted, human-readable output to the console and raw JSON to the log stream.
  */
-export function processStreamLine(
-  line: string,
-  logStream: WriteStream,
-): void {
+export function processStreamLine(line: string, logStream: WriteStream): void {
   // Always write raw JSON to log
   logStream.write(line + "\n");
 
@@ -58,10 +55,12 @@ export function processStreamLine(
     case "result": {
       if (event.duration_ms != null) {
         const secs = (event.duration_ms / 1000).toFixed(1);
-        const cost = event.total_cost_usd != null
-          ? ` · $${event.total_cost_usd.toFixed(4)}`
-          : "";
-        const turns = event.num_turns != null ? ` · ${event.num_turns} turns` : "";
+        const cost =
+          event.total_cost_usd != null
+            ? ` · $${event.total_cost_usd.toFixed(4)}`
+            : "";
+        const turns =
+          event.num_turns != null ? ` · ${event.num_turns} turns` : "";
         console.log(chalk.dim(`\n  [${secs}s${turns}${cost}]`));
       }
       break;
@@ -72,35 +71,32 @@ export function processStreamLine(
   }
 }
 
-function formatToolUse(
-  name: string,
-  input?: Record<string, unknown>,
-): string {
+function formatToolUse(name: string, input?: Record<string, unknown>): string {
   if (!input) return name;
 
   switch (name) {
     case "Edit":
-      return `Edit ${chalk.white(input.file_path as string ?? "")}`;
+      return `Edit ${chalk.white((input.file_path as string) ?? "")}`;
     case "Write":
-      return `Write ${chalk.white(input.file_path as string ?? "")}`;
+      return `Write ${chalk.white((input.file_path as string) ?? "")}`;
     case "Read":
-      return `Read ${chalk.white(input.file_path as string ?? "")}`;
+      return `Read ${chalk.white((input.file_path as string) ?? "")}`;
     case "Bash":
-      return `Bash ${chalk.white(truncate(input.command as string ?? "", 80))}`;
+      return `Bash ${chalk.white(truncate((input.command as string) ?? "", 80))}`;
     case "Grep":
-      return `Grep ${chalk.white(truncate(input.pattern as string ?? "", 40))}${input.path ? ` in ${input.path}` : ""}`;
+      return `Grep ${chalk.white(truncate((input.pattern as string) ?? "", 40))}${input.path ? ` in ${input.path}` : ""}`;
     case "Glob":
-      return `Glob ${chalk.white(input.pattern as string ?? "")}`;
+      return `Glob ${chalk.white((input.pattern as string) ?? "")}`;
     case "Skill":
-      return `Skill ${chalk.white(input.skill as string ?? "")}`;
+      return `Skill ${chalk.white((input.skill as string) ?? "")}`;
     case "Task":
-      return `Task ${chalk.white(truncate(input.description as string ?? "", 60))}`;
+      return `Task ${chalk.white(truncate((input.description as string) ?? "", 60))}`;
     case "TodoWrite":
       return `TodoWrite`;
     case "WebFetch":
-      return `WebFetch ${chalk.white(truncate(input.url as string ?? "", 60))}`;
+      return `WebFetch ${chalk.white(truncate((input.url as string) ?? "", 60))}`;
     case "WebSearch":
-      return `WebSearch ${chalk.white(truncate(input.query as string ?? "", 60))}`;
+      return `WebSearch ${chalk.white(truncate((input.query as string) ?? "", 60))}`;
     default:
       return name;
   }

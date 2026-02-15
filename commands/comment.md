@@ -17,6 +17,7 @@ sb comment <ref> "<text>" --json
 - `<text>` — comment text
 
 Options:
+
 - `--board <ref>` — override default board
 
 Always use `--json`. Returns: `rkey`, `taskRkey`, `text`.

@@ -1,8 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import {
-  OWNER_DID,
-  USER_DID,
-} from "./helpers.js";
+import { OWNER_DID, USER_DID } from "./helpers.js";
 
 let resolveHandle: typeof import("../lib/pds.js").resolveHandle;
 
@@ -16,7 +13,12 @@ beforeEach(async () => {
 
 function stubFetch(handler: (url: string) => Response | Promise<Response>) {
   const mockFetch = vi.fn(async (input: string | URL | Request) => {
-    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    const url =
+      typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.href
+          : input.url;
     return handler(url);
   });
   vi.stubGlobal("fetch", mockFetch);

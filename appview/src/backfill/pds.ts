@@ -57,8 +57,7 @@ async function resolvePDS(did: string): Promise<string | null> {
       | Array<{ id: string; type: string; serviceEndpoint: string }>
       | undefined;
     const pds = services?.find(
-      (s) =>
-        s.id === "#atproto_pds" || s.type === "AtprotoPersonalDataServer",
+      (s) => s.id === "#atproto_pds" || s.type === "AtprotoPersonalDataServer",
     );
     if (!pds?.serviceEndpoint) return null;
 
@@ -199,21 +198,51 @@ async function fetchParticipantData(
   did: string,
   boardUri: string,
 ): Promise<void> {
-  await fetchAndStoreCollection(did, boardUri, TASK_COLLECTION, TaskRecordSchema, (rkey, v) => {
-    upsertTask(did, rkey, { ...v, boardUri });
-  });
-  await fetchAndStoreCollection(did, boardUri, OP_COLLECTION, OpRecordSchema, (rkey, v) => {
-    upsertOp(did, rkey, { ...v, boardUri });
-  });
-  await fetchAndStoreCollection(did, boardUri, COMMENT_COLLECTION, CommentRecordSchema, (rkey, v) => {
-    upsertComment(did, rkey, { ...v, boardUri });
-  });
-  await fetchAndStoreCollection(did, boardUri, APPROVAL_COLLECTION, ApprovalRecordSchema, (rkey, v) => {
-    upsertApproval(did, rkey, { ...v, boardUri });
-  });
-  await fetchAndStoreCollection(did, boardUri, REACTION_COLLECTION, ReactionRecordSchema, (rkey, v) => {
-    upsertReaction(did, rkey, { ...v, boardUri });
-  });
+  await fetchAndStoreCollection(
+    did,
+    boardUri,
+    TASK_COLLECTION,
+    TaskRecordSchema,
+    (rkey, v) => {
+      upsertTask(did, rkey, { ...v, boardUri });
+    },
+  );
+  await fetchAndStoreCollection(
+    did,
+    boardUri,
+    OP_COLLECTION,
+    OpRecordSchema,
+    (rkey, v) => {
+      upsertOp(did, rkey, { ...v, boardUri });
+    },
+  );
+  await fetchAndStoreCollection(
+    did,
+    boardUri,
+    COMMENT_COLLECTION,
+    CommentRecordSchema,
+    (rkey, v) => {
+      upsertComment(did, rkey, { ...v, boardUri });
+    },
+  );
+  await fetchAndStoreCollection(
+    did,
+    boardUri,
+    APPROVAL_COLLECTION,
+    ApprovalRecordSchema,
+    (rkey, v) => {
+      upsertApproval(did, rkey, { ...v, boardUri });
+    },
+  );
+  await fetchAndStoreCollection(
+    did,
+    boardUri,
+    REACTION_COLLECTION,
+    ReactionRecordSchema,
+    (rkey, v) => {
+      upsertReaction(did, rkey, { ...v, boardUri });
+    },
+  );
 
   upsertParticipant(did, boardUri);
   markParticipantFetched(did, boardUri);

@@ -29,7 +29,9 @@
 
   // Search state
   let query = $state("");
-  let suggestions = $state<{ did: string; handle: string; displayName?: string; avatar?: string }[]>([]);
+  let suggestions = $state<
+    { did: string; handle: string; displayName?: string; avatar?: string }[]
+  >([]);
   let showSuggestions = $state(false);
   let addError = $state<string | null>(null);
   let adding = $state(false);
@@ -74,7 +76,12 @@
       if (!res.ok) return;
       const data = await res.json();
       suggestions = (data.actors ?? []).map(
-        (a: { did: string; handle: string; displayName?: string; avatar?: string }) => ({
+        (a: {
+          did: string;
+          handle: string;
+          displayName?: string;
+          avatar?: string;
+        }) => ({
           did: a.did,
           handle: a.handle,
           displayName: a.displayName,
@@ -159,7 +166,11 @@
 <svelte:window onkeydown={handleKeydown} />
 
 <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
-<div class="modal-backdrop" onmousedown={handleBackdropMouseDown} onclick={handleBackdropClick}>
+<div
+  class="modal-backdrop"
+  onmousedown={handleBackdropMouseDown}
+  onclick={handleBackdropClick}
+>
   <div class="modal" role="dialog" aria-label="Board Access">
     <div class="modal-header">
       <h3>Board Access</h3>
@@ -361,7 +372,11 @@
 
   .option-card.selected {
     border-color: var(--color-primary);
-    background: color-mix(in srgb, var(--color-primary) 8%, var(--color-surface));
+    background: color-mix(
+      in srgb,
+      var(--color-primary) 8%,
+      var(--color-surface)
+    );
   }
 
   .option-card strong {

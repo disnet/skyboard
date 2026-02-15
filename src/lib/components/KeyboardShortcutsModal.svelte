@@ -22,7 +22,12 @@
     {
       title: "Navigation",
       shortcuts: [
-        { keys: ["\u2190", "\u2191", "\u2193", "\u2192"], sep: "", alt: ["h", "j", "k", "l"], description: "Navigate between tasks" },
+        {
+          keys: ["\u2190", "\u2191", "\u2193", "\u2192"],
+          sep: "",
+          alt: ["h", "j", "k", "l"],
+          description: "Navigate between tasks",
+        },
         { keys: ["Esc"], description: "Deselect task" },
       ],
     },
@@ -38,11 +43,36 @@
     {
       title: "Moving Tasks",
       shortcuts: [
-        { keys: [","], sep: "/", alt: ["."], description: "Move task left / right" },
-        { keys: ["<"], sep: "/", alt: [">"], description: "Move task to top of adjacent column" },
-        { keys: ["\u21E7", "H"], sep: "/", alt: ["\u21E7", "L"], description: "Move task to top of adjacent column" },
-        { keys: ["\u21E7", "\u2191"], sep: "/", alt: ["\u21E7", "\u2193"], description: "Reorder task up / down" },
-        { keys: ["\u21E7", "K"], sep: "/", alt: ["\u21E7", "J"], description: "Reorder task up / down" },
+        {
+          keys: [","],
+          sep: "/",
+          alt: ["."],
+          description: "Move task left / right",
+        },
+        {
+          keys: ["<"],
+          sep: "/",
+          alt: [">"],
+          description: "Move task to top of adjacent column",
+        },
+        {
+          keys: ["\u21E7", "H"],
+          sep: "/",
+          alt: ["\u21E7", "L"],
+          description: "Move task to top of adjacent column",
+        },
+        {
+          keys: ["\u21E7", "\u2191"],
+          sep: "/",
+          alt: ["\u21E7", "\u2193"],
+          description: "Reorder task up / down",
+        },
+        {
+          keys: ["\u21E7", "K"],
+          sep: "/",
+          alt: ["\u21E7", "J"],
+          description: "Reorder task up / down",
+        },
         { keys: ["m"], description: "Quick move to column" },
       ],
     },
@@ -59,7 +89,11 @@
 <svelte:window onkeydown={handleKeydown} />
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="modal-backdrop" onmousedown={handleBackdropMouseDown} onclick={handleBackdropClick}>
+<div
+  class="modal-backdrop"
+  onmousedown={handleBackdropMouseDown}
+  onclick={handleBackdropClick}
+>
   <div class="modal" role="dialog" aria-label="Keyboard shortcuts">
     <div class="modal-header">
       <h3>Keyboard Shortcuts</h3>

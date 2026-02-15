@@ -23,7 +23,9 @@
 
   // Search state
   let query = $state("");
-  let suggestions = $state<{ did: string; handle: string; displayName?: string; avatar?: string }[]>([]);
+  let suggestions = $state<
+    { did: string; handle: string; displayName?: string; avatar?: string }[]
+  >([]);
   let showSuggestions = $state(false);
   let addError = $state<string | null>(null);
   let adding = $state(false);
@@ -43,7 +45,12 @@
       if (!res.ok) return;
       const data = await res.json();
       suggestions = (data.actors ?? []).map(
-        (a: { did: string; handle: string; displayName?: string; avatar?: string }) => ({
+        (a: {
+          did: string;
+          handle: string;
+          displayName?: string;
+          avatar?: string;
+        }) => ({
           did: a.did,
           handle: a.handle,
           displayName: a.displayName,

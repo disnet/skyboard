@@ -29,8 +29,8 @@
 </script>
 
 {#each segments as seg}{#if seg.type === "mention"}<span class="mention"
-    >{seg.value}</span
-  >{:else}{seg.value}{/if}{/each}
+      >{seg.value}</span
+    >{:else}{seg.value}{/if}{/each}
 
 <style>
   .mention {

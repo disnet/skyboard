@@ -129,7 +129,8 @@ export function materializeTasks(
       effectiveDescription: fieldStates.description.value as string | undefined,
       effectiveColumnId: fieldStates.columnId.value as string,
       effectivePosition: fieldStates.position.value as string,
-      effectiveLabelIds: (fieldStates.labelIds.value as string[] | undefined) ?? [],
+      effectiveLabelIds:
+        (fieldStates.labelIds.value as string[] | undefined) ?? [],
       ownerDid: task.did,
       lastModifiedBy,
       lastModifiedAt,

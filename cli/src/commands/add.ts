@@ -20,7 +20,10 @@ export async function addCommand(link: string): Promise<void> {
   }
 
   // Parse web URL
-  if (!boardDid && (link.startsWith("http://") || link.startsWith("https://"))) {
+  if (
+    !boardDid &&
+    (link.startsWith("http://") || link.startsWith("https://"))
+  ) {
     const url = new URL(link);
     const pathParts = url.pathname.split("/").filter(Boolean);
     if (pathParts.length >= 3 && pathParts[0] === "board") {
@@ -30,9 +33,15 @@ export async function addCommand(link: string): Promise<void> {
   }
 
   if (!boardDid || !boardRkey) {
-    console.error(chalk.red("Could not parse board link. Provide an AT URI or web URL."));
-    console.error(chalk.dim("  AT URI: at://did:plc:xxx/dev.skyboard.board/rkey"));
-    console.error(chalk.dim("  URL:    https://skyboard.dev/board/did:plc:xxx/rkey"));
+    console.error(
+      chalk.red("Could not parse board link. Provide an AT URI or web URL."),
+    );
+    console.error(
+      chalk.dim("  AT URI: at://did:plc:xxx/dev.skyboard.board/rkey"),
+    );
+    console.error(
+      chalk.dim("  URL:    https://skyboard.dev/board/did:plc:xxx/rkey"),
+    );
     process.exit(1);
   }
 

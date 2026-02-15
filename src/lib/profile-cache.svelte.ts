@@ -46,7 +46,9 @@ function extractHandle(didDoc: { alsoKnownAs?: string[] }): string | undefined {
   return undefined;
 }
 
-async function fetchProfileFromDidDoc(did: string): Promise<ProfileData | null> {
+async function fetchProfileFromDidDoc(
+  did: string,
+): Promise<ProfileData | null> {
   const url = didDocUrl(did);
   if (!url) return null;
 
