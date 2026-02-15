@@ -24,4 +24,5 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
-      - run: npm publish --access public
+      # boo: https://github.com/actions/setup-node/issues/1440
+      - run: NODE_AUTH_TOKEN="" npm publish
