@@ -19,6 +19,7 @@ interface OpFields {
   columnId?: string;
   position?: string;
   labelIds?: string[];
+  assigneeDid?: string;
   order?: number;
 }
 
@@ -28,6 +29,7 @@ const MUTABLE_FIELDS: (keyof OpFields)[] = [
   "columnId",
   "position",
   "labelIds",
+  "assigneeDid",
 ];
 
 function orderToPosition(order: number | undefined): string {
@@ -58,6 +60,7 @@ interface MaterializedTask {
   effectiveColumnId: string;
   effectivePosition: string;
   effectiveLabelIds: string[];
+  effectiveAssigneeDid: string | undefined;
   createdAt: string;
   lastModifiedBy: string;
   lastModifiedAt: string;
@@ -151,6 +154,7 @@ function materializeTasks(
       effectivePosition: fieldStates.position.value as string,
       effectiveLabelIds:
         (fieldStates.labelIds.value as string[] | undefined) ?? [],
+      effectiveAssigneeDid: fieldStates.assigneeDid.value as string | undefined,
       createdAt: task.createdAt,
       lastModifiedBy,
       lastModifiedAt,
@@ -181,6 +185,7 @@ export interface BoardResponse {
     boardUri: string;
     position: string | null;
     labelIds: string[] | null;
+    assigneeDid: string | null;
     order: number | null;
     createdAt: string;
     updatedAt: string | null;
@@ -267,6 +272,7 @@ export function getBoardData(did: string, rkey: string): BoardResponse | null {
       boardUri: t.boardUri,
       position: t.position,
       labelIds: t.labelIds ? JSON.parse(t.labelIds) : null,
+      assigneeDid: t.assigneeDid,
       order: t.order,
       createdAt: t.createdAt,
       updatedAt: t.updatedAt,

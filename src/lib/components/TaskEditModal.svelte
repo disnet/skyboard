@@ -10,6 +10,7 @@
   import type { PermissionStatus } from "$lib/permissions.js";
   import { COMMENT_COLLECTION, buildAtUri, generateTID } from "$lib/tid.js";
   import AuthorBadge from "./AuthorBadge.svelte";
+  import { getProfile, ensureProfile } from "$lib/profile-cache.svelte.js";
   import MentionText from "./MentionText.svelte";
   import MentionTextarea from "./MentionTextarea.svelte";
   import { EditorView, basicSetup } from "codemirror";
@@ -59,6 +60,7 @@
     comments = [],
     reactions,
     boardLabels = [],
+    boardMembers = [],
     boardUri = "",
     columns = [],
     onclose,
@@ -75,6 +77,7 @@
     comments?: Comment[];
     reactions?: Map<string, { count: number; userReacted: boolean }>;
     boardLabels?: Label[];
+    boardMembers?: string[];
     boardUri?: string;
     columns?: Column[];
     onclose: () => void;
@@ -331,6 +334,7 @@
   let editTitle = $state(task.effectiveTitle);
   let editDescription = $state(task.effectiveDescription ?? "");
   let editLabelIds = $state<string[]>([...task.effectiveLabelIds]);
+  let editAssigneeDid = $state<string>(task.effectiveAssigneeDid ?? "");
 
   function toggleLabel(id: string) {
     if (editLabelIds.includes(id)) {
@@ -392,6 +396,19 @@
       .map((id) => boardLabels.find((l) => l.id === id))
       .filter((l): l is Label => l !== undefined),
   );
+
+  $effect(() => {
+    for (const did of boardMembers) {
+      ensureProfile(did);
+    }
+  });
+
+  function memberDisplayName(did: string): string {
+    const p = getProfile(did);
+    if (p.data?.displayName) return p.data.displayName;
+    if (p.data?.handle) return `@${p.data.handle}`;
+    return did.slice(0, 20) + "...";
+  }
 
   let editorContainer: HTMLDivElement | undefined = $state();
   let editorView: EditorView | undefined = $state();
@@ -528,6 +545,9 @@
       JSON.stringify(sortedEffectiveLabelIds)
     )
       fields.labelIds = [...editLabelIds];
+    const effectiveAssignee = task.effectiveAssigneeDid ?? "";
+    if (editAssigneeDid !== effectiveAssignee)
+      fields.assigneeDid = editAssigneeDid || undefined;
     if (Object.keys(fields).length > 0) {
       await createOp(currentUserDid, task.sourceTask, task.boardUri, fields);
     }
@@ -804,6 +824,35 @@
               >
             </div>
           {/if}
+        </div>
+      {/if}
+
+      {#if !readonly && boardMembers.length > 0}
+        <div class="assignee-section">
+          <div class="assignee-header">
+            <!-- svelte-ignore a11y_label_has_associated_control -->
+            <label>Assignee</label>
+            {#if editStatus === "denied"}
+              <span class="field-status denied">Trusted users only</span>
+            {/if}
+          </div>
+          <select
+            class="assignee-select"
+            bind:value={editAssigneeDid}
+            disabled={editStatus === "denied"}
+          >
+            <option value="">Unassigned</option>
+            {#each boardMembers as did (did)}
+              <option value={did}>{memberDisplayName(did)}</option>
+            {/each}
+          </select>
+        </div>
+      {:else if readonly && task.effectiveAssigneeDid}
+        <div class="assignee-section">
+          <div class="assignee-header">
+            <label>Assignee</label>
+          </div>
+          <AuthorBadge did={task.effectiveAssigneeDid} isCurrentUser={task.effectiveAssigneeDid === currentUserDid} />
         </div>
       {/if}
 
@@ -1585,6 +1634,45 @@
     height: 0.5rem;
     border-radius: 50%;
     flex-shrink: 0;
+  }
+
+  .assignee-section {
+    margin-top: 1rem;
+    padding: 0 1.25rem;
+  }
+
+  .assignee-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.375rem;
+  }
+
+  .assignee-header label {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--color-text-secondary);
+  }
+
+  .assignee-select {
+    width: 100%;
+    padding: 0.375rem 0.5rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    font-size: 0.8125rem;
+    background: var(--color-surface);
+    color: var(--color-text);
+    cursor: pointer;
+  }
+
+  .assignee-select:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .assignee-select:focus {
+    outline: none;
+    border-color: var(--color-primary);
   }
 
   .comments-section {

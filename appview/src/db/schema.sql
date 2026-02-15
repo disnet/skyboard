@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   boardUri TEXT NOT NULL,
   position TEXT,
   labelIds TEXT,                         -- JSON
+  assigneeDid TEXT,
   "order" INTEGER,
   createdAt TEXT NOT NULL,
   updatedAt TEXT

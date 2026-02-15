@@ -58,6 +58,11 @@
           "items": { "type": "string" },
           "description": "IDs of labels assigned to this task"
         },
+        "assigneeDid": {
+          "type": "string",
+          "format": "did",
+          "description": "DID of the user assigned to this task"
+        },
         "order": {
           "type": "integer",
           "minimum": 0
