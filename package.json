@@ -4,6 +4,9 @@
   "private": true,
   "license": "GPL-3.0-only",
   "type": "module",
+  "repository": {
+    "url": "https://github.com/disnet/skyboard"
+  },
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
