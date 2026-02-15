@@ -460,12 +460,12 @@
       }
       case "<":
       case ">":
-      case "H":
-      case "L": {
+      case "{":
+      case "}": {
         if (!pos || !auth.did) break;
         const taskTop = sortedTasksByColumn[pos.col]?.[pos.row];
         if (!taskTop) break;
-        const destColTop = e.key === "<" || e.key === "H" ? pos.col - 1 : pos.col + 1;
+        const destColTop = e.key === "<" || e.key === "{" ? pos.col - 1 : pos.col + 1;
         if (destColTop < 0 || destColTop >= numCols) break;
         e.preventDefault();
         const destTasksTop = sortedTasksByColumn[destColTop] ?? [];

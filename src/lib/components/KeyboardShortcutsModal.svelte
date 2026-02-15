@@ -40,7 +40,7 @@
       shortcuts: [
         { keys: [","], sep: "/", alt: ["."], description: "Move task left / right" },
         { keys: ["<"], sep: "/", alt: [">"], description: "Move task to top of adjacent column" },
-        { keys: ["\u21E7", "H"], sep: "/", alt: ["\u21E7", "L"], description: "Move task to top of adjacent column" },
+        { keys: ["{"], sep: "/", alt: ["}"], description: "Move task to top of adjacent column" },
         { keys: ["\u21E7", "\u2191"], sep: "/", alt: ["\u21E7", "\u2193"], description: "Reorder task up / down" },
         { keys: ["\u21E7", "K"], sep: "/", alt: ["\u21E7", "J"], description: "Reorder task up / down" },
         { keys: ["m"], description: "Quick move to column" },
