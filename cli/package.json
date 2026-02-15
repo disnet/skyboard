@@ -5,6 +5,9 @@
   "author": {
     "name": "Tim Disney"
   },
+  "repository": {
+    "url": "https://github.com/disnet/skyboard"
+  },
   "type": "module",
   "files": [
     "dist",
