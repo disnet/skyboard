@@ -1008,6 +1008,10 @@
       </div>
     </div>
 
+    {#if board.current.description}
+      <div class="board-description">{board.current.description}</div>
+    {/if}
+
     {#if !auth.isLoggedIn}
       <div class="readonly-banner">
         Viewing in read-only mode. <a href="/">Sign in</a> to collaborate.
@@ -1591,6 +1595,21 @@
     font-weight: 600;
     min-width: 1rem;
     text-align: center;
+  }
+
+  .board-description {
+    padding: 0.375rem 1.5rem;
+    font-size: 0.8125rem;
+    color: var(--color-text-secondary);
+    border-bottom: 1px solid var(--color-border-light);
+    flex-shrink: 0;
+    white-space: pre-line;
+  }
+
+  @media (max-width: 600px) {
+    .board-description {
+      padding: 0.375rem 0.75rem;
+    }
   }
 
   .readonly-banner {
