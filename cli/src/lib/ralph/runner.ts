@@ -1,7 +1,9 @@
 import { spawn } from "node:child_process";
 import { createWriteStream, readFileSync, existsSync, mkdirSync, unlinkSync } from "node:fs";
+import { createInterface } from "node:readline";
 import { dirname, resolve } from "node:path";
 import { generateProtocol } from "./protocol.js";
+import { processStreamLine } from "./format.js";
 import type { RalphConfig } from "./config.js";
 
 export type LoopStatus = "CONTINUE" | "DONE" | "BLOCKED" | "UNKNOWN";
@@ -76,12 +78,12 @@ export async function runLoop(opts: RunLoopOptions): Promise<LoopStatus> {
       boardRkey: config.board.rkey,
     });
 
-    const args = ["-p", prompt];
+    const args = ["-p", prompt, "--output-format", "stream-json", "--verbose"];
     if (!interactive) {
       args.push("--dangerously-skip-permissions");
     }
 
-    // Run claude
+    // Run claude with stream-json output for rich logging
     const exitCode = await new Promise<number>((resolvePromise) => {
       const child = spawn("claude", args, {
         cwd,
@@ -89,9 +91,10 @@ export async function runLoop(opts: RunLoopOptions): Promise<LoopStatus> {
         env: { ...process.env },
       });
 
-      child.stdout.on("data", (data: Buffer) => {
-        process.stdout.write(data);
-        logStream.write(data);
+      // Parse stream-json lines for formatted console output
+      const rl = createInterface({ input: child.stdout });
+      rl.on("line", (line) => {
+        processStreamLine(line, logStream);
       });
 
       child.stderr.on("data", (data: Buffer) => {
@@ -100,6 +103,7 @@ export async function runLoop(opts: RunLoopOptions): Promise<LoopStatus> {
       });
 
       child.on("close", (code) => {
+        rl.close();
         resolvePromise(code ?? 1);
       });
 
