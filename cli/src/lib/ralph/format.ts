@@ -44,7 +44,7 @@ export function processStreamLine(line: string, logStream: WriteStream): void {
       if (!content) break;
       for (const block of content) {
         if (block.type === "text" && block.text) {
-          process.stdout.write(block.text);
+          process.stdout.write(wordWrap(block.text, 80));
         } else if (block.type === "tool_use") {
           const summary = formatToolUse(block.name ?? "unknown", block.input);
           console.log(chalk.dim(`  ${chalk.cyan("tool")} ${summary}`));
@@ -105,4 +105,44 @@ function formatToolUse(name: string, input?: Record<string, unknown>): string {
 function truncate(s: string, maxLen: number): string {
   if (s.length <= maxLen) return s;
   return s.slice(0, maxLen - 1) + "…";
+}
+
+/**
+ * Word-wraps text to the given width, preserving existing line breaks
+ * and indentation. Lines that are already shorter than maxWidth pass
+ * through unchanged.
+ */
+export function wordWrap(text: string, maxWidth: number): string {
+  return text
+    .split("\n")
+    .map((line) => wrapLine(line, maxWidth))
+    .join("\n");
+}
+
+function wrapLine(line: string, maxWidth: number): string {
+  if (line.length <= maxWidth) return line;
+
+  // Detect leading whitespace to preserve indentation on continuation lines
+  const indentMatch = line.match(/^(\s*)/);
+  const indent = indentMatch ? indentMatch[1] : "";
+
+  const words = line.split(/( +)/); // split keeping spaces as separate tokens
+  const lines: string[] = [];
+  let current = "";
+
+  for (const word of words) {
+    if (current.length + word.length > maxWidth && current.trimEnd().length > 0) {
+      lines.push(current.trimEnd());
+      // Start continuation line with same indentation
+      current = indent + word.trimStart();
+    } else {
+      current += word;
+    }
+  }
+
+  if (current.length > 0) {
+    lines.push(current.trimEnd());
+  }
+
+  return lines.join("\n");
 }
