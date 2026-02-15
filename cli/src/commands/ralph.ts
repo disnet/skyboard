@@ -63,7 +63,7 @@ export function ralphCommand(program: Command): void {
 
   ralph
     .command("init")
-    .description("Set up .ralph.json config and generate protocol file")
+    .description("Set up .skyboard-ralph/ config and generate protocol file")
     .option("--board <ref>", "Board reference (rkey, AT URI, URL, name)")
     .option("--max-iterations <n>", "Default max iterations", "50")
     .action(async (opts: { board?: string; maxIterations: string }) => {
@@ -112,18 +112,18 @@ export function ralphCommand(program: Command): void {
         console.log(`Board: ${chalk.bold(defaultBoard.name)} (from default)`);
       }
 
-      const protocolFile = ".ralph-protocol.md";
+      const protocolFile = ".skyboard-ralph/protocol.md";
 
       const config = {
         board: boardRef,
         maxIterations,
-        statusFile: ".claude/loop-status",
-        logFile: ".claude/loop.log",
+        statusFile: ".skyboard-ralph/loop-status",
+        logFile: ".skyboard-ralph/loop.log",
         protocolFile,
       };
 
       saveRalphConfig(config, cwd);
-      console.log(`Created ${chalk.cyan(".ralph.json")}`);
+      console.log(`Created ${chalk.cyan(".skyboard-ralph/config.json")}`);
 
       const protocolPath = resolve(cwd, protocolFile);
       if (!existsSync(protocolPath)) {
@@ -136,6 +136,7 @@ export function ralphCommand(program: Command): void {
       }
 
       console.log(chalk.green("\nRalph initialized! Run `sb ralph start` to begin."));
+      console.log(chalk.dim("All ralph files are under .skyboard-ralph/"));
     });
 
   ralph
@@ -151,7 +152,7 @@ export function ralphCommand(program: Command): void {
         if (!config) {
           console.error(
             chalk.red(
-              "No .ralph.json found. Run `sb ralph init` first.",
+              "No .skyboard-ralph/config.json found. Run `sb ralph init` first.",
             ),
           );
           process.exit(1);

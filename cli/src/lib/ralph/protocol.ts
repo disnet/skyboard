@@ -70,7 +70,7 @@ After completing one transition (or determining you can't make progress), write 
 **After a successful transition:**
 
 \`\`\`bash
-echo "CONTINUE" > .claude/loop-status
+echo "CONTINUE" > .skyboard-ralph/loop-status
 \`\`\`
 
 **If blocked on a card:**
@@ -82,22 +82,22 @@ echo "CONTINUE" > .claude/loop-status
 5. If no other non-blocked cards are available:
 
 \`\`\`bash
-echo "BLOCKED" > .claude/loop-status
+echo "BLOCKED" > .skyboard-ralph/loop-status
 \`\`\`
 
 **If all done** (every card is in Done and Backlog is empty):
 
 \`\`\`bash
-echo "DONE" > .claude/loop-status
+echo "DONE" > .skyboard-ralph/loop-status
 \`\`\`
 
 **If all remaining cards are blocked** (every non-Done card has the \`blocked\` label):
 
 \`\`\`bash
-echo "BLOCKED" > .claude/loop-status
+echo "BLOCKED" > .skyboard-ralph/loop-status
 \`\`\`
 
-You MUST write to \`.claude/loop-status\` before exiting. The outer loop script reads this file to decide whether to continue.
+You MUST write to \`.skyboard-ralph/loop-status\` before exiting. The outer loop script reads this file to decide whether to continue.
 
 ## Rules
 
@@ -107,7 +107,7 @@ You MUST write to \`.claude/loop-status\` before exiting. The outer loop script 
 - Check for new comments from the human — they may have added guidance or reprioritized.
 - If a card's description is vague, comment asking for clarification and move on to the next card.
 - Commit code changes with clear commit messages before ending the iteration.
-- Always write \`.claude/loop-status\` as your very last action.
+- Always write \`.skyboard-ralph/loop-status\` as your very last action.
 `;
 
 export function writeDefaultProtocol(path: string): void {
