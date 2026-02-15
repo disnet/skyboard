@@ -131,7 +131,10 @@ function wrapLine(line: string, maxWidth: number): string {
   let current = "";
 
   for (const word of words) {
-    if (current.length + word.length > maxWidth && current.trimEnd().length > 0) {
+    if (
+      current.length + word.length > maxWidth &&
+      current.trimEnd().length > 0
+    ) {
       lines.push(current.trimEnd());
       // Start continuation line with same indentation
       current = indent + word.trimStart();
