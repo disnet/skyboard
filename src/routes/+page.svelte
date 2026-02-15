@@ -15,6 +15,7 @@
   const boards = useLiveQuery<Board[]>(() => db.boards.toArray());
 
   let newBoardName = $state("");
+  let newBoardDescription = $state("");
   let creating = $state(false);
   let joinUri = $state("");
   let joining = $state(false);
@@ -35,16 +36,20 @@
         { id: generateTID(), name: "Done", order: 2 },
       ];
 
+      const description = newBoardDescription.trim() || undefined;
+
       await db.boards.add({
         rkey,
         did: auth.did,
         name,
+        description,
         columns: defaultColumns,
         createdAt: now,
         syncStatus: "pending",
       });
 
       newBoardName = "";
+      newBoardDescription = "";
     } catch (err) {
       console.error("Failed to create board:", err);
     } finally {
@@ -126,13 +131,21 @@
   </div>
 
   <form class="create-board-form" onsubmit={createBoard}>
-    <input
-      type="text"
-      bind:value={newBoardName}
-      placeholder="New board name..."
-      disabled={creating}
-      required
-    />
+    <div class="create-board-fields">
+      <input
+        type="text"
+        bind:value={newBoardName}
+        placeholder="New board name..."
+        disabled={creating}
+        required
+      />
+      <textarea
+        bind:value={newBoardDescription}
+        placeholder="Description (optional)"
+        disabled={creating}
+        rows="2"
+      ></textarea>
+    </div>
     <button type="submit" disabled={creating || !newBoardName.trim()}>
       {creating ? "Creating..." : "Create Board"}
     </button>
@@ -190,8 +203,36 @@
     margin-bottom: 0.75rem;
   }
 
+  .create-board-fields {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+  }
+
+  .create-board-form textarea {
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    font-size: 0.8125rem;
+    background: var(--color-surface);
+    color: var(--color-text);
+    resize: vertical;
+    font-family: inherit;
+  }
+
+  .create-board-form textarea:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px var(--color-primary-alpha);
+  }
+
   .join-board-form {
     margin-bottom: 1.5rem;
+  }
+
+  .create-board-form {
+    align-items: flex-start;
   }
 
   .create-board-form input,
