@@ -66,7 +66,8 @@ beforeEach(() => {
 });
 
 describe("ralph start", () => {
-  let exitSpy: ReturnType<typeof vi.spyOn>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let exitSpy: any;
 
   beforeEach(() => {
     exitSpy = vi.spyOn(process, "exit").mockImplementation((() => {
