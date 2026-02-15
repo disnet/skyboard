@@ -427,35 +427,38 @@
           }
         }),
         EditorView.domEventHandlers({
-          click(e: MouseEvent, view: EditorView) {
+          mousedown(e: MouseEvent, view: EditorView) {
             if (!(e.metaKey || e.ctrlKey)) return false;
             const pos = view.posAtCoords({ x: e.clientX, y: e.clientY });
             if (pos === null) return false;
             const line = view.state.doc.lineAt(pos);
             const text = line.text;
-            // Try to find a URL at the click position
-            const urlRegex = /https?:\/\/[^\s)>\]]+/g;
-            let match: RegExpExecArray | null;
             const offsetInLine = pos - line.from;
-            while ((match = urlRegex.exec(text)) !== null) {
-              if (
-                offsetInLine >= match.index &&
-                offsetInLine <= match.index + match[0].length
-              ) {
-                window.open(match[0], "_blank", "noopener,noreferrer");
-                e.preventDefault();
-                return true;
-              }
-            }
-            // Try markdown link syntax: [text](url)
+            // Try markdown link syntax first: [text](url)
+            // The raw doc text always has the full markdown even when decorations hide it
             const mdLinkRegex = /\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g;
+            let match: RegExpExecArray | null;
             while ((match = mdLinkRegex.exec(text)) !== null) {
               if (
                 offsetInLine >= match.index &&
                 offsetInLine <= match.index + match[0].length
               ) {
-                window.open(match[2], "_blank", "noopener,noreferrer");
                 e.preventDefault();
+                e.stopPropagation();
+                window.open(match[2], "_blank", "noopener,noreferrer");
+                return true;
+              }
+            }
+            // Try plain URL
+            const urlRegex = /https?:\/\/[^\s)>\]]+/g;
+            while ((match = urlRegex.exec(text)) !== null) {
+              if (
+                offsetInLine >= match.index &&
+                offsetInLine <= match.index + match[0].length
+              ) {
+                e.preventDefault();
+                e.stopPropagation();
+                window.open(match[0], "_blank", "noopener,noreferrer");
                 return true;
               }
             }
