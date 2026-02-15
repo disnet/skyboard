@@ -363,11 +363,14 @@
     );
   }
 
-  function handleClick() {
+  function handleClick(e: MouseEvent) {
     if (wasDragged) {
       wasDragged = false;
       return;
     }
+    // Let the browser follow link clicks instead of opening the edit modal
+    const target = e.target as HTMLElement;
+    if (target.closest("a")) return;
     onedit(task);
   }
 </script>
@@ -700,6 +703,12 @@
 
   .task-desc :global(:last-child) {
     margin-bottom: 0;
+  }
+
+  .task-desc :global(a) {
+    color: var(--color-primary);
+    text-decoration: underline;
+    cursor: pointer;
   }
 
   .task-desc :global(input[type="checkbox"]) {

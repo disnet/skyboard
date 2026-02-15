@@ -26,6 +26,13 @@
   import BlockInsertMenu from "./BlockInsertMenu.svelte";
   import DOMPurify from "dompurify";
 
+  DOMPurify.addHook("afterSanitizeAttributes", (node) => {
+    if (node.tagName === "A") {
+      node.setAttribute("target", "_blank");
+      node.setAttribute("rel", "noopener noreferrer");
+    }
+  });
+
   const markedInstance = new Marked(mentionExtension(), {
     renderer: {
       checkbox({ checked }: { checked: boolean }) {
@@ -450,7 +457,54 @@
       parent: editorContainer,
     });
 
+    // Cmd/Ctrl+click to open links — use capturing listener to intercept
+    // before CodeMirror's multi-cursor handler processes the event
+    function handleEditorMousedown(e: MouseEvent) {
+      if (!(e.metaKey || e.ctrlKey) || !editorView) return;
+      const pos = editorView.posAtCoords({ x: e.clientX, y: e.clientY });
+      if (pos === null) return;
+      const line = editorView.state.doc.lineAt(pos);
+      const text = line.text;
+      const offsetInLine = pos - line.from;
+      // Try markdown link syntax first: [text](url)
+      const mdLinkRegex = /\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g;
+      let match: RegExpExecArray | null;
+      while ((match = mdLinkRegex.exec(text)) !== null) {
+        if (
+          offsetInLine >= match.index &&
+          offsetInLine <= match.index + match[0].length
+        ) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          window.open(match[2], "_blank", "noopener,noreferrer");
+          return;
+        }
+      }
+      // Try plain URL (with or without protocol)
+      const urlRegex = /(?:https?:\/\/|www\.)[^\s)>\]]+/g;
+      while ((match = urlRegex.exec(text)) !== null) {
+        if (
+          offsetInLine >= match.index &&
+          offsetInLine <= match.index + match[0].length
+        ) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          const url = match[0].startsWith("www.")
+            ? `https://${match[0]}`
+            : match[0];
+          window.open(url, "_blank", "noopener,noreferrer");
+          return;
+        }
+      }
+    }
+    editorContainer.addEventListener("mousedown", handleEditorMousedown, true);
+
     return () => {
+      editorContainer!.removeEventListener(
+        "mousedown",
+        handleEditorMousedown,
+        true,
+      );
       editorView?.destroy();
       editorView = undefined;
     };
@@ -1352,6 +1406,12 @@
 
   .rendered-description :global(:last-child) {
     margin-bottom: 0;
+  }
+
+  .rendered-description :global(a) {
+    color: var(--color-primary);
+    text-decoration: underline;
+    cursor: pointer;
   }
 
   .rendered-description :global(input[type="checkbox"]) {
