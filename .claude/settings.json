@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.file_path' | xargs npx prettier --write 2>/dev/null; npm run check 2>&1 | tail -20"
+          }
+        ]
+      }
+    ]
+  }
+}
