@@ -37,6 +37,7 @@ export interface Task {
   boardUri: string;
   position?: string;
   labelIds?: string[];
+  assigneeDid?: string;
   order?: number; // Deprecated: use position
   createdAt: string;
   updatedAt?: string;
@@ -61,6 +62,7 @@ export interface TaskRecord {
   boardUri: string;
   position?: string;
   labelIds?: string[];
+  assigneeDid?: string;
   order?: number; // Deprecated: use position
   createdAt: string;
   updatedAt?: string;
@@ -74,6 +76,7 @@ export interface OpFields {
   columnId?: string;
   position?: string;
   labelIds?: string[];
+  assigneeDid?: string;
   order?: number; // Deprecated: use position
 }
 
@@ -191,6 +194,8 @@ export interface MaterializedTask {
   effectivePosition: string;
   labelIds?: string[];
   effectiveLabelIds: string[];
+  assigneeDid?: string;
+  effectiveAssigneeDid?: string;
   ownerDid: string;
   lastModifiedBy: string;
   lastModifiedAt: string;
