@@ -111,7 +111,7 @@ sb whoami --json
 ### Setup
 
 ```bash
-sb ralph init --board "Sprint Board"   # creates .ralph.json + .ralph-protocol.md
+sb ralph init --board "Sprint Board"   # creates .skyboard-ralph/ config + protocol
 sb ralph start                         # run the loop
 ```
 
@@ -119,7 +119,7 @@ sb ralph start                         # run the loop
 
 | Command | Description |
 |---------|-------------|
-| `sb ralph init` | Set up `.ralph.json` config and generate protocol file |
+| `sb ralph init` | Set up `.skyboard-ralph/` config and generate protocol file |
 | `sb ralph start` | Run the autonomous dev loop |
 | `sb ralph status` | Show current loop state (iteration count, last status) |
 
@@ -130,9 +130,9 @@ sb ralph start                         # run the loop
 | `--board <ref>` | Board reference (rkey, AT URI, URL, name). Falls back to default board. |
 | `--max-iterations <n>` | Default max iterations (default: 50) |
 
-Creates two files:
-- **`.ralph.json`** — Config with board ref, iteration limit, and file paths
-- **`.ralph-protocol.md`** — The agent protocol template. Edit this to customize agent behavior.
+Creates files under `.skyboard-ralph/`:
+- **`config.json`** — Config with board ref, iteration limit, and file paths
+- **`protocol.md`** — The agent protocol template. Edit this to customize agent behavior.
 
 ### `sb ralph start` options
 
@@ -143,7 +143,7 @@ Creates two files:
 
 By default, `start` runs with `--dangerously-skip-permissions` so the agent can work autonomously. Use `--interactive` for supervised runs.
 
-Output streams to both stdout and `.claude/loop.log`. Press Ctrl-C to stop gracefully — the current iteration finishes before exiting.
+Output streams to both stdout and `.skyboard-ralph/loop.log`. Press Ctrl-C to stop gracefully — the current iteration finishes before exiting.
 
 ### `sb ralph status` options
 
@@ -153,7 +153,7 @@ Output streams to both stdout and `.claude/loop.log`. Press Ctrl-C to stop grace
 
 ### Protocol customization
 
-The generated `.ralph-protocol.md` contains the full agent protocol with `{{placeholder}}` markers that are interpolated at runtime:
+The generated `.skyboard-ralph/protocol.md` contains the full agent protocol with `{{placeholder}}` markers that are interpolated at runtime:
 
 - `{{iteration}}` — Current iteration number
 - `{{maxIterations}}` — Total iteration limit
@@ -166,7 +166,7 @@ Edit the protocol file to change how the agent picks tasks, what transitions it 
 
 - **Skyboard web UI** — Watch cards move across columns in real time
 - **Card comments** — The agent logs what it did each iteration
-- **Log file** — `.claude/loop.log` has full output from every iteration
+- **Log file** — `.skyboard-ralph/loop.log` has full output from every iteration
 - **Status** — `sb ralph status` shows iteration count and last status
 
 ## Claude Code plugin
