@@ -35,7 +35,9 @@ function boardToRecord(board: Board): BoardRecord {
     name: board.name,
     ...(board.description ? { description: board.description } : {}),
     columns: board.columns,
-    ...(board.labels && board.labels.length > 0 ? { labels: board.labels } : {}),
+    ...(board.labels && board.labels.length > 0
+      ? { labels: board.labels }
+      : {}),
     ...(board.open ? { open: board.open } : {}),
     createdAt: board.createdAt,
   };
@@ -49,7 +51,9 @@ function taskToRecord(task: Task): TaskRecord {
     columnId: task.columnId,
     boardUri: task.boardUri,
     ...(task.position ? { position: task.position } : {}),
-    ...(task.labelIds && task.labelIds.length > 0 ? { labelIds: task.labelIds } : {}),
+    ...(task.labelIds && task.labelIds.length > 0
+      ? { labelIds: task.labelIds }
+      : {}),
     order: task.order ?? 0,
     createdAt: task.createdAt,
     ...(task.updatedAt ? { updatedAt: task.updatedAt } : {}),
@@ -62,7 +66,6 @@ function isNetworkError(err: unknown): boolean {
   const name = (err as { name?: string })?.name;
   return name === "FetchRequestError" || name === "_FetchRequestError";
 }
-
 
 export async function syncPendingToPDS(
   agent: Agent,
@@ -258,7 +261,6 @@ export async function syncPendingToPDS(
   }
 }
 
-
 export async function deleteBoardFromPDS(
   agent: Agent,
   did: string,
@@ -450,7 +452,15 @@ export async function deleteReactionFromPDS(
 }
 
 async function resetErrorsToPending(did: string): Promise<void> {
-  const tables = [db.boards, db.tasks, db.ops, db.trusts, db.comments, db.approvals, db.reactions];
+  const tables = [
+    db.boards,
+    db.tasks,
+    db.ops,
+    db.trusts,
+    db.comments,
+    db.approvals,
+    db.reactions,
+  ];
   for (const table of tables) {
     const errored = await (table as any)
       .where("syncStatus")

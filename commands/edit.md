@@ -16,6 +16,7 @@ sb edit <ref> --json
 - `<ref>` — card reference (rkey prefix, minimum 4 characters)
 
 Options:
+
 - `-t, --title <title>` — new title
 - `-d, --description <desc>` — new description
 - `-l, --label <label...>` — set labels (can be specified multiple times)

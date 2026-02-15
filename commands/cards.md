@@ -14,6 +14,7 @@ sb cards --json
 ```
 
 Options:
+
 - `-c, --column <column>` — filter by column (name, prefix, or 1-based index)
 - `-l, --label <label>` — filter by label name
 - `-s, --search <text>` — search in title and description

@@ -40,9 +40,17 @@
         basicSetup,
         markdown({ codeLanguages: languages }),
         EditorView.lineWrapping,
-        Prec.high(keymap.of([
-          { key: "Mod-Enter", run: () => { onsubmit?.(); return true; } },
-        ])),
+        Prec.high(
+          keymap.of([
+            {
+              key: "Mod-Enter",
+              run: () => {
+                onsubmit?.();
+                return true;
+              },
+            },
+          ]),
+        ),
         cmPlaceholder(placeholder),
         autocompletion({ override: [mentionCompletionSource] }),
         markdownLivePreview,
@@ -98,7 +106,11 @@
     if (currentValue !== editorContent) {
       updatingFromProp = true;
       editorView.dispatch({
-        changes: { from: 0, to: editorView.state.doc.length, insert: currentValue },
+        changes: {
+          from: 0,
+          to: editorView.state.doc.length,
+          insert: currentValue,
+        },
       });
       updatingFromProp = false;
     }
@@ -108,17 +120,15 @@
   $effect(() => {
     if (!editorView) return;
     editorView.dispatch({
-      effects: editableCompartment.reconfigure(EditorView.editable.of(!disabled)),
+      effects: editableCompartment.reconfigure(
+        EditorView.editable.of(!disabled),
+      ),
     });
   });
 </script>
 
 <div class="mention-textarea-wrapper">
-  <div
-    class="editor-wrapper"
-    class:disabled
-    bind:this={container}
-  ></div>
+  <div class="editor-wrapper" class:disabled bind:this={container}></div>
 </div>
 
 <style>

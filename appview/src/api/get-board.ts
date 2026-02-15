@@ -146,9 +146,7 @@ function materializeTasks(
       did: task.did,
       rkey: task.rkey,
       effectiveTitle: fieldStates.title.value as string,
-      effectiveDescription: fieldStates.description.value as
-        | string
-        | undefined,
+      effectiveDescription: fieldStates.description.value as string | undefined,
       effectiveColumnId: fieldStates.columnId.value as string,
       effectivePosition: fieldStates.position.value as string,
       effectiveLabelIds:
@@ -228,10 +226,7 @@ export interface BoardResponse {
   }>;
 }
 
-export function getBoardData(
-  did: string,
-  rkey: string,
-): BoardResponse | null {
+export function getBoardData(did: string, rkey: string): BoardResponse | null {
   const boardRow = getBoard(did, rkey);
   if (!boardRow) return null;
 
@@ -244,9 +239,7 @@ export function getBoardData(
   const reactionRows = getReactionsByBoard(boardUri);
 
   const trustedDids = new Set(
-    trustRows
-      .filter((t) => t.did === did)
-      .map((t) => t.trustedDid),
+    trustRows.filter((t) => t.did === did).map((t) => t.trustedDid),
   );
 
   const tasks = materializeTasks(taskRows, opRows, did, trustedDids);

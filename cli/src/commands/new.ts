@@ -2,14 +2,24 @@ import { requireAgent } from "../lib/auth.js";
 import { fetchBoardData } from "../lib/pds.js";
 import { getDefaultBoard } from "../lib/config.js";
 import { resolveColumn } from "../lib/column-match.js";
-import { generateTID, buildAtUri, TASK_COLLECTION, BOARD_COLLECTION } from "../lib/tid.js";
+import {
+  generateTID,
+  buildAtUri,
+  TASK_COLLECTION,
+  BOARD_COLLECTION,
+} from "../lib/tid.js";
 import { shortRkey } from "../lib/display.js";
 import { generateKeyBetween } from "fractional-indexing";
 import chalk from "chalk";
 
 export async function newCommand(
   title: string,
-  opts: { column?: string; description?: string; board?: string; json?: boolean },
+  opts: {
+    column?: string;
+    description?: string;
+    board?: string;
+    json?: boolean;
+  },
 ): Promise<void> {
   const { agent, did } = await requireAgent();
 
@@ -22,13 +32,17 @@ export async function newCommand(
   }
 
   // Determine target column
-  const sortedColumns = [...data.board.columns].sort((a, b) => a.order - b.order);
+  const sortedColumns = [...data.board.columns].sort(
+    (a, b) => a.order - b.order,
+  );
   let targetCol;
   if (opts.column) {
     try {
       targetCol = resolveColumn(opts.column, data.board.columns);
     } catch (err) {
-      console.error(chalk.red(err instanceof Error ? err.message : String(err)));
+      console.error(
+        chalk.red(err instanceof Error ? err.message : String(err)),
+      );
       process.exit(1);
     }
   } else {
@@ -39,7 +53,10 @@ export async function newCommand(
   const colTasks = data.tasks
     .filter((t) => t.effectiveColumnId === targetCol.id)
     .sort((a, b) => a.effectivePosition.localeCompare(b.effectivePosition));
-  const lastPos = colTasks.length > 0 ? colTasks[colTasks.length - 1].effectivePosition : null;
+  const lastPos =
+    colTasks.length > 0
+      ? colTasks[colTasks.length - 1].effectivePosition
+      : null;
   const position = generateKeyBetween(lastPos, null);
 
   const boardUri = buildAtUri(boardRef.did, BOARD_COLLECTION, boardRef.rkey);
@@ -64,16 +81,22 @@ export async function newCommand(
   });
 
   if (opts.json) {
-    console.log(JSON.stringify({ rkey, title, column: targetCol.name, position }));
+    console.log(
+      JSON.stringify({ rkey, title, column: targetCol.name, position }),
+    );
   } else {
-    console.log(chalk.green(`Created: ${shortRkey(rkey)}  ${title}  → ${targetCol.name}`));
+    console.log(
+      chalk.green(`Created: ${shortRkey(rkey)}  ${title}  → ${targetCol.name}`),
+    );
   }
 }
 
 function resolveBoard(boardOpt?: string): { did: string; rkey: string } {
   const defaultBoard = getDefaultBoard();
   if (!defaultBoard) {
-    console.error(chalk.red("No default board set. Run `sb use <board>` first."));
+    console.error(
+      chalk.red("No default board set. Run `sb use <board>` first."),
+    );
     process.exit(1);
   }
   return defaultBoard;

@@ -4,11 +4,7 @@ import { app } from "./api/router.js";
 import { JetstreamConsumer } from "./firehose/jetstream.js";
 import { backfillBoard } from "./backfill/pds.js";
 import { broadcast } from "./ws/subscriptions.js";
-import {
-  subscribe,
-  unsubscribe,
-  type WsData,
-} from "./ws/subscriptions.js";
+import { subscribe, unsubscribe, type WsData } from "./ws/subscriptions.js";
 
 // Initialize DB (runs migrations)
 getDb();
@@ -21,7 +17,9 @@ jetstream.connect();
 if (jetstream.cursorWasStale) {
   (async () => {
     const boards = getAllBoards();
-    console.log(`[backfill] Cursor stale, backfilling ${boards.length} boards...`);
+    console.log(
+      `[backfill] Cursor stale, backfilling ${boards.length} boards...`,
+    );
     for (const board of boards) {
       try {
         await backfillBoard(board.did, board.rkey);

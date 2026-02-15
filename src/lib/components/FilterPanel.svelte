@@ -34,7 +34,9 @@
     selectedLabelIds = [];
   }
 
-  const hasFilters = $derived(titleFilter !== "" || selectedLabelIds.length > 0);
+  const hasFilters = $derived(
+    titleFilter !== "" || selectedLabelIds.length > 0,
+  );
 </script>
 
 <div class="panel-backdrop" onclick={onclose} role="presentation">
@@ -82,7 +84,14 @@
             <button
               class="label-pill"
               class:selected={selectedLabelIds.includes(label.id)}
-              style="background: {selectedLabelIds.includes(label.id) ? label.color + '30' : label.color + '10'}; color: {label.color}; border-color: {selectedLabelIds.includes(label.id) ? label.color : label.color + '40'};"
+              style="background: {selectedLabelIds.includes(label.id)
+                ? label.color + '30'
+                : label.color +
+                  '10'}; color: {label.color}; border-color: {selectedLabelIds.includes(
+                label.id,
+              )
+                ? label.color
+                : label.color + '40'};"
               onclick={() => toggleLabel(label.id)}
             >
               {label.name}
@@ -93,9 +102,7 @@
     {/if}
 
     {#if hasFilters}
-      <button class="clear-btn" onclick={clearAll}>
-        Clear all filters
-      </button>
+      <button class="clear-btn" onclick={clearAll}> Clear all filters </button>
     {/if}
 
     <div class="save-actions">

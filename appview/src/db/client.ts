@@ -75,7 +75,9 @@ export function upsertBoard(
 export function getBoard(did: string, rkey: string): BoardRow | null {
   const db = getDb();
   const uri = buildAtUri(did, "dev.skyboard.board", rkey);
-  return db.query<BoardRow, [string]>("SELECT * FROM boards WHERE uri = ?").get(uri);
+  return db
+    .query<BoardRow, [string]>("SELECT * FROM boards WHERE uri = ?")
+    .get(uri);
 }
 
 export function getAllBoards(): BoardRow[] {
@@ -160,9 +162,10 @@ export function deleteTask(did: string, rkey: string): string | null {
   const db = getDb();
   const uri = buildAtUri(did, "dev.skyboard.task", rkey);
   const existing = db
-    .query<{ boardUri: string }, [string]>(
-      "SELECT boardUri FROM tasks WHERE uri = ?",
-    )
+    .query<
+      { boardUri: string },
+      [string]
+    >("SELECT boardUri FROM tasks WHERE uri = ?")
     .get(uri);
   if (existing) {
     db.run("DELETE FROM tasks WHERE uri = ?", [uri]);
@@ -224,9 +227,10 @@ export function deleteOp(did: string, rkey: string): string | null {
   const db = getDb();
   const uri = buildAtUri(did, "dev.skyboard.op", rkey);
   const existing = db
-    .query<{ boardUri: string }, [string]>(
-      "SELECT boardUri FROM ops WHERE uri = ?",
-    )
+    .query<
+      { boardUri: string },
+      [string]
+    >("SELECT boardUri FROM ops WHERE uri = ?")
     .get(uri);
   if (existing) {
     db.run("DELETE FROM ops WHERE uri = ?", [uri]);
@@ -278,9 +282,10 @@ export function deleteTrust(did: string, rkey: string): string | null {
   const db = getDb();
   const uri = buildAtUri(did, "dev.skyboard.trust", rkey);
   const existing = db
-    .query<{ boardUri: string }, [string]>(
-      "SELECT boardUri FROM trusts WHERE uri = ?",
-    )
+    .query<
+      { boardUri: string },
+      [string]
+    >("SELECT boardUri FROM trusts WHERE uri = ?")
     .get(uri);
   if (existing) {
     db.run("DELETE FROM trusts WHERE uri = ?", [uri]);
@@ -342,9 +347,10 @@ export function deleteComment(did: string, rkey: string): string | null {
   const db = getDb();
   const uri = buildAtUri(did, "dev.skyboard.comment", rkey);
   const existing = db
-    .query<{ boardUri: string }, [string]>(
-      "SELECT boardUri FROM comments WHERE uri = ?",
-    )
+    .query<
+      { boardUri: string },
+      [string]
+    >("SELECT boardUri FROM comments WHERE uri = ?")
     .get(uri);
   if (existing) {
     db.run("DELETE FROM comments WHERE uri = ?", [uri]);
@@ -396,9 +402,10 @@ export function deleteApproval(did: string, rkey: string): string | null {
   const db = getDb();
   const uri = buildAtUri(did, "dev.skyboard.approval", rkey);
   const existing = db
-    .query<{ boardUri: string }, [string]>(
-      "SELECT boardUri FROM approvals WHERE uri = ?",
-    )
+    .query<
+      { boardUri: string },
+      [string]
+    >("SELECT boardUri FROM approvals WHERE uri = ?")
     .get(uri);
   if (existing) {
     db.run("DELETE FROM approvals WHERE uri = ?", [uri]);
@@ -460,9 +467,10 @@ export function deleteReaction(did: string, rkey: string): string | null {
   const db = getDb();
   const uri = buildAtUri(did, "dev.skyboard.reaction", rkey);
   const existing = db
-    .query<{ boardUri: string }, [string]>(
-      "SELECT boardUri FROM reactions WHERE uri = ?",
-    )
+    .query<
+      { boardUri: string },
+      [string]
+    >("SELECT boardUri FROM reactions WHERE uri = ?")
     .get(uri);
   if (existing) {
     db.run("DELETE FROM reactions WHERE uri = ?", [uri]);
@@ -473,10 +481,7 @@ export function deleteReaction(did: string, rkey: string): string | null {
 
 // --- Board participants ---
 
-export function upsertParticipant(
-  did: string,
-  boardUri: string,
-): void {
+export function upsertParticipant(did: string, boardUri: string): void {
   const db = getDb();
   db.run(
     `INSERT INTO board_participants (did, boardUri, discoveredAt)
@@ -496,10 +501,7 @@ export function getParticipants(boardUri: string): string[] {
     .map((r) => r.did);
 }
 
-export function markParticipantFetched(
-  did: string,
-  boardUri: string,
-): void {
+export function markParticipantFetched(did: string, boardUri: string): void {
   const db = getDb();
   db.run(
     "UPDATE board_participants SET lastFetchedAt = ? WHERE did = ? AND boardUri = ?",
@@ -512,7 +514,10 @@ export function markParticipantFetched(
 export function getCursor(): number | null {
   const db = getDb();
   const row = db
-    .query<{ cursor: number }, []>("SELECT cursor FROM jetstream_cursor WHERE id = 1")
+    .query<
+      { cursor: number },
+      []
+    >("SELECT cursor FROM jetstream_cursor WHERE id = 1")
     .get();
   return row?.cursor ?? null;
 }

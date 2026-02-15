@@ -14,6 +14,7 @@ sb new "<title>" --json
 ```
 
 Options:
+
 - `-c, --column <column>` — target column (default: first column). Column by name, prefix, or 1-based index.
 - `-d, --description <desc>` — card description
 - `--board <ref>` — override default board

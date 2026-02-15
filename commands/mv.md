@@ -17,6 +17,7 @@ sb mv <ref> <column> --json
 - `<column>` — target column (name, prefix, or 1-based index)
 
 Options:
+
 - `--board <ref>` — override default board
 
 Always use `--json`. Returns: `rkey`, `column`.

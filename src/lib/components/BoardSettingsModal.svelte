@@ -106,7 +106,11 @@
 <svelte:window onkeydown={handleKeydown} />
 
 <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
-<div class="modal-backdrop" onmousedown={handleBackdropMouseDown} onclick={handleBackdropClick}>
+<div
+  class="modal-backdrop"
+  onmousedown={handleBackdropMouseDown}
+  onclick={handleBackdropClick}
+>
   <div class="modal" role="dialog" aria-label="Board Settings">
     <div class="modal-header">
       <h3>Board Settings</h3>
@@ -180,10 +184,7 @@
         <div class="label-list">
           {#each labels as lbl (lbl.id)}
             <div class="label-row">
-              <span
-                class="color-dot"
-                style="background: {lbl.color}"
-              ></span>
+              <span class="color-dot" style="background: {lbl.color}"></span>
               <input
                 type="text"
                 bind:value={lbl.name}
@@ -203,10 +204,7 @@
           {/each}
         </div>
         <div class="add-label-row">
-          <span
-            class="color-dot"
-            style="background: {newLabelColor}"
-          ></span>
+          <span class="color-dot" style="background: {newLabelColor}"></span>
           <input
             type="text"
             bind:value={newLabelName}
@@ -223,8 +221,7 @@
               <option value={c.value}>{c.name}</option>
             {/each}
           </select>
-          <button onclick={addLabel} disabled={!newLabelName.trim()}
-            >Add</button
+          <button onclick={addLabel} disabled={!newLabelName.trim()}>Add</button
           >
         </div>
       </div>

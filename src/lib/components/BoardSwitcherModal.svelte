@@ -80,7 +80,11 @@
 <svelte:window onkeydown={handleKeydown} />
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="modal-backdrop" onmousedown={handleBackdropMouseDown} onclick={handleBackdropClick}>
+<div
+  class="modal-backdrop"
+  onmousedown={handleBackdropMouseDown}
+  onclick={handleBackdropClick}
+>
   <div class="modal" role="dialog" aria-label="Switch board">
     <div class="search-wrap">
       <input

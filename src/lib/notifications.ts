@@ -112,10 +112,7 @@ export async function generateCatchUpNotifications(
   }
 
   // Scan recent ops for @mentions in description/title updates
-  const recentOps = await db.ops
-    .where("createdAt")
-    .above(lastScan)
-    .toArray();
+  const recentOps = await db.ops.where("createdAt").above(lastScan).toArray();
 
   for (const op of recentOps) {
     if (op.did === currentUserDid) continue;

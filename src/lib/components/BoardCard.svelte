@@ -20,7 +20,11 @@
     {:else}
       <span class="sync-badge closed">Closed</span>
     {/if}
-    <span class="sync-badge public" title="All boards are publicly viewable on the AT Protocol network">Public</span>
+    <span
+      class="sync-badge public"
+      title="All boards are publicly viewable on the AT Protocol network"
+      >Public</span
+    >
     {#if board.syncStatus === "pending"}
       <span class="sync-badge pending">Pending</span>
     {:else if board.syncStatus === "error"}

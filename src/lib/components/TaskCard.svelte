@@ -10,7 +10,7 @@
   const marked = new Marked({
     renderer: {
       checkbox({ checked }: { checked: boolean }) {
-        return `<input ${checked ? 'checked="" ' : ''}type="checkbox"> `;
+        return `<input ${checked ? 'checked="" ' : ""}type="checkbox"> `;
       },
     },
   });
@@ -22,7 +22,13 @@
     }
   });
 
-  const EMOJI_OPTIONS = ["\u{1F44D}", "\u{1F44E}", "\u{2764}\u{FE0F}", "\u{1F389}", "\u{1F680}"];
+  const EMOJI_OPTIONS = [
+    "\u{1F44D}",
+    "\u{1F44E}",
+    "\u{2764}\u{FE0F}",
+    "\u{1F389}",
+    "\u{1F680}",
+  ];
 
   let {
     task,
@@ -53,7 +59,11 @@
     readonly?: boolean;
     selected?: boolean;
     editing?: boolean;
-    onsavetitle?: (task: MaterializedTask, title: string, andContinue?: boolean) => void;
+    onsavetitle?: (
+      task: MaterializedTask,
+      title: string,
+      andContinue?: boolean,
+    ) => void;
     onpastelines?: (task: MaterializedTask, lines: string[]) => void;
     ondiscarderrors?: (task: MaterializedTask) => void;
   } = $props();
@@ -114,7 +124,10 @@
 
   function handlePaste(e: ClipboardEvent) {
     const text = e.clipboardData?.getData("text/plain") ?? "";
-    const lines = text.split(/\r?\n/).map((l) => stripListMarker(l.trim())).filter(Boolean);
+    const lines = text
+      .split(/\r?\n/)
+      .map((l) => stripListMarker(l.trim()))
+      .filter(Boolean);
     if (lines.length <= 1) return; // single line — let default paste behavior handle it
     e.preventDefault();
     if (titleEl) {
@@ -229,10 +242,10 @@
 
   const renderedDescription = $derived(
     task.effectiveDescription
-      ? DOMPurify.sanitize(
-          marked.parse(task.effectiveDescription) as string,
-          { ADD_TAGS: ["input"], ADD_ATTR: ["type", "checked"] },
-        )
+      ? DOMPurify.sanitize(marked.parse(task.effectiveDescription) as string, {
+          ADD_TAGS: ["input"],
+          ADD_ATTR: ["type", "checked"],
+        })
       : "",
   );
 
@@ -240,7 +253,11 @@
 
   function handleCheckboxClick(e: MouseEvent) {
     const target = e.target as HTMLElement;
-    if (target.tagName !== "INPUT" || (target as HTMLInputElement).type !== "checkbox") return;
+    if (
+      target.tagName !== "INPUT" ||
+      (target as HTMLInputElement).type !== "checkbox"
+    )
+      return;
     if (readonly || !currentUserDid || !task.effectiveDescription) return;
 
     e.preventDefault();
@@ -261,7 +278,9 @@
         const isChecked = match[1] !== " ";
         const newChar = isChecked ? " " : "x";
         const newDesc =
-          desc.slice(0, match.index + 1) + newChar + desc.slice(match.index + 2);
+          desc.slice(0, match.index + 1) +
+          newChar +
+          desc.slice(match.index + 2);
         createOp(currentUserDid, task.sourceTask, task.boardUri, {
           description: newDesc,
         });
@@ -285,7 +304,7 @@
 
   const hasSyncErrors = $derived(
     task.sourceTask.syncStatus === "error" ||
-    task.appliedOps.some((op) => op.syncStatus === "error"),
+      task.appliedOps.some((op) => op.syncStatus === "error"),
   );
 
   const isOwned = $derived(task.ownerDid === currentUserDid);
@@ -380,15 +399,26 @@
     class="task-title"
     contenteditable={editing ? "plaintext-only" : false}
     bind:this={titleEl}
-    onkeydown={editing ? (e) => {
-      if (e.key === "Enter") { e.preventDefault(); commitEdit(true); }
-      if (e.key === "Escape") { e.preventDefault(); normalizeTitleDom(task.effectiveTitle); onsavetitle?.(task, task.effectiveTitle); }
-      e.stopPropagation();
-    } : undefined}
+    onkeydown={editing
+      ? (e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            commitEdit(true);
+          }
+          if (e.key === "Escape") {
+            e.preventDefault();
+            normalizeTitleDom(task.effectiveTitle);
+            onsavetitle?.(task, task.effectiveTitle);
+          }
+          e.stopPropagation();
+        }
+      : undefined}
     onpaste={editing ? handlePaste : undefined}
     onblur={editing ? () => commitEdit() : undefined}
     onclick={editing ? (e) => e.stopPropagation() : undefined}
-  >{task.effectiveTitle}</div>
+  >
+    {task.effectiveTitle}
+  </div>
   {#if taskLabels.length > 0}
     <div class="task-labels">
       {#each taskLabels as label (label.id)}
@@ -403,7 +433,9 @@
   {/if}
   {#if task.effectiveDescription}
     <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
-    <div class="task-desc" onclick={handleCheckboxClick}>{@html renderedDescription}</div>
+    <div class="task-desc" onclick={handleCheckboxClick}>
+      {@html renderedDescription}
+    </div>
   {/if}
   <div class="task-meta">
     <AuthorBadge did={task.ownerDid} isCurrentUser={isOwned} />
@@ -421,7 +453,13 @@
         class:todo-done={todoStats.checked === todoStats.total}
         title="{todoStats.checked} of {todoStats.total} completed"
       >
-        <svg class="todo-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <svg
+          class="todo-icon"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+        >
           <rect x="1.5" y="1.5" width="13" height="13" rx="2" />
           <path d="M4.5 8.5l2.5 2.5 4.5-5" />
         </svg>
@@ -441,7 +479,9 @@
         onmouseenter={handleTriggerEnter}
         onmouseleave={handleTriggerLeave}
         onclick={(e) => e.stopPropagation()}
-        title="{totalReactionCount} reaction{totalReactionCount === 1 ? '' : 's'}"
+        title="{totalReactionCount} reaction{totalReactionCount === 1
+          ? ''
+          : 's'}"
       >
         {#if topEmoji}
           {topEmoji.emoji} {topEmoji.count}
@@ -458,8 +498,11 @@
         {#if ondiscarderrors}
           <button
             class="discard-btn"
-            onclick={(e) => { e.stopPropagation(); ondiscarderrors(task); }}
-          >Discard</button>
+            onclick={(e) => {
+              e.stopPropagation();
+              ondiscarderrors(task);
+            }}>Discard</button
+          >
         {/if}
       </div>
     {:else if task.sourceTask.syncStatus === "pending"}
@@ -569,7 +612,6 @@
     -webkit-user-select: text;
     user-select: text;
   }
-
 
   .task-labels {
     display: flex;

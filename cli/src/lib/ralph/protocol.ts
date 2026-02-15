@@ -14,9 +14,17 @@ const SIMPLE_COLUMNS: ColumnDef[] = [
 
 const STANDARD_COLUMNS: ColumnDef[] = [
   { name: "Backlog", description: "Raw ideas or requests. Not yet scoped." },
-  { name: "Planned", description: "Scoped and ready to implement. Has clear acceptance criteria." },
+  {
+    name: "Planned",
+    description:
+      "Scoped and ready to implement. Has clear acceptance criteria.",
+  },
   { name: "In Progress", description: "Actively being worked on." },
-  { name: "In Review", description: "Implementation complete, needs verification (tests pass, code review)." },
+  {
+    name: "In Review",
+    description:
+      "Implementation complete, needs verification (tests pass, code review).",
+  },
   { name: "Done", description: "Verified and complete." },
 ];
 
@@ -52,7 +60,10 @@ function buildTransitionTable(columns: ColumnDef[]): string {
   return rows.join("\n");
 }
 
-function transitionDetails(from: string, to: string): { what: string; when: string } {
+function transitionDetails(
+  from: string,
+  to: string,
+): { what: string; when: string } {
   const fromLower = from.toLowerCase();
   const toLower = to.toLowerCase();
 
@@ -102,7 +113,9 @@ function transitionDetails(from: string, to: string): { what: string; when: stri
 
 function buildPickPriority(columns: ColumnDef[]): string {
   // Reverse order (excluding Done), highest priority first
-  const workColumns = columns.filter((c) => c.name.toLowerCase() !== "done").reverse();
+  const workColumns = columns
+    .filter((c) => c.name.toLowerCase() !== "done")
+    .reverse();
   return workColumns
     .map((col, i) => {
       if (i === workColumns.length - 1) {
@@ -253,7 +266,10 @@ export function generateProtocol(
 ): string {
   let content = readFileSync(protocolFile, "utf-8");
   content = content.replace(/\{\{iteration\}\}/g, String(context.iteration));
-  content = content.replace(/\{\{maxIterations\}\}/g, String(context.maxIterations));
+  content = content.replace(
+    /\{\{maxIterations\}\}/g,
+    String(context.maxIterations),
+  );
   content = content.replace(/\{\{boardDid\}\}/g, context.boardDid);
   content = content.replace(/\{\{boardRkey\}\}/g, context.boardRkey);
   return content;

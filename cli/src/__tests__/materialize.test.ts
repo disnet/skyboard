@@ -19,7 +19,13 @@ describe("materializeTasks", () => {
 
   it("returns a materialized task with no ops applied", () => {
     const task = makeTask();
-    const result = materializeTasks([task], [], trustedDids, USER_DID, OWNER_DID);
+    const result = materializeTasks(
+      [task],
+      [],
+      trustedDids,
+      USER_DID,
+      OWNER_DID,
+    );
 
     expect(result).toHaveLength(1);
     expect(result[0].effectiveTitle).toBe("Test Task");
@@ -38,7 +44,13 @@ describe("materializeTasks", () => {
       createdAt: "2025-01-02T00:00:00.000Z",
     });
 
-    const result = materializeTasks([task], [op], trustedDids, USER_DID, OWNER_DID);
+    const result = materializeTasks(
+      [task],
+      [op],
+      trustedDids,
+      USER_DID,
+      OWNER_DID,
+    );
 
     expect(result[0].effectiveTitle).toBe("Updated Title");
     expect(result[0].appliedOps).toHaveLength(1);
@@ -53,7 +65,13 @@ describe("materializeTasks", () => {
       createdAt: "2025-01-02T00:00:00.000Z",
     });
 
-    const result = materializeTasks([task], [op], trustedDids, USER_DID, OWNER_DID);
+    const result = materializeTasks(
+      [task],
+      [op],
+      trustedDids,
+      USER_DID,
+      OWNER_DID,
+    );
 
     expect(result[0].effectiveColumnId).toBe("col-done");
     expect(result[0].appliedOps).toHaveLength(1);
@@ -68,7 +86,13 @@ describe("materializeTasks", () => {
       createdAt: "2025-01-02T00:00:00.000Z",
     });
 
-    const result = materializeTasks([task], [op], trustedDids, USER_DID, OWNER_DID);
+    const result = materializeTasks(
+      [task],
+      [op],
+      trustedDids,
+      USER_DID,
+      OWNER_DID,
+    );
 
     expect(result[0].effectiveTitle).toBe("My Edit");
     expect(result[0].appliedOps).toHaveLength(1);
@@ -83,7 +107,13 @@ describe("materializeTasks", () => {
       createdAt: "2025-01-02T00:00:00.000Z",
     });
 
-    const result = materializeTasks([task], [op], trustedDids, USER_DID, OWNER_DID);
+    const result = materializeTasks(
+      [task],
+      [op],
+      trustedDids,
+      USER_DID,
+      OWNER_DID,
+    );
 
     expect(result[0].effectiveTitle).toBe("Test Task"); // unchanged
     expect(result[0].appliedOps).toHaveLength(0);
@@ -173,7 +203,13 @@ describe("materializeTasks", () => {
       createdAt: "2025-01-01T00:00:00.000Z", // before task creation
     });
 
-    const result = materializeTasks([task], [op], trustedDids, USER_DID, OWNER_DID);
+    const result = materializeTasks(
+      [task],
+      [op],
+      trustedDids,
+      USER_DID,
+      OWNER_DID,
+    );
 
     expect(result[0].effectiveTitle).toBe("Test Task"); // base task wins
   });
@@ -182,7 +218,13 @@ describe("materializeTasks", () => {
     const task = makeTask();
     const dupe = makeTask(); // same rkey+did
 
-    const result = materializeTasks([task, dupe], [], trustedDids, USER_DID, OWNER_DID);
+    const result = materializeTasks(
+      [task, dupe],
+      [],
+      trustedDids,
+      USER_DID,
+      OWNER_DID,
+    );
 
     expect(result).toHaveLength(1);
   });
@@ -228,7 +270,13 @@ describe("materializeTasks", () => {
       createdAt: "2025-01-05T00:00:00.000Z",
     });
 
-    const result = materializeTasks([task], [op], trustedDids, USER_DID, OWNER_DID);
+    const result = materializeTasks(
+      [task],
+      [op],
+      trustedDids,
+      USER_DID,
+      OWNER_DID,
+    );
 
     expect(result[0].lastModifiedBy).toBe(TRUSTED_DID);
     expect(result[0].lastModifiedAt).toBe("2025-01-05T00:00:00.000Z");
@@ -249,7 +297,13 @@ describe("materializeTasks", () => {
       createdAt: "2025-01-02T00:00:00.000Z",
     });
 
-    const result = materializeTasks([task], [op], trustedDids, "did:plc:somebodyelse", OWNER_DID);
+    const result = materializeTasks(
+      [task],
+      [op],
+      trustedDids,
+      "did:plc:somebodyelse",
+      OWNER_DID,
+    );
 
     expect(result[0].effectiveTitle).toBe("Author Edit");
     expect(result[0].appliedOps).toHaveLength(1);

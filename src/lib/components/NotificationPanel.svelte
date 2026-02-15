@@ -65,8 +65,7 @@
     const path = notificationPath(n);
     const hashIndex = path.indexOf("#task-");
     const pathname = hashIndex >= 0 ? path.slice(0, hashIndex) : path;
-    const taskRkey =
-      hashIndex >= 0 ? path.slice(hashIndex + 6) : null;
+    const taskRkey = hashIndex >= 0 ? path.slice(hashIndex + 6) : null;
 
     onclose();
 
@@ -115,10 +114,7 @@
             class:unread={!n.read}
             class:mention={n.type === "mention"}
           >
-            <button
-              class="notification-body"
-              onclick={() => handleClick(n)}
-            >
+            <button class="notification-body" onclick={() => handleClick(n)}>
               <div class="notification-row">
                 {#if !n.read}
                   <span class="unread-dot"></span>
@@ -135,9 +131,12 @@
                   {/if}
                   <div class="notification-meta">
                     {#if boardNameByUri.get(n.boardUri)}
-                      <span class="notification-board">{boardNameByUri.get(n.boardUri)}</span>
+                      <span class="notification-board"
+                        >{boardNameByUri.get(n.boardUri)}</span
+                      >
                     {/if}
-                    <span class="notification-time">{timeAgo(n.createdAt)}</span>
+                    <span class="notification-time">{timeAgo(n.createdAt)}</span
+                    >
                   </div>
                 </div>
               </div>
@@ -145,8 +144,8 @@
             <button
               class="notification-clear-btn"
               title="Remove"
-              onclick={() => n.id && clearNotification(n.id)}
-            >&times;</button>
+              onclick={() => n.id && clearNotification(n.id)}>&times;</button
+            >
           </div>
         {/each}
       </div>
@@ -283,7 +282,9 @@
     font-size: 1rem;
     line-height: 1;
     opacity: 0;
-    transition: opacity 0.15s, color 0.15s;
+    transition:
+      opacity 0.15s,
+      color 0.15s;
     flex-shrink: 0;
   }
 

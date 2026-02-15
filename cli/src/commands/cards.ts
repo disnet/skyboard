@@ -58,7 +58,9 @@ function resolveBoard(boardOpt?: string): { did: string; rkey: string } {
 
   const defaultBoard = getDefaultBoard();
   if (!defaultBoard) {
-    console.error(chalk.red("No default board set. Run `sb use <board>` first."));
+    console.error(
+      chalk.red("No default board set. Run `sb use <board>` first."),
+    );
     process.exit(1);
   }
   return defaultBoard;

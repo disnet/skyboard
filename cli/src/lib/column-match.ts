@@ -4,10 +4,7 @@ import type { Column } from "./types.js";
  * Match a column reference (name, prefix, or 1-based index) to a column.
  * Throws with a helpful message if no match found.
  */
-export function resolveColumn(
-  ref: string,
-  columns: Column[],
-): Column {
+export function resolveColumn(ref: string, columns: Column[]): Column {
   const sorted = [...columns].sort((a, b) => a.order - b.order);
 
   // Try numeric index (1-based)
@@ -26,7 +23,9 @@ export function resolveColumn(
   );
   if (prefixMatches.length === 1) return prefixMatches[0];
   if (prefixMatches.length > 1) {
-    const list = prefixMatches.map((c, i) => `  ${i + 1}. ${c.name}`).join("\n");
+    const list = prefixMatches
+      .map((c, i) => `  ${i + 1}. ${c.name}`)
+      .join("\n");
     throw new Error(`Ambiguous column "${ref}". Matches:\n${list}`);
   }
 
@@ -41,5 +40,7 @@ export function resolveColumn(
   }
 
   const allCols = sorted.map((c, i) => `  ${i + 1}. ${c.name}`).join("\n");
-  throw new Error(`No column matching "${ref}". Available columns:\n${allCols}`);
+  throw new Error(
+    `No column matching "${ref}". Available columns:\n${allCols}`,
+  );
 }

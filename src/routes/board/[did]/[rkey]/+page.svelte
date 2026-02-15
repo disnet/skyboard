@@ -162,7 +162,11 @@
     const map = new Map<string, number>();
     if (!board.current) return map;
     for (const comment of allComments.current ?? []) {
-      const commentUri = buildAtUri(comment.did, COMMENT_COLLECTION, comment.rkey);
+      const commentUri = buildAtUri(
+        comment.did,
+        COMMENT_COLLECTION,
+        comment.rkey,
+      );
       if (
         isContentVisible(
           comment.did,
@@ -185,7 +189,10 @@
 
   // Reactions grouped by task → emoji → {count, userReacted}
   const reactionsByTask = $derived.by(() => {
-    const map = new Map<string, Map<string, { count: number; userReacted: boolean }>>();
+    const map = new Map<
+      string,
+      Map<string, { count: number; userReacted: boolean }>
+    >();
     for (const reaction of allReactions.current ?? []) {
       let emojiMap = map.get(reaction.targetTaskUri);
       if (!emojiMap) {
@@ -265,13 +272,21 @@
         )
       ) {
         // Apply title filter
-        if (filterTitle && !task.effectiveTitle.toLowerCase().includes(filterTitle.toLowerCase())) {
+        if (
+          filterTitle &&
+          !task.effectiveTitle.toLowerCase().includes(filterTitle.toLowerCase())
+        ) {
           continue;
         }
         // Apply label filter (OR logic: task must match at least one selected label, or have no labels if "__no_labels__" is selected)
         if (filterLabelIds.length > 0) {
-          const matchesNoLabels = filterLabelIds.includes("__no_labels__") && task.effectiveLabelIds.length === 0;
-          const matchesLabel = filterLabelIds.some((id) => id !== "__no_labels__" && task.effectiveLabelIds.includes(id));
+          const matchesNoLabels =
+            filterLabelIds.includes("__no_labels__") &&
+            task.effectiveLabelIds.length === 0;
+          const matchesLabel = filterLabelIds.some(
+            (id) =>
+              id !== "__no_labels__" && task.effectiveLabelIds.includes(id),
+          );
           if (!matchesNoLabels && !matchesLabel) {
             continue;
           }
@@ -345,7 +360,18 @@
 
   function handleBoardKeydown(e: KeyboardEvent) {
     // Skip when a modal is open
-    if (editingTask || showSettings || showPermissions || showProposals || showOpsPanel || showFilterPanel || showViewDropdown || showQuickLabel || showQuickMove) return;
+    if (
+      editingTask ||
+      showSettings ||
+      showPermissions ||
+      showProposals ||
+      showOpsPanel ||
+      showFilterPanel ||
+      showViewDropdown ||
+      showQuickLabel ||
+      showQuickMove
+    )
+      return;
 
     // Skip when focus is inside an input, textarea, or contenteditable
     const tag = (e.target as HTMLElement)?.tagName;
@@ -364,7 +390,10 @@
           setSelectedPos({ col: 0, row: 0 });
         } else {
           const newCol = Math.max(0, pos.col - 1);
-          const maxRow = Math.max(0, (sortedTasksByColumn[newCol]?.length ?? 1) - 1);
+          const maxRow = Math.max(
+            0,
+            (sortedTasksByColumn[newCol]?.length ?? 1) - 1,
+          );
           setSelectedPos({ col: newCol, row: Math.min(pos.row, maxRow) });
         }
         break;
@@ -376,7 +405,10 @@
           setSelectedPos({ col: 0, row: 0 });
         } else {
           const newCol = Math.min(numCols - 1, pos.col + 1);
-          const maxRow = Math.max(0, (sortedTasksByColumn[newCol]?.length ?? 1) - 1);
+          const maxRow = Math.max(
+            0,
+            (sortedTasksByColumn[newCol]?.length ?? 1) - 1,
+          );
           setSelectedPos({ col: newCol, row: Math.min(pos.row, maxRow) });
         }
         break;
@@ -419,7 +451,10 @@
             setSelectedPos({ col: pos.col, row: pos.row + 1 });
           }
         } else {
-          const maxRow = Math.max(0, (sortedTasksByColumn[pos.col]?.length ?? 1) - 1);
+          const maxRow = Math.max(
+            0,
+            (sortedTasksByColumn[pos.col]?.length ?? 1) - 1,
+          );
           setSelectedPos({ col: pos.col, row: Math.min(maxRow, pos.row + 1) });
         }
         break;
@@ -448,7 +483,10 @@
         if (destCol < 0 || destCol >= numCols) break;
         e.preventDefault();
         const destTasks = sortedTasksByColumn[destCol] ?? [];
-        const lastPos = destTasks.length > 0 ? destTasks[destTasks.length - 1].effectivePosition : null;
+        const lastPos =
+          destTasks.length > 0
+            ? destTasks[destTasks.length - 1].effectivePosition
+            : null;
         const newPosition = generateKeyBetween(lastPos, null);
         createOp(auth.did, task.sourceTask, boardUri, {
           columnId: sortedColumns[destCol].id,
@@ -465,11 +503,13 @@
         if (!pos || !auth.did) break;
         const taskTop = sortedTasksByColumn[pos.col]?.[pos.row];
         if (!taskTop) break;
-        const destColTop = e.key === "<" || e.key === "H" ? pos.col - 1 : pos.col + 1;
+        const destColTop =
+          e.key === "<" || e.key === "H" ? pos.col - 1 : pos.col + 1;
         if (destColTop < 0 || destColTop >= numCols) break;
         e.preventDefault();
         const destTasksTop = sortedTasksByColumn[destColTop] ?? [];
-        const firstPos = destTasksTop.length > 0 ? destTasksTop[0].effectivePosition : null;
+        const firstPos =
+          destTasksTop.length > 0 ? destTasksTop[0].effectivePosition : null;
         const newPosTop = generateKeyBetween(null, firstPos);
         createOp(auth.did, taskTop.sourceTask, boardUri, {
           columnId: sortedColumns[destColTop].id,
@@ -482,7 +522,10 @@
         if (!auth.did) break;
         e.preventDefault();
         const col = pos ? pos.col : 0;
-        const afterRow = pos && (sortedTasksByColumn[col]?.length ?? 0) > 0 ? pos.row : undefined;
+        const afterRow =
+          pos && (sortedTasksByColumn[col]?.length ?? 0) > 0
+            ? pos.row
+            : undefined;
         addNewCard(col, afterRow);
         break;
       }
@@ -618,7 +661,11 @@
     }
   }
 
-  function handleSaveTitle(task: MaterializedTask, title: string, andContinue = false) {
+  function handleSaveTitle(
+    task: MaterializedTask,
+    title: string,
+    andContinue = false,
+  ) {
     const pos = inlineEditPos;
     if (!title && !task.effectiveTitle) {
       // Empty title on a new card — discard it
@@ -787,7 +834,9 @@
     } else {
       current.push(labelId);
     }
-    createOp(auth.did, quickLabelTask.sourceTask, boardUri, { labelIds: current });
+    createOp(auth.did, quickLabelTask.sourceTask, boardUri, {
+      labelIds: current,
+    });
   }
 
   // Auto-scroll columns-container during HTML5 drag
@@ -904,36 +953,89 @@
         {:else}
           <span class="closed-badge">Closed</span>
         {/if}
-        <span class="public-badge" title="All boards are publicly viewable on the AT Protocol network">Public</span>
+        <span
+          class="public-badge"
+          title="All boards are publicly viewable on the AT Protocol network"
+          >Public</span
+        >
         {#if auth.isLoggedIn}
           <!-- svelte-ignore a11y_no_static_element_interactions -->
-          <div class="view-dropdown-wrapper" onkeydown={handleViewDropdownKeydown}>
-            <button class="view-dropdown-btn" onclick={() => (showViewDropdown = !showViewDropdown)}>
+          <div
+            class="view-dropdown-wrapper"
+            onkeydown={handleViewDropdownKeydown}
+          >
+            <button
+              class="view-dropdown-btn"
+              onclick={() => (showViewDropdown = !showViewDropdown)}
+            >
               {activeViewName()}
-              <svg width="10" height="6" viewBox="0 0 10 6" fill="none" aria-hidden="true">
-                <path d="M1 1L5 5L9 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              <svg
+                width="10"
+                height="6"
+                viewBox="0 0 10 6"
+                fill="none"
+                aria-hidden="true"
+              >
+                <path
+                  d="M1 1L5 5L9 1"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
               </svg>
             </button>
             {#if showViewDropdown}
-              <div class="view-dropdown-backdrop" onclick={() => (showViewDropdown = false)} role="presentation"></div>
+              <div
+                class="view-dropdown-backdrop"
+                onclick={() => (showViewDropdown = false)}
+                role="presentation"
+              ></div>
               <div class="view-dropdown-menu">
-                <button class="view-dropdown-item" class:active={activeViewId === null} onclick={selectAllView}>
+                <button
+                  class="view-dropdown-item"
+                  class:active={activeViewId === null}
+                  onclick={selectAllView}
+                >
                   All
                 </button>
                 {#each savedViews.current ?? [] as view (view.id)}
                   <div class="view-dropdown-item-row">
-                    <button class="view-dropdown-item" class:active={activeViewId === view.id} onclick={() => selectView(view)}>
+                    <button
+                      class="view-dropdown-item"
+                      class:active={activeViewId === view.id}
+                      onclick={() => selectView(view)}
+                    >
                       {view.name}
                     </button>
-                    <button class="view-edit-btn" onclick={() => openEditView(view)} title="Edit view">
-                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-                        <path d="M8.5 1.5L10.5 3.5M1 11L1.5 8.5L9.5 0.5L11.5 2.5L3.5 10.5L1 11Z" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+                    <button
+                      class="view-edit-btn"
+                      onclick={() => openEditView(view)}
+                      title="Edit view"
+                    >
+                      <svg
+                        width="12"
+                        height="12"
+                        viewBox="0 0 12 12"
+                        fill="none"
+                        aria-hidden="true"
+                      >
+                        <path
+                          d="M8.5 1.5L10.5 3.5M1 11L1.5 8.5L9.5 0.5L11.5 2.5L3.5 10.5L1 11Z"
+                          stroke="currentColor"
+                          stroke-width="1"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                        />
                       </svg>
                     </button>
                   </div>
                 {/each}
                 <div class="view-dropdown-separator"></div>
-                <button class="view-dropdown-item view-dropdown-new" onclick={openNewView}>
+                <button
+                  class="view-dropdown-item view-dropdown-new"
+                  onclick={openNewView}
+                >
                   New view...
                 </button>
               </div>
@@ -943,7 +1045,10 @@
       </div>
       <div class="board-header-right">
         {#if auth.isLoggedIn}
-          <button class="activity-btn header-desktop" onclick={() => (showOpsPanel = true)}>
+          <button
+            class="activity-btn header-desktop"
+            onclick={() => (showOpsPanel = true)}
+          >
             Activity
           </button>
           {#if isBoardOwner && (untrustedTasks.length > 0 || untrustedComments.length > 0)}
@@ -968,37 +1073,81 @@
           >
             Access
             {#if (ownerTrusts.current ?? []).length > 0}
-              <span class="access-badge">{(ownerTrusts.current ?? []).length}</span>
+              <span class="access-badge"
+                >{(ownerTrusts.current ?? []).length}</span
+              >
             {/if}
           </button>
-          <button class="settings-btn header-desktop" onclick={() => (showSettings = true)}>
+          <button
+            class="settings-btn header-desktop"
+            onclick={() => (showSettings = true)}
+          >
             Settings
           </button>
-          <button class="delete-btn header-desktop" onclick={deleteBoard}>Delete</button>
+          <button class="delete-btn header-desktop" onclick={deleteBoard}
+            >Delete</button
+          >
         {/if}
         <div class="more-wrapper header-mobile">
-          <button class="more-btn" onclick={() => (showMoreMenu = !showMoreMenu)}>
+          <button
+            class="more-btn"
+            onclick={() => (showMoreMenu = !showMoreMenu)}
+          >
             &hellip;
           </button>
           {#if showMoreMenu}
-            <div class="more-backdrop" onclick={() => (showMoreMenu = false)} role="presentation"></div>
+            <div
+              class="more-backdrop"
+              onclick={() => (showMoreMenu = false)}
+              role="presentation"
+            ></div>
             <div class="more-menu">
               {#if auth.isLoggedIn}
-                <button class="more-item" onclick={() => { showMoreMenu = false; showOpsPanel = true; }}>
+                <button
+                  class="more-item"
+                  onclick={() => {
+                    showMoreMenu = false;
+                    showOpsPanel = true;
+                  }}
+                >
                   Activity
                 </button>
               {/if}
-              <button class="more-item" onclick={() => { showMoreMenu = false; shareBoardUri(); }}>
+              <button
+                class="more-item"
+                onclick={() => {
+                  showMoreMenu = false;
+                  shareBoardUri();
+                }}
+              >
                 {shareCopied ? "Copied!" : "Share"}
               </button>
               {#if isBoardOwner}
-                <button class="more-item" onclick={() => { showMoreMenu = false; showPermissions = true; }}>
+                <button
+                  class="more-item"
+                  onclick={() => {
+                    showMoreMenu = false;
+                    showPermissions = true;
+                  }}
+                >
                   Access
                 </button>
-                <button class="more-item" onclick={() => { showMoreMenu = false; showSettings = true; }}>
+                <button
+                  class="more-item"
+                  onclick={() => {
+                    showMoreMenu = false;
+                    showSettings = true;
+                  }}
+                >
                   Settings
                 </button>
-                <button class="more-item more-item-danger" onclick={() => { showMoreMenu = false; deleteBoard(); }}>
+                <button
+                  class="more-item more-item-danger"
+                  onclick={() => {
+                    showMoreMenu = false;
+                    deleteBoard();
+                  }}
+                >
                   Delete
                 </button>
               {/if}
@@ -1020,8 +1169,15 @@
 
     {#if hasApprovalSyncErrors && isBoardOwner}
       <div class="reauth-banner">
-        Approval sync failed. You may need to sign out and re-login to grant updated permissions.
-        <button class="reauth-btn" onclick={async () => { await logout(); goto("/"); }}>
+        Approval sync failed. You may need to sign out and re-login to grant
+        updated permissions.
+        <button
+          class="reauth-btn"
+          onclick={async () => {
+            await logout();
+            goto("/");
+          }}
+        >
           Sign out
         </button>
       </div>
@@ -1029,8 +1185,15 @@
 
     {#if hasReactionSyncErrors && auth.isLoggedIn}
       <div class="reauth-banner">
-        Reaction sync failed. You may need to sign out and re-login to grant updated permissions.
-        <button class="reauth-btn" onclick={async () => { await logout(); goto("/"); }}>
+        Reaction sync failed. You may need to sign out and re-login to grant
+        updated permissions.
+        <button
+          class="reauth-btn"
+          onclick={async () => {
+            await logout();
+            goto("/");
+          }}
+        >
           Sign out
         </button>
       </div>
@@ -1060,12 +1223,17 @@
           onedit={openTaskEditor}
           onreact={handleReact}
           readonly={!auth.isLoggedIn}
-          selectedTaskIndex={getSelectedPos()?.col === colIdx ? getSelectedPos()?.row ?? null : null}
-          editingTaskIndex={inlineEditPos?.col === colIdx ? inlineEditPos.row : null}
+          selectedTaskIndex={getSelectedPos()?.col === colIdx
+            ? (getSelectedPos()?.row ?? null)
+            : null}
+          editingTaskIndex={inlineEditPos?.col === colIdx
+            ? inlineEditPos.row
+            : null}
           onsavetitle={handleSaveTitle}
           onpastelines={handlePasteLines}
           onaddtask={() => addNewCard(colIdx)}
-          onhover={(taskIndex) => setSelectedPos({ col: colIdx, row: taskIndex })}
+          onhover={(taskIndex) =>
+            setSelectedPos({ col: colIdx, row: taskIndex })}
           ondiscarderrors={handleDiscardErrors}
         />
       {/each}
@@ -1098,7 +1266,6 @@
     />
   {/if}
 
-
   {#if showOpsPanel}
     <OpsPanel
       ops={allOps.current ?? []}
@@ -1112,7 +1279,7 @@
       labels={board.current.labels ?? []}
       bind:titleFilter={filterTitle}
       bind:selectedLabelIds={filterLabelIds}
-      bind:viewName={viewName}
+      bind:viewName
       {editingViewId}
       onsave={handleSaveView}
       ondelete={editingViewId ? handleDeleteView : null}
@@ -1126,7 +1293,10 @@
       activeLabelIds={quickLabelTask.effectiveLabelIds}
       anchorRect={quickLabelAnchorRect}
       ontogglelabel={handleQuickLabelToggle}
-      onclose={() => { showQuickLabel = false; quickLabelAnchorRect = null; }}
+      onclose={() => {
+        showQuickLabel = false;
+        quickLabelAnchorRect = null;
+      }}
     />
   {/if}
 
@@ -1136,7 +1306,10 @@
       currentColumnId={quickMoveTask.effectiveColumnId}
       anchorRect={quickMoveAnchorRect}
       onmove={handleQuickMove}
-      onclose={() => { showQuickMove = false; quickMoveAnchorRect = null; }}
+      onclose={() => {
+        showQuickMove = false;
+        quickMoveAnchorRect = null;
+      }}
     />
   {/if}
 

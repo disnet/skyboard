@@ -14,6 +14,7 @@ sb cols --json
 ```
 
 Options:
+
 - `--board <ref>` — override default board
 
 Always use `--json`. Returns an array with: `index`, `id`, `name`, `taskCount`.

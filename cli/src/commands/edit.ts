@@ -2,14 +2,26 @@ import { requireAgent } from "../lib/auth.js";
 import { fetchBoardData } from "../lib/pds.js";
 import { getDefaultBoard } from "../lib/config.js";
 import { resolveCardRef } from "../lib/card-ref.js";
-import { generateTID, buildAtUri, TASK_COLLECTION, OP_COLLECTION, BOARD_COLLECTION } from "../lib/tid.js";
+import {
+  generateTID,
+  buildAtUri,
+  TASK_COLLECTION,
+  OP_COLLECTION,
+  BOARD_COLLECTION,
+} from "../lib/tid.js";
 import { shortRkey } from "../lib/display.js";
 import type { OpFields } from "../lib/types.js";
 import chalk from "chalk";
 
 export async function editCommand(
   cardRef: string,
-  opts: { title?: string; description?: string; label?: string[]; board?: string; json?: boolean },
+  opts: {
+    title?: string;
+    description?: string;
+    label?: string[];
+    board?: string;
+    json?: boolean;
+  },
 ): Promise<void> {
   const { agent, did } = await requireAgent();
 
@@ -42,7 +54,9 @@ export async function editCommand(
       if (label) {
         labelIds.push(label.id);
       } else {
-        console.error(chalk.yellow(`Warning: label "${name}" not found, skipping.`));
+        console.error(
+          chalk.yellow(`Warning: label "${name}" not found, skipping.`),
+        );
       }
     }
     if (labelIds.length > 0) fields.labelIds = labelIds;
@@ -75,14 +89,20 @@ export async function editCommand(
     console.log(JSON.stringify({ rkey: task.rkey, fields }));
   } else {
     const changes = Object.keys(fields).join(", ");
-    console.log(chalk.green(`Edited ${shortRkey(task.rkey)} "${task.effectiveTitle}" (${changes})`));
+    console.log(
+      chalk.green(
+        `Edited ${shortRkey(task.rkey)} "${task.effectiveTitle}" (${changes})`,
+      ),
+    );
   }
 }
 
 function resolveBoard(boardOpt?: string): { did: string; rkey: string } {
   const defaultBoard = getDefaultBoard();
   if (!defaultBoard) {
-    console.error(chalk.red("No default board set. Run `sb use <board>` first."));
+    console.error(
+      chalk.red("No default board set. Run `sb use <board>` first."),
+    );
     process.exit(1);
   }
   return defaultBoard;

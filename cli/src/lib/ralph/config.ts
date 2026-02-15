@@ -36,7 +36,10 @@ export function loadRalphConfig(cwd = process.cwd()): RalphConfig | null {
   }
 }
 
-export function saveRalphConfig(config: RalphConfig, cwd = process.cwd()): void {
+export function saveRalphConfig(
+  config: RalphConfig,
+  cwd = process.cwd(),
+): void {
   const configDir = join(cwd, CONFIG_DIR);
   mkdirSync(configDir, { recursive: true });
   const configPath = join(configDir, CONFIG_FILENAME);

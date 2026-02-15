@@ -1,4 +1,12 @@
-import type { Board, Task, Op, Trust, Comment, Column, MaterializedTask } from "../lib/types.js";
+import type {
+  Board,
+  Task,
+  Op,
+  Trust,
+  Comment,
+  Column,
+  MaterializedTask,
+} from "../lib/types.js";
 
 // Fake DIDs
 export const OWNER_DID = "did:plc:owner111111111111";

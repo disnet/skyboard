@@ -29,12 +29,18 @@
   const markedInstance = new Marked(mentionExtension(), {
     renderer: {
       checkbox({ checked }: { checked: boolean }) {
-        return `<input ${checked ? 'checked="" ' : ''}type="checkbox"> `;
+        return `<input ${checked ? 'checked="" ' : ""}type="checkbox"> `;
       },
     },
   });
 
-  const EMOJI_OPTIONS = ["\u{1F44D}", "\u{1F44E}", "\u{2764}\u{FE0F}", "\u{1F389}", "\u{1F680}"];
+  const EMOJI_OPTIONS = [
+    "\u{1F44D}",
+    "\u{1F44E}",
+    "\u{2764}\u{FE0F}",
+    "\u{1F389}",
+    "\u{1F680}",
+  ];
 
   let {
     task,
@@ -71,9 +77,7 @@
   } = $props();
 
   const activeReactions = $derived(
-    reactions
-      ? [...reactions.entries()].filter(([, v]) => v.count > 0)
-      : [],
+    reactions ? [...reactions.entries()].filter(([, v]) => v.count > 0) : [],
   );
 
   const totalReactionCount = $derived(
@@ -358,7 +362,11 @@
     const board = await db.boards.where("rkey").equals(boardRkey).first();
     if (!board?.id) return;
 
-    const newLabel: Label = { id: generateTID(), name: labelName, color: newLabelColor };
+    const newLabel: Label = {
+      id: generateTID(),
+      name: labelName,
+      color: newLabelColor,
+    };
     const existingLabels = board.labels ?? [];
     await db.boards.update(board.id, {
       labels: [...existingLabels, newLabel],
@@ -391,15 +399,17 @@
         basicSetup,
         markdown({ codeLanguages: languages, base: markdownLanguage }),
         EditorView.lineWrapping,
-        Prec.highest(keymap.of([
-          {
-            key: "Mod-Enter",
-            run: () => {
-              closeModal();
-              return true;
+        Prec.highest(
+          keymap.of([
+            {
+              key: "Mod-Enter",
+              run: () => {
+                closeModal();
+                return true;
+              },
             },
-          },
-        ])),
+          ]),
+        ),
         placeholder("Write a description… Type @ to mention, / for commands"),
         autocompletion({ override: [mentionCompletionSource] }),
         markdownLivePreview,
@@ -460,7 +470,10 @@
       fields.description = description;
     const sortedEditLabelIds = [...editLabelIds].sort();
     const sortedEffectiveLabelIds = [...task.effectiveLabelIds].sort();
-    if (JSON.stringify(sortedEditLabelIds) !== JSON.stringify(sortedEffectiveLabelIds))
+    if (
+      JSON.stringify(sortedEditLabelIds) !==
+      JSON.stringify(sortedEffectiveLabelIds)
+    )
       fields.labelIds = [...editLabelIds];
     if (Object.keys(fields).length > 0) {
       await createOp(currentUserDid, task.sourceTask, task.boardUri, fields);
@@ -499,9 +512,9 @@
   function getFocusableElements(): HTMLElement[] {
     if (!modalEl) return [];
     const els = modalEl.querySelectorAll<HTMLElement>(
-      'input:not([disabled]):not([tabindex="-1"]), textarea:not([disabled]):not([tabindex="-1"]), button:not([disabled]):not([tabindex="-1"]), select:not([disabled]):not([tabindex="-1"]), [contenteditable="true"], [tabindex]:not([tabindex="-1"]):not([disabled])'
+      'input:not([disabled]):not([tabindex="-1"]), textarea:not([disabled]):not([tabindex="-1"]), button:not([disabled]):not([tabindex="-1"]), select:not([disabled]):not([tabindex="-1"]), [contenteditable="true"], [tabindex]:not([tabindex="-1"]):not([disabled])',
     );
-    return Array.from(els).filter(el => el.offsetParent !== null);
+    return Array.from(els).filter((el) => el.offsetParent !== null);
   }
 
   let mouseDownOnBackdrop = false;
@@ -522,12 +535,18 @@
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
       if (e.shiftKey) {
-        if (document.activeElement === first || !modalEl?.contains(document.activeElement)) {
+        if (
+          document.activeElement === first ||
+          !modalEl?.contains(document.activeElement)
+        ) {
           e.preventDefault();
           last.focus();
         }
       } else {
-        if (document.activeElement === last || !modalEl?.contains(document.activeElement)) {
+        if (
+          document.activeElement === last ||
+          !modalEl?.contains(document.activeElement)
+        ) {
           e.preventDefault();
           first.focus();
         }
@@ -538,7 +557,13 @@
       handleMoveKeydown(e);
       return;
     }
-    if (e.key === "m" && !readonly && onmove && moveStatus !== "denied" && columns.length > 0) {
+    if (
+      e.key === "m" &&
+      !readonly &&
+      onmove &&
+      moveStatus !== "denied" &&
+      columns.length > 0
+    ) {
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
       if ((e.target as HTMLElement)?.isContentEditable) return;
@@ -560,7 +585,11 @@
 <svelte:window onkeydown={handleKeydown} />
 
 <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
-<div class="modal-backdrop" onmousedown={handleBackdropMouseDown} onclick={handleBackdropClick}>
+<div
+  class="modal-backdrop"
+  onmousedown={handleBackdropMouseDown}
+  onclick={handleBackdropClick}
+>
   <div
     class="modal"
     role="dialog"
@@ -592,7 +621,9 @@
             bind:this={reactionTriggerEl}
             onmouseenter={handleTriggerEnter}
             onmouseleave={handleTriggerLeave}
-            title="{totalReactionCount} reaction{totalReactionCount === 1 ? '' : 's'}"
+            title="{totalReactionCount} reaction{totalReactionCount === 1
+              ? ''
+              : 's'}"
             tabindex="-1"
           >
             {#if topEmoji}
@@ -602,7 +633,9 @@
             {/if}
           </button>
         {/if}
-        <button class="close-btn" onclick={closeModal} tabindex="-1">&times;</button>
+        <button class="close-btn" onclick={closeModal} tabindex="-1"
+          >&times;</button
+        >
       </div>
     </div>
 
@@ -634,9 +667,9 @@
       {:else}
         <div class="field">
           {#if editStatus === "denied"}
-          <div class="field-header">
+            <div class="field-header">
               <span class="field-status denied">Trusted users only</span>
-          </div>
+            </div>
           {/if}
           <div class="editor-area">
             {#if editStatus !== "denied"}
@@ -667,25 +700,20 @@
                 onclick={() => toggleLabel(lbl.id)}
                 disabled={editStatus === "denied"}
               >
-                <span
-                  class="label-dot"
-                  style="background: {lbl.color};"
-                ></span>
+                <span class="label-dot" style="background: {lbl.color};"></span>
                 {lbl.name}
               </button>
             {/each}
             {#if isBoardOwner && editStatus !== "denied" && !showAddLabel}
               <button
                 class="label-toggle add-new-label"
-                onclick={() => (showAddLabel = true)}
-              >+</button>
+                onclick={() => (showAddLabel = true)}>+</button
+              >
             {/if}
           </div>
           {#if showAddLabel && isBoardOwner}
             <div class="add-label-form">
-              <span
-                class="add-label-dot"
-                style="background: {newLabelColor};"
+              <span class="add-label-dot" style="background: {newLabelColor};"
               ></span>
               <input
                 class="add-label-input"
@@ -712,12 +740,15 @@
               <button
                 class="add-label-confirm"
                 onclick={addBoardLabel}
-                disabled={!newLabelName.trim()}
-              >Add</button>
+                disabled={!newLabelName.trim()}>Add</button
+              >
               <button
                 class="add-label-cancel"
-                onclick={() => { showAddLabel = false; newLabelName = ""; }}
-              >&times;</button>
+                onclick={() => {
+                  showAddLabel = false;
+                  newLabelName = "";
+                }}>&times;</button
+              >
             </div>
           {/if}
         </div>
@@ -763,7 +794,9 @@
                       did={comment.did}
                       isCurrentUser={comment.did === currentUserDid}
                     />
-                    <span class="comment-time" title={new Date(comment.createdAt).toLocaleString()}
+                    <span
+                      class="comment-time"
+                      title={new Date(comment.createdAt).toLocaleString()}
                       >{relativeTime(comment.createdAt)}</span
                     >
                     {#if comment.syncStatus === "pending"}
@@ -783,7 +816,11 @@
                       >
                     {/if}
                   </div>
-                  <div class="comment-text rendered-description">{@html DOMPurify.sanitize(markedInstance.parse(comment.text) as string)}</div>
+                  <div class="comment-text rendered-description">
+                    {@html DOMPurify.sanitize(
+                      markedInstance.parse(comment.text) as string,
+                    )}
+                  </div>
                 </div>
               {/each}
             </div>
@@ -801,7 +838,13 @@
             class:todo-done={todoStats.checked === todoStats.total}
             title="{todoStats.checked} of {todoStats.total} completed"
           >
-            <svg class="todo-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+            <svg
+              class="todo-icon"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+            >
               <rect x="1.5" y="1.5" width="13" height="13" rx="2" />
               <path d="M4.5 8.5l2.5 2.5 4.5-5" />
             </svg>
@@ -817,7 +860,10 @@
       <div class="footer-right">
         {#if !readonly && onmove && moveStatus !== "denied" && columns.length > 0}
           <div class="move-wrapper">
-            <button class="move-btn" onclick={() => (showMoveMenu = !showMoveMenu)}>
+            <button
+              class="move-btn"
+              onclick={() => (showMoveMenu = !showMoveMenu)}
+            >
               Move
             </button>
             {#if showMoveMenu}
@@ -1065,7 +1111,6 @@
     overflow: hidden;
     min-height: 150px;
   }
-
 
   .modal-footer {
     display: flex;

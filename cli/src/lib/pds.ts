@@ -2,15 +2,9 @@
 // PDS only for listing the user's own boards.
 
 import type { Agent } from "@atproto/api";
-import {
-  BOARD_COLLECTION,
-  buildAtUri,
-} from "./tid.js";
+import { BOARD_COLLECTION, buildAtUri } from "./tid.js";
 import type { Board, Task, Op, OpFields, Trust, Comment } from "./types.js";
-import {
-  safeParse,
-  BoardRecordSchema,
-} from "./schemas.js";
+import { safeParse, BoardRecordSchema } from "./schemas.js";
 import { materializeTasks } from "./materialize.js";
 import type { MaterializedTask } from "./types.js";
 
@@ -107,7 +101,10 @@ function inferOpenFromRecord(
 /**
  * Fetch all boards from the authenticated user's PDS (using Agent).
  */
-export async function fetchMyBoards(agent: Agent, did: string): Promise<Board[]> {
+export async function fetchMyBoards(
+  agent: Agent,
+  did: string,
+): Promise<Board[]> {
   const boards: Board[] = [];
   let cursor: string | undefined;
 
@@ -271,7 +268,7 @@ export async function resolveHandle(handle: string): Promise<string | null> {
       `https://bsky.social/xrpc/com.atproto.identity.resolveHandle?${params.toString()}`,
     );
     if (res.ok) {
-      const data = await res.json() as { did: string };
+      const data = (await res.json()) as { did: string };
       return data.did;
     }
   } catch {

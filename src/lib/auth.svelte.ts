@@ -19,7 +19,9 @@ let oauthClient: BrowserOAuthClient | null = null;
  * Resolve an AT Protocol handle to a DID via the .well-known/atproto-did endpoint.
  * This is the standard resolution path that works for any PDS, not just Bluesky.
  */
-async function resolveHandleViaWellKnown(handle: string): Promise<string | null> {
+async function resolveHandleViaWellKnown(
+  handle: string,
+): Promise<string | null> {
   try {
     const res = await fetch(`https://${handle}/.well-known/atproto-did`);
     if (!res.ok) return null;

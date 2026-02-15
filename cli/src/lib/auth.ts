@@ -1,6 +1,9 @@
 import { Agent } from "@atproto/api";
 import { NodeOAuthClient } from "@atproto/oauth-client-node";
-import type { NodeSavedSession, NodeSavedState } from "@atproto/oauth-client-node";
+import type {
+  NodeSavedSession,
+  NodeSavedState,
+} from "@atproto/oauth-client-node";
 import { requestLocalLock } from "@atproto/oauth-client";
 import { createServer } from "node:http";
 import {
@@ -87,7 +90,9 @@ async function findFreePort(): Promise<number> {
  * starts a local HTTP server for the callback.
  * Returns the DID and handle of the authenticated user.
  */
-export async function login(handle: string): Promise<{ did: string; handle: string }> {
+export async function login(
+  handle: string,
+): Promise<{ did: string; handle: string }> {
   const port = await findFreePort();
   const client = createOAuthClient(port);
 
@@ -133,7 +138,9 @@ export async function login(handle: string): Promise<{ did: string; handle: stri
               | Array<{ id: string; type: string; serviceEndpoint: string }>
               | undefined;
             const pds = services?.find(
-              (s) => s.id === "#atproto_pds" || s.type === "AtprotoPersonalDataServer",
+              (s) =>
+                s.id === "#atproto_pds" ||
+                s.type === "AtprotoPersonalDataServer",
             );
             if (pds?.serviceEndpoint) {
               service = pds.serviceEndpoint;
@@ -176,9 +183,13 @@ export async function login(handle: string): Promise<{ did: string; handle: stri
         const open = (await import("open")).default;
         await open(authUrl.toString());
         console.log(`\nOpened browser for login. Waiting for authorization...`);
-        console.log(`If the browser didn't open, visit:\n${authUrl.toString()}\n`);
+        console.log(
+          `If the browser didn't open, visit:\n${authUrl.toString()}\n`,
+        );
       } catch {
-        console.log(`\nOpen this URL in your browser to log in:\n${authUrl.toString()}\n`);
+        console.log(
+          `\nOpen this URL in your browser to log in:\n${authUrl.toString()}\n`,
+        );
       }
     });
   });
@@ -188,7 +199,11 @@ export async function login(handle: string): Promise<{ did: string; handle: stri
  * Get an authenticated Agent for the currently logged-in user.
  * Restores the OAuth session and returns an Agent that auto-refreshes tokens.
  */
-export async function getAgent(): Promise<{ agent: Agent; did: string; handle: string } | null> {
+export async function getAgent(): Promise<{
+  agent: Agent;
+  did: string;
+  handle: string;
+} | null> {
   const authInfo = loadAuthInfo();
   if (!authInfo) return null;
 
@@ -208,7 +223,11 @@ export async function getAgent(): Promise<{ agent: Agent; did: string; handle: s
 /**
  * Require authentication — exit with error if not logged in.
  */
-export async function requireAgent(): Promise<{ agent: Agent; did: string; handle: string }> {
+export async function requireAgent(): Promise<{
+  agent: Agent;
+  did: string;
+  handle: string;
+}> {
   const result = await getAgent();
   if (!result) {
     console.error("Not logged in. Run `sb login <handle>` first.");

@@ -1,4 +1,10 @@
-import { mkdirSync, readFileSync, writeFileSync, existsSync, unlinkSync } from "node:fs";
+import {
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+  existsSync,
+  unlinkSync,
+} from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 
@@ -67,7 +73,11 @@ export function saveConfig(config: Config): void {
 export function setDefaultBoard(board: BoardRef): void {
   const config = loadConfig();
   config.defaultBoard = board;
-  if (!config.knownBoards.some((b) => b.did === board.did && b.rkey === board.rkey)) {
+  if (
+    !config.knownBoards.some(
+      (b) => b.did === board.did && b.rkey === board.rkey,
+    )
+  ) {
     config.knownBoards.push(board);
   }
   saveConfig(config);
@@ -85,7 +95,11 @@ export function clearDefaultBoard(): void {
 
 export function addKnownBoard(board: BoardRef): void {
   const config = loadConfig();
-  if (!config.knownBoards.some((b) => b.did === board.did && b.rkey === board.rkey)) {
+  if (
+    !config.knownBoards.some(
+      (b) => b.did === board.did && b.rkey === board.rkey,
+    )
+  ) {
     config.knownBoards.push(board);
   }
   saveConfig(config);

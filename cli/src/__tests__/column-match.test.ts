@@ -45,7 +45,9 @@ describe("resolveColumn", () => {
   });
 
   it("throws on no match with available columns", () => {
-    expect(() => resolveColumn("Nonexistent", COLUMNS)).toThrow("No column matching");
+    expect(() => resolveColumn("Nonexistent", COLUMNS)).toThrow(
+      "No column matching",
+    );
     expect(() => resolveColumn("Nonexistent", COLUMNS)).toThrow("To Do");
   });
 

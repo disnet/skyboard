@@ -73,7 +73,11 @@
 <svelte:window onkeydown={handleKeydown} />
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="picker-backdrop" onmousedown={handleBackdropMouseDown} onclick={handleBackdropClick}>
+<div
+  class="picker-backdrop"
+  onmousedown={handleBackdropMouseDown}
+  onclick={handleBackdropClick}
+>
   <div
     class="picker"
     role="listbox"
@@ -85,7 +89,10 @@
       <button
         class="col-option"
         class:current={col.id === currentColumnId}
-        onclick={() => { onmove(col.id); onclose(); }}
+        onclick={() => {
+          onmove(col.id);
+          onclose();
+        }}
         role="option"
         aria-selected={col.id === currentColumnId}
       >
