@@ -191,6 +191,29 @@ export function ralphCommand(program: Command): void {
           `${chalk.dim("Board:")} ${boardName ?? `${boardRef.did}/${boardRef.rkey}`}`,
         );
 
+        // Warn if the board is open
+        const selectedBoard = await fetchBoardFromAppview(
+          boardRef.did,
+          boardRef.rkey,
+        );
+        if (selectedBoard?.open) {
+          console.log(
+            chalk.yellow(
+              "\n⚠ Warning: This board is open. Ralph mode should only be used on closed boards",
+            ),
+          );
+          console.log(
+            chalk.yellow(
+              "  to prevent prompt injection from untrusted card content.",
+            ),
+          );
+          console.log(
+            chalk.yellow(
+              "  Close the board before running `sb ralph start`.\n",
+            ),
+          );
+        }
+
         // --- Step 2: Workflow selection ---
         let workflow: WorkflowType;
         let customColumns: string[] | undefined;
@@ -349,6 +372,36 @@ export function ralphCommand(program: Command): void {
       }
 
       await requireAgent();
+
+      // Check if the board is open — refuse to run on open boards due to prompt injection risk
+      const board = await fetchBoardFromAppview(
+        config.board.did,
+        config.board.rkey,
+      );
+      if (!board) {
+        console.error(
+          chalk.red(
+            `Board not found: ${config.board.did}/${config.board.rkey}`,
+          ),
+        );
+        process.exit(1);
+      }
+      if (board.open) {
+        console.error(
+          chalk.red("\nError: Ralph mode cannot run on open boards.\n"),
+        );
+        console.error(
+          "Open boards allow anyone to create cards and comments. An attacker could",
+        );
+        console.error(
+          "craft cards with prompt injection content that tricks the agent into",
+        );
+        console.error("executing arbitrary commands.\n");
+        console.error(
+          "Close the board first (via board settings) then run `sb ralph start` again.",
+        );
+        process.exit(1);
+      }
 
       const protocolPath = resolve(cwd, config.protocolFile);
       if (!existsSync(protocolPath)) {
