@@ -19,3 +19,11 @@ jobs:
       - run: npm run format:check
       - run: npm run check
       - run: npm run build
+
+      - name: Install CLI dependencies
+        run: npm ci
+        working-directory: cli
+
+      - name: Run CLI tests
+        run: npm test
+        working-directory: cli
