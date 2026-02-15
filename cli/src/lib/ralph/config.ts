@@ -22,7 +22,15 @@ export function loadRalphConfig(cwd = process.cwd()): RalphConfig | null {
   const configPath = join(cwd, CONFIG_DIR, CONFIG_FILENAME);
   if (!existsSync(configPath)) return null;
   try {
-    return JSON.parse(readFileSync(configPath, "utf-8")) as RalphConfig;
+    const config = JSON.parse(readFileSync(configPath, "utf-8")) as RalphConfig;
+    // Apply defaults for fields added after initial release
+    if (!config.workflow) {
+      config.workflow = "standard";
+    }
+    if (!config.branching) {
+      config.branching = "per-card";
+    }
+    return config;
   } catch {
     return null;
   }
