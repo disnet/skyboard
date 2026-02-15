@@ -444,11 +444,20 @@
     <AuthorBadge did={task.ownerDid} isCurrentUser={isOwned} />
     {#if task.effectiveAssigneeDid}
       <span class="assignee-badge" title="Assigned">
-        <svg class="assignee-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <svg
+          class="assignee-icon"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+        >
           <circle cx="8" cy="5" r="3" />
           <path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6" />
         </svg>
-        <AuthorBadge did={task.effectiveAssigneeDid} isCurrentUser={task.effectiveAssigneeDid === currentUserDid} />
+        <AuthorBadge
+          did={task.effectiveAssigneeDid}
+          isCurrentUser={task.effectiveAssigneeDid === currentUserDid}
+        />
       </span>
     {/if}
     {#if commentCount > 0}
