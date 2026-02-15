@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 import { loginCommand } from "./commands/login.js";
 import { logoutCommand } from "./commands/logout.js";
@@ -21,7 +24,14 @@ const program = new Command();
 program
   .name("sb")
   .description("Skyboard CLI — manage kanban boards on AT Protocol")
-  .version("0.1.0");
+  .version(
+    JSON.parse(
+      readFileSync(
+        join(dirname(fileURLToPath(import.meta.url)), "..", "package.json"),
+        "utf-8",
+      ),
+    ).version,
+  );
 
 // Auth commands
 program
