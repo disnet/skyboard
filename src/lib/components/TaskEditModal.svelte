@@ -429,10 +429,9 @@
         EditorView.theme({
           "&": {
             fontSize: "0.875rem",
-            maxHeight: "50vh",
           },
           ".cm-scroller": {
-            overflow: "auto",
+            overflow: "visible",
             fontFamily: "inherit",
           },
           ".cm-content": {
