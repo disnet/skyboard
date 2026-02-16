@@ -176,6 +176,13 @@ function buildDecorations(view: EditorView): DecorationSet {
             return false;
           }
 
+          case "FencedCode": {
+            decs.push(
+              Decoration.mark({ class: "cm-md-fenced-code" }).range(from, to),
+            );
+            break;
+          }
+
           case "Link": {
             const linkMarks = nodeRef.node.getChildren("LinkMark");
             const urls = nodeRef.node.getChildren("URL");
@@ -246,6 +253,10 @@ const theme = EditorView.baseTheme({
     color: "var(--color-primary, #3b82f6)",
     textDecoration: "underline",
   },
+  ".cm-md-fenced-code": {
+    backgroundColor: "rgba(128, 128, 128, 0.08)",
+    borderRadius: "4px",
+  },
   ".cm-task-checkbox": {
     cursor: "pointer",
     margin: "0 2px 0 0",
@@ -255,12 +266,30 @@ const theme = EditorView.baseTheme({
   },
 });
 
-const linkHighlight = HighlightStyle.define([
+const codeHighlight = HighlightStyle.define([
   { tag: [tags.link, tags.url], color: "var(--color-primary, #3b82f6)" },
+  { tag: tags.keyword, color: "#8b5cf6" },
+  { tag: tags.string, color: "#16a34a" },
+  { tag: tags.comment, color: "#6b7280", fontStyle: "italic" },
+  { tag: tags.number, color: "#d97706" },
+  { tag: tags.bool, color: "#d97706" },
+  { tag: tags.null, color: "#d97706" },
+  { tag: tags.function(tags.variableName), color: "#2563eb" },
+  { tag: tags.typeName, color: "#0d9488" },
+  { tag: tags.className, color: "#0d9488" },
+  { tag: tags.operator, color: "#dc2626" },
+  { tag: tags.propertyName, color: "#2563eb" },
+  { tag: tags.definition(tags.variableName), color: "#2563eb" },
+  { tag: tags.angleBracket, color: "#6b7280" },
+  { tag: tags.tagName, color: "#dc2626" },
+  { tag: tags.attributeName, color: "#d97706" },
+  { tag: tags.attributeValue, color: "#16a34a" },
+  { tag: tags.regexp, color: "#d97706" },
+  { tag: tags.self, color: "#8b5cf6" },
 ]);
 
 export const markdownLivePreview = [
   plugin,
   theme,
-  syntaxHighlighting(linkHighlight),
+  syntaxHighlighting(codeHighlight),
 ];
