@@ -32,6 +32,8 @@
     getSelectedPos,
     setSelectedPos,
     clearSelection,
+    suppressHover,
+    shouldHandleHover,
   } from "$lib/board-nav.svelte.js";
   import BoardSettingsModal from "$lib/components/BoardSettingsModal.svelte";
   import PermissionsModal from "$lib/components/PermissionsModal.svelte";
@@ -428,6 +430,7 @@
             const newPos = generateKeyBetween(before, after);
             createOp(auth.did, task.sourceTask, boardUri, { position: newPos });
             setSelectedPos({ col: pos.col, row: pos.row - 1 });
+            suppressHover();
           }
         } else {
           setSelectedPos({ col: pos.col, row: Math.max(0, pos.row - 1) });
@@ -449,6 +452,7 @@
             const newPos = generateKeyBetween(before, after);
             createOp(auth.did, task.sourceTask, boardUri, { position: newPos });
             setSelectedPos({ col: pos.col, row: pos.row + 1 });
+            suppressHover();
           }
         } else {
           const maxRow = Math.max(
@@ -1232,8 +1236,11 @@
           onsavetitle={handleSaveTitle}
           onpastelines={handlePasteLines}
           onaddtask={() => addNewCard(colIdx)}
-          onhover={(taskIndex) =>
-            setSelectedPos({ col: colIdx, row: taskIndex })}
+          onhover={(taskIndex) => {
+            if (shouldHandleHover()) {
+              setSelectedPos({ col: colIdx, row: taskIndex });
+            }
+          }}
           ondiscarderrors={handleDiscardErrors}
         />
       {/each}
