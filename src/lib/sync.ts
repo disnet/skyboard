@@ -54,7 +54,9 @@ function taskToRecord(task: Task): TaskRecord {
     ...(task.labelIds && task.labelIds.length > 0
       ? { labelIds: task.labelIds }
       : {}),
-    ...(task.assigneeDid ? { assigneeDid: task.assigneeDid } : {}),
+    ...(task.assigneeDids && task.assigneeDids.length > 0
+      ? { assigneeDids: task.assigneeDids }
+      : {}),
     order: task.order ?? 0,
     createdAt: task.createdAt,
     ...(task.updatedAt ? { updatedAt: task.updatedAt } : {}),

@@ -19,7 +19,7 @@ interface OpFields {
   columnId?: string;
   position?: string;
   labelIds?: string[];
-  assigneeDid?: string;
+  assigneeDids?: string[];
   order?: number;
 }
 
@@ -29,7 +29,7 @@ const MUTABLE_FIELDS: (keyof OpFields)[] = [
   "columnId",
   "position",
   "labelIds",
-  "assigneeDid",
+  "assigneeDids",
 ];
 
 function orderToPosition(order: number | undefined): string {
@@ -60,7 +60,7 @@ interface MaterializedTask {
   effectiveColumnId: string;
   effectivePosition: string;
   effectiveLabelIds: string[];
-  effectiveAssigneeDid: string | undefined;
+  effectiveAssigneeDids: string[];
   createdAt: string;
   lastModifiedBy: string;
   lastModifiedAt: string;
@@ -99,7 +99,10 @@ function materializeTasks(
     > = {};
     for (const field of MUTABLE_FIELDS) {
       let value: unknown = task[field as keyof TaskRow];
-      if (field === "labelIds" && typeof value === "string") {
+      if (
+        (field === "labelIds" || field === "assigneeDids") &&
+        typeof value === "string"
+      ) {
         value = JSON.parse(value);
       }
       if (field === "position" && !value) {
@@ -154,7 +157,8 @@ function materializeTasks(
       effectivePosition: fieldStates.position.value as string,
       effectiveLabelIds:
         (fieldStates.labelIds.value as string[] | undefined) ?? [],
-      effectiveAssigneeDid: fieldStates.assigneeDid.value as string | undefined,
+      effectiveAssigneeDids:
+        (fieldStates.assigneeDids.value as string[] | undefined) ?? [],
       createdAt: task.createdAt,
       lastModifiedBy,
       lastModifiedAt,
@@ -185,7 +189,7 @@ export interface BoardResponse {
     boardUri: string;
     position: string | null;
     labelIds: string[] | null;
-    assigneeDid: string | null;
+    assigneeDids: string[] | null;
     order: number | null;
     createdAt: string;
     updatedAt: string | null;
@@ -272,7 +276,7 @@ export function getBoardData(did: string, rkey: string): BoardResponse | null {
       boardUri: t.boardUri,
       position: t.position,
       labelIds: t.labelIds ? JSON.parse(t.labelIds) : null,
-      assigneeDid: t.assigneeDid,
+      assigneeDids: t.assigneeDids ? JSON.parse(t.assigneeDids) : null,
       order: t.order,
       createdAt: t.createdAt,
       updatedAt: t.updatedAt,

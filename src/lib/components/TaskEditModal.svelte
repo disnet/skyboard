@@ -334,7 +334,17 @@
   let editTitle = $state(task.effectiveTitle);
   let editDescription = $state(task.effectiveDescription ?? "");
   let editLabelIds = $state<string[]>([...task.effectiveLabelIds]);
-  let editAssigneeDid = $state<string>(task.effectiveAssigneeDid ?? "");
+  let editAssigneeDids = $state<string[]>([
+    ...(task.effectiveAssigneeDids ?? []),
+  ]);
+
+  function toggleAssignee(did: string) {
+    if (editAssigneeDids.includes(did)) {
+      editAssigneeDids = editAssigneeDids.filter((d) => d !== did);
+    } else {
+      editAssigneeDids = [...editAssigneeDids, did];
+    }
+  }
 
   function toggleLabel(id: string) {
     if (editLabelIds.includes(id)) {
@@ -545,9 +555,15 @@
       JSON.stringify(sortedEffectiveLabelIds)
     )
       fields.labelIds = [...editLabelIds];
-    const effectiveAssignee = task.effectiveAssigneeDid ?? "";
-    if (editAssigneeDid !== effectiveAssignee)
-      fields.assigneeDid = editAssigneeDid || undefined;
+    const sortedEditAssigneeDids = [...editAssigneeDids].sort();
+    const sortedEffectiveAssigneeDids = [
+      ...(task.effectiveAssigneeDids ?? []),
+    ].sort();
+    if (
+      JSON.stringify(sortedEditAssigneeDids) !==
+      JSON.stringify(sortedEffectiveAssigneeDids)
+    )
+      fields.assigneeDids = [...editAssigneeDids];
     if (Object.keys(fields).length > 0) {
       await createOp(currentUserDid, task.sourceTask, task.boardUri, fields);
     }
@@ -831,31 +847,34 @@
         <div class="assignee-section">
           <div class="assignee-header">
             <!-- svelte-ignore a11y_label_has_associated_control -->
-            <label>Assignee</label>
+            <label>Assignees</label>
             {#if editStatus === "denied"}
               <span class="field-status denied">Trusted users only</span>
             {/if}
           </div>
-          <select
-            class="assignee-select"
-            bind:value={editAssigneeDid}
-            disabled={editStatus === "denied"}
-          >
-            <option value="">Unassigned</option>
+          <div class="assignee-picker" class:disabled={editStatus === "denied"}>
             {#each boardMembers as did (did)}
-              <option value={did}>{memberDisplayName(did)}</option>
+              <button
+                class="assignee-toggle"
+                class:selected={editAssigneeDids.includes(did)}
+                onclick={() => toggleAssignee(did)}
+                disabled={editStatus === "denied"}
+              >
+                <AuthorBadge {did} isCurrentUser={did === currentUserDid} />
+              </button>
             {/each}
-          </select>
+          </div>
         </div>
-      {:else if readonly && task.effectiveAssigneeDid}
+      {:else if readonly && task.effectiveAssigneeDids && task.effectiveAssigneeDids.length > 0}
         <div class="assignee-section">
           <div class="assignee-header">
-            <label>Assignee</label>
+            <label>Assignees</label>
           </div>
-          <AuthorBadge
-            did={task.effectiveAssigneeDid}
-            isCurrentUser={task.effectiveAssigneeDid === currentUserDid}
-          />
+          <div class="assignee-list">
+            {#each task.effectiveAssigneeDids as did (did)}
+              <AuthorBadge {did} isCurrentUser={did === currentUserDid} />
+            {/each}
+          </div>
         </div>
       {/if}
 
@@ -1657,25 +1676,41 @@
     color: var(--color-text-secondary);
   }
 
-  .assignee-select {
-    width: 100%;
-    padding: 0.375rem 0.5rem;
+  .assignee-picker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+  }
+
+  .assignee-picker.disabled {
+    opacity: 0.6;
+    pointer-events: none;
+  }
+
+  .assignee-toggle {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.625rem;
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
-    font-size: 0.8125rem;
     background: var(--color-surface);
-    color: var(--color-text);
     cursor: pointer;
+    transition: all 0.15s;
   }
 
-  .assignee-select:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
-
-  .assignee-select:focus {
-    outline: none;
+  .assignee-toggle:hover:not(:disabled) {
     border-color: var(--color-primary);
+  }
+
+  .assignee-toggle.selected {
+    background: var(--color-primary-alpha, rgba(0, 102, 204, 0.1));
+    border-color: var(--color-primary);
+  }
+
+  .assignee-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
   }
 
   .comments-section {

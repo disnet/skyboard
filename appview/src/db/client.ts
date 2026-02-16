@@ -21,7 +21,7 @@ export function getDb(): Database {
     _db.exec(schema);
 
     // Additive migrations for existing databases
-    const migrations = [`ALTER TABLE tasks ADD COLUMN assigneeDid TEXT`];
+    const migrations = [`ALTER TABLE tasks ADD COLUMN assigneeDids TEXT`];
     for (const sql of migrations) {
       try {
         _db.exec(sql);
@@ -113,7 +113,7 @@ export interface TaskRow {
   boardUri: string;
   position: string | null;
   labelIds: string | null;
-  assigneeDid: string | null;
+  assigneeDids: string | null;
   order: number | null;
   createdAt: string;
   updatedAt: string | null;
@@ -129,7 +129,7 @@ export function upsertTask(
     boardUri: string;
     position?: string;
     labelIds?: string[];
-    assigneeDid?: string;
+    assigneeDids?: string[];
     order?: number;
     createdAt: string;
     updatedAt?: string;
@@ -138,13 +138,13 @@ export function upsertTask(
   const db = getDb();
   const uri = buildAtUri(did, "dev.skyboard.task", rkey);
   db.run(
-    `INSERT INTO tasks (uri, did, rkey, title, description, columnId, boardUri, position, labelIds, assigneeDid, "order", createdAt, updatedAt)
+    `INSERT INTO tasks (uri, did, rkey, title, description, columnId, boardUri, position, labelIds, assigneeDids, "order", createdAt, updatedAt)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(uri) DO UPDATE SET
        title=excluded.title, description=excluded.description,
        columnId=excluded.columnId, boardUri=excluded.boardUri,
        position=excluded.position, labelIds=excluded.labelIds,
-       assigneeDid=excluded.assigneeDid,
+       assigneeDids=excluded.assigneeDids,
        "order"=excluded."order", createdAt=excluded.createdAt,
        updatedAt=excluded.updatedAt`,
     [
@@ -157,7 +157,7 @@ export function upsertTask(
       record.boardUri,
       record.position ?? null,
       record.labelIds ? JSON.stringify(record.labelIds) : null,
-      record.assigneeDid ?? null,
+      record.assigneeDids ? JSON.stringify(record.assigneeDids) : null,
       record.order ?? null,
       record.createdAt,
       record.updatedAt ?? null,
