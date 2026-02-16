@@ -11,7 +11,7 @@ This project uses a Skyboard kanban board to drive an iterative development loop
 ## Columns (workflow stages)
 
 1. **Backlog** — Raw ideas or requests. Not yet scoped.
-2. **Planned** — Scoped and ready to implement. Has clear acceptance criteria.
+2. **Planned** — Scoped and ready to implement. Has clear acceptance criteria. **Human-gated: the agent never picks cards from Planned.** The human reviews the plan and moves approved cards to In Progress (or back to Backlog with comments if changes are needed).
 3. **In Progress** — Actively being worked on.
 4. **In Review** — Implementation complete, needs verification (tests pass, code review). **Human-only stage: the agent never moves cards out of In Review.**
 5. **Done** — Verified and complete. Only the human moves cards here after review.
@@ -31,8 +31,9 @@ Run `sb cards --json` to see the full board state. Identify which cards are in w
 Select exactly one card to work on. You will only work on this single card during this invocation. Use this priority order:
 
 - **In Progress** cards first — continue implementation
-- **Planned** cards — start implementation
 - **Backlog** cards last — scope and plan the work
+
+**Never pick cards from Planned.** Planned is a human gate. The human reviews the agent's plan and moves approved cards to In Progress. The agent only sees In Progress cards once the human has approved them.
 
 **Skip cards with the `blocked` label.** These are waiting on human input. However, if a previously-blocked card has a new comment from the human since it was blocked, the human has likely answered — remove the `blocked` label (`sb edit <ref> -l ""`) and work on it.
 
@@ -45,8 +46,9 @@ Each transition type has a specific definition of done:
 | Transition | What to do | Move when |
 |---|---|---|
 | Backlog → Planned | Read the card. Investigate the codebase to understand the scope. Update the card description (`sb edit <ref> -d "..."`) with a clear summary of the work, implementation approach, and acceptance criteria. Add a comment summarizing your findings. | Scope is clear and actionable |
-| Planned → In Progress | Start coding. Write the implementation. | Meaningful code has been written |
-| In Progress → In Review | Finish the implementation. Run tests. Create a PR with `gh pr create`. | Code is complete, tests pass, and PR is created |
+| In Progress → In Review | Start coding based on the accepted plan. Write the implementation. Run tests. Create a PR with `gh pr create`. | Code is complete, tests pass, and PR is created |
+
+**Note:** There is no Planned → In Progress transition for the agent. The human moves approved cards from Planned to In Progress.
 
 **Never skip columns.** A card must pass through each stage in order.
 
@@ -83,7 +85,7 @@ echo "CONTINUE" > .skyboard-ralph/loop-status
 echo "BLOCKED" > .skyboard-ralph/loop-status
 ```
 
-**If all done** (every card is in In Review or Done and Backlog is empty):
+**If all done** (every card is in Planned, In Review, or Done and Backlog and In Progress are empty):
 
 ```bash
 echo "DONE" > .skyboard-ralph/loop-status
@@ -106,5 +108,6 @@ You MUST write to `.skyboard-ralph/loop-status` before exiting. The outer loop s
 - If a card's description is vague, comment asking for clarification and move on to the next card.
 - **Branching:** Always create or checkout a dedicated branch for the card you are working on before making any code changes. The branch name must be `card/<rkey>` where `<rkey>` is the card's record key (e.g., `card/3lgjasx2zws2p`). Always fetch first (`git fetch origin`) and branch off of `origin/main` (i.e., `git checkout -b card/<rkey> origin/main`). If the branch already exists, check it out and continue from there.
 - Commit code changes with clear commit messages before ending the iteration.
+- **Never pick cards from Planned.** Planned is a human gate — the human approves plans and moves cards to In Progress.
 - **Never move a card from In Review to Done.** The human handles all review and merging. In Review is the final column the agent can move a card into.
 - Always write `.skyboard-ralph/loop-status` as your very last action.
