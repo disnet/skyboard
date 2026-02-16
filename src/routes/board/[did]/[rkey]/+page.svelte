@@ -23,6 +23,7 @@
     Comment,
     Approval,
     Reaction,
+    Link,
     Block,
     MaterializedTask,
     FilterView,
@@ -122,6 +123,11 @@
     return db.reactions.where("boardUri").equals(boardUri).toArray();
   });
 
+  const allLinks = useLiveQuery<Link[]>(() => {
+    if (!boardUri) return [];
+    return db.links.where("boardUri").equals(boardUri).toArray();
+  });
+
   const allBlocks = useLiveQuery<Block[]>(() => {
     if (!boardUri || !auth.did) return [];
     return db.blocks
@@ -158,6 +164,35 @@
   const hasReactionSyncErrors = $derived(
     (allReactions.current ?? []).some((r) => r.syncStatus === "error"),
   );
+
+  // Detect if links are failing to sync (likely a scope/auth issue requiring re-login)
+  const hasLinkSyncErrors = $derived(
+    (allLinks.current ?? []).some((l) => l.syncStatus === "error"),
+  );
+
+  // Links grouped by task URI (both source and target)
+  const linksByTask = $derived.by(() => {
+    const map = new Map<string, Link[]>();
+    for (const link of allLinks.current ?? []) {
+      const srcList = map.get(link.sourceTaskUri) || [];
+      srcList.push(link);
+      map.set(link.sourceTaskUri, srcList);
+
+      const tgtList = map.get(link.targetTaskUri) || [];
+      tgtList.push(link);
+      map.set(link.targetTaskUri, tgtList);
+    }
+    return map;
+  });
+
+  // Link counts per task URI
+  const linkCountsByTask = $derived.by(() => {
+    const map = new Map<string, number>();
+    for (const [taskUri, links] of linksByTask) {
+      map.set(taskUri, links.length);
+    }
+    return map;
+  });
 
   // Comment counts grouped by targetTaskUri — only count visible comments
   const commentCountsByTask = $derived.by(() => {
@@ -1239,6 +1274,22 @@
       </div>
     {/if}
 
+    {#if hasLinkSyncErrors && auth.isLoggedIn}
+      <div class="reauth-banner">
+        Link sync failed. You may need to sign out and re-login to grant updated
+        permissions.
+        <button
+          class="reauth-btn"
+          onclick={async () => {
+            await logout();
+            goto("/");
+          }}
+        >
+          Sign out
+        </button>
+      </div>
+    {/if}
+
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
       class="columns-container"
@@ -1258,6 +1309,7 @@
           {ownerTrustedDids}
           {approvedUris}
           commentCounts={commentCountsByTask}
+          linkCounts={linkCountsByTask}
           {reactionsByTask}
           boardLabels={board.current.labels ?? []}
           onedit={openTaskEditor}
@@ -1368,6 +1420,10 @@
       reactions={reactionsByTask.get(
         `at://${editingTask.ownerDid}/dev.skyboard.task/${editingTask.rkey}`,
       )}
+      links={linksByTask.get(
+        `at://${editingTask.ownerDid}/dev.skyboard.task/${editingTask.rkey}`,
+      ) ?? []}
+      allTasks={materializedTasks}
       boardLabels={board.current.labels ?? []}
       columns={sortedColumns}
       {boardUri}

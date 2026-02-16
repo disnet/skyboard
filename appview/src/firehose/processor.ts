@@ -6,6 +6,7 @@ import {
   COMMENT_COLLECTION,
   APPROVAL_COLLECTION,
   REACTION_COLLECTION,
+  LINK_COLLECTION,
 } from "../shared/collections.js";
 import {
   safeParse,
@@ -16,6 +17,7 @@ import {
   CommentRecordSchema,
   ApprovalRecordSchema,
   ReactionRecordSchema,
+  LinkRecordSchema,
 } from "../shared/schemas.js";
 import {
   upsertBoard,
@@ -32,6 +34,8 @@ import {
   deleteApproval,
   upsertReaction,
   deleteReaction,
+  upsertLink,
+  deleteLink,
   upsertParticipant,
 } from "../db/client.js";
 
@@ -98,6 +102,8 @@ export function processEvent(event: CommitEvent): string | null {
       return boardUri
         ? processReaction(did, commit.rkey, record, boardUri)
         : null;
+    case LINK_COLLECTION:
+      return boardUri ? processLink(did, commit.rkey, record, boardUri) : null;
     default:
       return null;
   }
@@ -124,6 +130,8 @@ function processDelete(
       return deleteApproval(did, rkey);
     case REACTION_COLLECTION:
       return deleteReaction(did, rkey);
+    case LINK_COLLECTION:
+      return deleteLink(did, rkey);
     default:
       return null;
   }
@@ -264,6 +272,26 @@ function processReaction(
     targetTaskUri: validated.targetTaskUri,
     boardUri,
     emoji: validated.emoji,
+    createdAt: validated.createdAt,
+  });
+  upsertParticipant(did, boardUri);
+  return boardUri;
+}
+
+function processLink(
+  did: string,
+  rkey: string,
+  record: Record<string, unknown>,
+  boardUri: string,
+): string | null {
+  const validated = safeParse(LinkRecordSchema, record, "LinkRecord");
+  if (!validated) return null;
+
+  upsertLink(did, rkey, {
+    sourceTaskUri: validated.sourceTaskUri,
+    targetTaskUri: validated.targetTaskUri,
+    boardUri,
+    linkType: validated.linkType,
     createdAt: validated.createdAt,
   });
   upsertParticipant(did, boardUri);

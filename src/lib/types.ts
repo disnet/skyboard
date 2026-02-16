@@ -156,6 +156,29 @@ export interface ReactionRecord {
   createdAt: string;
 }
 
+// --- Link types ---
+
+export interface Link {
+  id?: number;
+  rkey: string;
+  did: string;
+  sourceTaskUri: string;
+  targetTaskUri: string;
+  boardUri: string;
+  linkType: string;
+  createdAt: string;
+  syncStatus: SyncStatus;
+}
+
+export interface LinkRecord {
+  $type: "dev.skyboard.link";
+  sourceTaskUri: string;
+  targetTaskUri: string;
+  boardUri: string;
+  linkType: string;
+  createdAt: string;
+}
+
 // --- Block types (local-only, not synced to PDS) ---
 
 export interface Block {

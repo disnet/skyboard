@@ -83,6 +83,14 @@ export const ReactionRecordSchema = z.object({
   createdAt: z.string().max(MAX_STRING),
 });
 
+export const LinkRecordSchema = z.object({
+  sourceTaskUri: z.string().max(MAX_STRING),
+  targetTaskUri: z.string().max(MAX_STRING),
+  boardUri: z.string().max(MAX_STRING),
+  linkType: z.string().max(MAX_STRING),
+  createdAt: z.string().max(MAX_STRING),
+});
+
 export function safeParse<T>(
   schema: z.ZodType<T>,
   data: unknown,

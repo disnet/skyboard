@@ -88,6 +88,19 @@ CREATE TABLE IF NOT EXISTS reactions (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_reactions_did_rkey ON reactions(did, rkey);
 CREATE INDEX IF NOT EXISTS idx_reactions_boardUri ON reactions(boardUri);
 
+CREATE TABLE IF NOT EXISTS links (
+  uri TEXT PRIMARY KEY,
+  did TEXT NOT NULL,
+  rkey TEXT NOT NULL,
+  sourceTaskUri TEXT NOT NULL,
+  targetTaskUri TEXT NOT NULL,
+  boardUri TEXT NOT NULL,
+  linkType TEXT NOT NULL,
+  createdAt TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_links_did_rkey ON links(did, rkey);
+CREATE INDEX IF NOT EXISTS idx_links_boardUri ON links(boardUri);
+
 CREATE TABLE IF NOT EXISTS board_participants (
   did TEXT NOT NULL,
   boardUri TEXT NOT NULL,
