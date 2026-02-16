@@ -90,10 +90,12 @@ export function printBoardCards(
       );
     }
 
-    // Sort by position
-    colTasks.sort((a, b) =>
-      a.effectivePosition.localeCompare(b.effectivePosition),
-    );
+    // Sort by position, with rkey+did tiebreaker to match UI
+    colTasks.sort((a, b) => {
+      if (a.effectivePosition < b.effectivePosition) return -1;
+      if (a.effectivePosition > b.effectivePosition) return 1;
+      return (a.rkey + a.did).localeCompare(b.rkey + b.did);
+    });
 
     console.log(formatColumnHeader(col, colTasks.length));
     if (colTasks.length === 0) {

@@ -217,7 +217,9 @@ export async function fetchBoardData(
       createdAt: c.createdAt,
     }));
 
-    const trustedDids = new Set(trusts.map((t) => t.trustedDid));
+    const trustedDids = new Set(
+      trusts.filter((t) => t.did === boardDid).map((t) => t.trustedDid),
+    );
 
     const allParticipants = new Set<string>();
     allParticipants.add(boardDid);
