@@ -22,9 +22,42 @@
   import { markdownLivePreview } from "$lib/markdown-live-preview.js";
   import { formattingToolbar } from "$lib/editor-formatting-toolbar.js";
   import { Marked } from "marked";
+  import { markedHighlight } from "marked-highlight";
+  import hljs from "highlight.js/lib/core";
+  import javascript from "highlight.js/lib/languages/javascript";
+  import typescript from "highlight.js/lib/languages/typescript";
+  import python from "highlight.js/lib/languages/python";
+  import rust from "highlight.js/lib/languages/rust";
+  import go from "highlight.js/lib/languages/go";
+  import css from "highlight.js/lib/languages/css";
+  import xml from "highlight.js/lib/languages/xml";
+  import json from "highlight.js/lib/languages/json";
+  import yaml from "highlight.js/lib/languages/yaml";
+  import bash from "highlight.js/lib/languages/bash";
+  import sql from "highlight.js/lib/languages/sql";
+  import markdown_hl from "highlight.js/lib/languages/markdown";
   import { mentionExtension } from "$lib/mention-markdown.js";
   import BlockInsertMenu from "./BlockInsertMenu.svelte";
   import DOMPurify from "dompurify";
+
+  hljs.registerLanguage("javascript", javascript);
+  hljs.registerLanguage("js", javascript);
+  hljs.registerLanguage("typescript", typescript);
+  hljs.registerLanguage("ts", typescript);
+  hljs.registerLanguage("python", python);
+  hljs.registerLanguage("rust", rust);
+  hljs.registerLanguage("go", go);
+  hljs.registerLanguage("css", css);
+  hljs.registerLanguage("html", xml);
+  hljs.registerLanguage("xml", xml);
+  hljs.registerLanguage("json", json);
+  hljs.registerLanguage("yaml", yaml);
+  hljs.registerLanguage("bash", bash);
+  hljs.registerLanguage("shell", bash);
+  hljs.registerLanguage("sh", bash);
+  hljs.registerLanguage("sql", sql);
+  hljs.registerLanguage("markdown", markdown_hl);
+  hljs.registerLanguage("md", markdown_hl);
 
   DOMPurify.addHook("afterSanitizeAttributes", (node) => {
     if (node.tagName === "A") {
@@ -33,13 +66,24 @@
     }
   });
 
-  const markedInstance = new Marked(mentionExtension(), {
-    renderer: {
-      checkbox({ checked }: { checked: boolean }) {
-        return `<input ${checked ? 'checked="" ' : ""}type="checkbox"> `;
+  const markedInstance = new Marked(
+    markedHighlight({
+      highlight(code, lang) {
+        if (lang && hljs.getLanguage(lang)) {
+          return hljs.highlight(code, { language: lang }).value;
+        }
+        return code;
+      },
+    }),
+    mentionExtension(),
+    {
+      renderer: {
+        checkbox({ checked }: { checked: boolean }) {
+          return `<input ${checked ? 'checked="" ' : ""}type="checkbox"> `;
+        },
       },
     },
-  });
+  );
 
   const EMOJI_OPTIONS = [
     "\u{1F44D}",
@@ -1394,6 +1438,69 @@
   .rendered-description :global(pre code) {
     background: none;
     padding: 0;
+  }
+
+  /* highlight.js syntax highlighting tokens */
+  .rendered-description :global(.hljs-keyword),
+  .rendered-description :global(.hljs-selector-tag),
+  .rendered-description :global(.hljs-built_in) {
+    color: #8b5cf6;
+  }
+
+  .rendered-description :global(.hljs-string),
+  .rendered-description :global(.hljs-attr) {
+    color: #16a34a;
+  }
+
+  .rendered-description :global(.hljs-comment),
+  .rendered-description :global(.hljs-doctag) {
+    color: #6b7280;
+    font-style: italic;
+  }
+
+  .rendered-description :global(.hljs-number),
+  .rendered-description :global(.hljs-literal) {
+    color: #d97706;
+  }
+
+  .rendered-description :global(.hljs-title),
+  .rendered-description :global(.hljs-title.function_) {
+    color: #2563eb;
+  }
+
+  .rendered-description :global(.hljs-type),
+  .rendered-description :global(.hljs-title.class_) {
+    color: #0d9488;
+  }
+
+  .rendered-description :global(.hljs-variable),
+  .rendered-description :global(.hljs-template-variable) {
+    color: #dc2626;
+  }
+
+  .rendered-description :global(.hljs-tag) {
+    color: #dc2626;
+  }
+
+  .rendered-description :global(.hljs-name) {
+    color: #dc2626;
+  }
+
+  .rendered-description :global(.hljs-attribute) {
+    color: #d97706;
+  }
+
+  .rendered-description :global(.hljs-regexp) {
+    color: #d97706;
+  }
+
+  .rendered-description :global(.hljs-symbol),
+  .rendered-description :global(.hljs-meta) {
+    color: #8b5cf6;
+  }
+
+  .rendered-description :global(.hljs-params) {
+    color: inherit;
   }
 
   .rendered-description :global(blockquote) {
