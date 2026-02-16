@@ -1,0 +1,48 @@
+{
+  "lexicon": 1,
+  "id": "dev.skyboard.link",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "A directional link between two tasks on the same board",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": [
+          "sourceTaskUri",
+          "targetTaskUri",
+          "boardUri",
+          "linkType",
+          "createdAt"
+        ],
+        "properties": {
+          "sourceTaskUri": {
+            "type": "string",
+            "format": "at-uri",
+            "description": "AT URI of the source task"
+          },
+          "targetTaskUri": {
+            "type": "string",
+            "format": "at-uri",
+            "description": "AT URI of the target task"
+          },
+          "boardUri": {
+            "type": "string",
+            "format": "at-uri",
+            "description": "AT URI of the board this link belongs to"
+          },
+          "linkType": {
+            "type": "string",
+            "knownValues": ["blocks", "relates_to", "duplicates"],
+            "description": "The type of relationship between the tasks"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "When the link was created"
+          }
+        }
+      }
+    }
+  }
+}

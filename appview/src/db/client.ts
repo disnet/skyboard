@@ -479,6 +479,75 @@ export function deleteReaction(did: string, rkey: string): string | null {
   return null;
 }
 
+// --- Link ---
+
+export interface LinkRow {
+  uri: string;
+  did: string;
+  rkey: string;
+  sourceTaskUri: string;
+  targetTaskUri: string;
+  boardUri: string;
+  linkType: string;
+  createdAt: string;
+}
+
+export function upsertLink(
+  did: string,
+  rkey: string,
+  record: {
+    sourceTaskUri: string;
+    targetTaskUri: string;
+    boardUri: string;
+    linkType: string;
+    createdAt: string;
+  },
+): void {
+  const db = getDb();
+  const uri = buildAtUri(did, "dev.skyboard.link", rkey);
+  db.run(
+    `INSERT INTO links (uri, did, rkey, sourceTaskUri, targetTaskUri, boardUri, linkType, createdAt)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(uri) DO UPDATE SET
+       sourceTaskUri=excluded.sourceTaskUri, targetTaskUri=excluded.targetTaskUri,
+       boardUri=excluded.boardUri, linkType=excluded.linkType,
+       createdAt=excluded.createdAt`,
+    [
+      uri,
+      did,
+      rkey,
+      record.sourceTaskUri,
+      record.targetTaskUri,
+      record.boardUri,
+      record.linkType,
+      record.createdAt,
+    ],
+  );
+}
+
+export function getLinksByBoard(boardUri: string): LinkRow[] {
+  const db = getDb();
+  return db
+    .query<LinkRow, [string]>("SELECT * FROM links WHERE boardUri = ?")
+    .all(boardUri);
+}
+
+export function deleteLink(did: string, rkey: string): string | null {
+  const db = getDb();
+  const uri = buildAtUri(did, "dev.skyboard.link", rkey);
+  const existing = db
+    .query<
+      { boardUri: string },
+      [string]
+    >("SELECT boardUri FROM links WHERE uri = ?")
+    .get(uri);
+  if (existing) {
+    db.run("DELETE FROM links WHERE uri = ?", [uri]);
+    return existing.boardUri;
+  }
+  return null;
+}
+
 // --- Board participants ---
 
 export function upsertParticipant(did: string, boardUri: string): void {

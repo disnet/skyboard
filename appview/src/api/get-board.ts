@@ -8,6 +8,7 @@ import {
   getCommentsByBoard,
   getApprovalsByBoard,
   getReactionsByBoard,
+  getLinksByBoard,
   type TaskRow,
   type OpRow,
   type BoardRow,
@@ -224,6 +225,15 @@ export interface BoardResponse {
     trustedDid: string;
     createdAt: string;
   }>;
+  links: Array<{
+    uri: string;
+    did: string;
+    rkey: string;
+    sourceTaskUri: string;
+    targetTaskUri: string;
+    linkType: string;
+    createdAt: string;
+  }>;
 }
 
 export function getBoardData(did: string, rkey: string): BoardResponse | null {
@@ -237,6 +247,7 @@ export function getBoardData(did: string, rkey: string): BoardResponse | null {
   const commentRows = getCommentsByBoard(boardUri);
   const approvalRows = getApprovalsByBoard(boardUri);
   const reactionRows = getReactionsByBoard(boardUri);
+  const linkRows = getLinksByBoard(boardUri);
 
   const trustedDids = new Set(
     trustRows.filter((t) => t.did === did).map((t) => t.trustedDid),
@@ -309,6 +320,15 @@ export function getBoardData(did: string, rkey: string): BoardResponse | null {
       rkey: t.rkey,
       trustedDid: t.trustedDid,
       createdAt: t.createdAt,
+    })),
+    links: linkRows.map((l) => ({
+      uri: l.uri,
+      did: l.did,
+      rkey: l.rkey,
+      sourceTaskUri: l.sourceTaskUri,
+      targetTaskUri: l.targetTaskUri,
+      linkType: l.linkType,
+      createdAt: l.createdAt,
     })),
   };
 }

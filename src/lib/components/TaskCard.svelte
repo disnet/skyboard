@@ -35,6 +35,7 @@
     currentUserDid,
     pending = false,
     commentCount = 0,
+    linkCount = 0,
     reactions,
     onreact,
     taskUri = "",
@@ -51,6 +52,7 @@
     currentUserDid: string;
     pending?: boolean;
     commentCount?: number;
+    linkCount?: number;
     reactions?: Map<string, { count: number; userReacted: boolean }>;
     onreact?: (taskUri: string, emoji: string) => void;
     taskUri?: string;
@@ -450,6 +452,25 @@
         {commentCount}
       </span>
     {/if}
+    {#if linkCount > 0}
+      <span
+        class="link-badge"
+        title="{linkCount} link{linkCount === 1 ? '' : 's'}"
+      >
+        <svg
+          class="link-icon"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+        >
+          <path d="M6.5 9.5l3-3" />
+          <path d="M9 10.5l1.5 1.5a2.12 2.12 0 003-3L12 7.5" />
+          <path d="M7 5.5L5.5 4a2.12 2.12 0 00-3 3L4 8.5" />
+        </svg>
+        {linkCount}
+      </span>
+    {/if}
     {#if todoStats}
       <span
         class="todo-badge"
@@ -752,6 +773,23 @@
     padding: 0 0.3125rem;
     border-radius: var(--radius-sm);
     font-weight: 600;
+  }
+
+  .link-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.125rem;
+    font-size: 0.75rem;
+    background: var(--color-border);
+    color: var(--color-text-secondary);
+    padding: 0 0.3125rem;
+    border-radius: var(--radius-sm);
+    font-weight: 600;
+  }
+
+  .link-icon {
+    width: 0.75rem;
+    height: 0.75rem;
   }
 
   .pending-badge {

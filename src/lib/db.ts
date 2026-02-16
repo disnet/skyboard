@@ -7,6 +7,7 @@ import type {
   Comment,
   Approval,
   Reaction,
+  Link,
   Block,
   Notification,
   FilterView,
@@ -20,6 +21,7 @@ type SkyboardDb = Dexie & {
   comments: EntityTable<Comment, "id">;
   approvals: EntityTable<Approval, "id">;
   reactions: EntityTable<Reaction, "id">;
+  links: EntityTable<Link, "id">;
   blocks: EntityTable<Block, "id">;
   notifications: EntityTable<Notification, "id">;
   filterViews: EntityTable<FilterView, "id">;
@@ -166,6 +168,11 @@ function createDb(name: string): SkyboardDb {
   // Drop the knownParticipants table (no longer needed with the appview)
   d.version(10).stores({
     knownParticipants: null,
+  });
+
+  d.version(11).stores({
+    links:
+      "++id, rkey, did, sourceTaskUri, targetTaskUri, boardUri, syncStatus, [did+rkey]",
   });
 
   return d;
