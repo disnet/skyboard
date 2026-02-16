@@ -463,38 +463,38 @@
         }
         break;
       }
-      case "Home": {
-        if (!pos || !e.shiftKey || !auth.did) break;
-        const colTasksHome = sortedTasksByColumn[pos.col] ?? [];
-        const taskHome = colTasksHome[pos.row];
-        if (taskHome && pos.row > 0) {
+      case "[": {
+        if (!pos || !auth.did) break;
+        const colTasksTop = sortedTasksByColumn[pos.col] ?? [];
+        const taskTop = colTasksTop[pos.row];
+        if (taskTop && pos.row > 0) {
           e.preventDefault();
-          const newPosHome = generateKeyBetween(
+          const newPosTop = generateKeyBetween(
             null,
-            colTasksHome[0].effectivePosition,
+            colTasksTop[0].effectivePosition,
           );
-          createOp(auth.did, taskHome.sourceTask, boardUri, {
-            position: newPosHome,
+          createOp(auth.did, taskTop.sourceTask, boardUri, {
+            position: newPosTop,
           });
           setSelectedPos({ col: pos.col, row: 0 });
           suppressHover();
         }
         break;
       }
-      case "End": {
-        if (!pos || !e.shiftKey || !auth.did) break;
-        const colTasksEnd = sortedTasksByColumn[pos.col] ?? [];
-        const taskEnd = colTasksEnd[pos.row];
-        if (taskEnd && pos.row < colTasksEnd.length - 1) {
+      case "]": {
+        if (!pos || !auth.did) break;
+        const colTasksBottom = sortedTasksByColumn[pos.col] ?? [];
+        const taskBottom = colTasksBottom[pos.row];
+        if (taskBottom && pos.row < colTasksBottom.length - 1) {
           e.preventDefault();
-          const newPosEnd = generateKeyBetween(
-            colTasksEnd[colTasksEnd.length - 1].effectivePosition,
+          const newPosBottom = generateKeyBetween(
+            colTasksBottom[colTasksBottom.length - 1].effectivePosition,
             null,
           );
-          createOp(auth.did, taskEnd.sourceTask, boardUri, {
-            position: newPosEnd,
+          createOp(auth.did, taskBottom.sourceTask, boardUri, {
+            position: newPosBottom,
           });
-          setSelectedPos({ col: pos.col, row: colTasksEnd.length - 1 });
+          setSelectedPos({ col: pos.col, row: colTasksBottom.length - 1 });
           suppressHover();
         }
         break;

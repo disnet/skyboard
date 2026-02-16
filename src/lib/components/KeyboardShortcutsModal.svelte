@@ -74,9 +74,9 @@
           description: "Reorder task up / down",
         },
         {
-          keys: ["\u21E7", "Home"],
+          keys: ["["],
           sep: "/",
-          alt: ["\u21E7", "End"],
+          alt: ["]"],
           description: "Send task to top / bottom of column",
         },
         { keys: ["m"], description: "Quick move to column" },
