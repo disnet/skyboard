@@ -463,6 +463,42 @@
         }
         break;
       }
+      case "Home": {
+        if (!pos || !e.shiftKey || !auth.did) break;
+        const colTasksHome = sortedTasksByColumn[pos.col] ?? [];
+        const taskHome = colTasksHome[pos.row];
+        if (taskHome && pos.row > 0) {
+          e.preventDefault();
+          const newPosHome = generateKeyBetween(
+            null,
+            colTasksHome[0].effectivePosition,
+          );
+          createOp(auth.did, taskHome.sourceTask, boardUri, {
+            position: newPosHome,
+          });
+          setSelectedPos({ col: pos.col, row: 0 });
+          suppressHover();
+        }
+        break;
+      }
+      case "End": {
+        if (!pos || !e.shiftKey || !auth.did) break;
+        const colTasksEnd = sortedTasksByColumn[pos.col] ?? [];
+        const taskEnd = colTasksEnd[pos.row];
+        if (taskEnd && pos.row < colTasksEnd.length - 1) {
+          e.preventDefault();
+          const newPosEnd = generateKeyBetween(
+            colTasksEnd[colTasksEnd.length - 1].effectivePosition,
+            null,
+          );
+          createOp(auth.did, taskEnd.sourceTask, boardUri, {
+            position: newPosEnd,
+          });
+          setSelectedPos({ col: pos.col, row: colTasksEnd.length - 1 });
+          suppressHover();
+        }
+        break;
+      }
       case "Enter": {
         if (!pos) return;
         const task = sortedTasksByColumn[pos.col]?.[pos.row];
