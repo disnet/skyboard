@@ -168,7 +168,7 @@ function processTask(
     boardUri,
     position: validated.position,
     labelIds: validated.labelIds,
-    assigneeDid: validated.assigneeDid,
+    assigneeDids: validated.assigneeDids,
     order: validated.order,
     createdAt: validated.createdAt,
     updatedAt: validated.updatedAt,
