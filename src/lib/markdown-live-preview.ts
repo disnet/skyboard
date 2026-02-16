@@ -256,6 +256,8 @@ const theme = EditorView.baseTheme({
   ".cm-md-fenced-code": {
     backgroundColor: "rgba(128, 128, 128, 0.08)",
     borderRadius: "4px",
+    fontFamily: "monospace",
+    fontSize: "0.9em",
   },
   ".cm-task-checkbox": {
     cursor: "pointer",
