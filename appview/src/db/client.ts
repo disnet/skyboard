@@ -19,6 +19,16 @@ export function getDb(): Database {
     const schemaPath = new URL("schema.sql", import.meta.url).pathname;
     const schema = readFileSync(schemaPath, "utf-8");
     _db.exec(schema);
+
+    // Additive migrations for existing databases
+    const migrations = [`ALTER TABLE tasks ADD COLUMN assigneeDids TEXT`];
+    for (const sql of migrations) {
+      try {
+        _db.exec(sql);
+      } catch {
+        // Column already exists — ignore
+      }
+    }
   }
   return _db;
 }
@@ -103,6 +113,7 @@ export interface TaskRow {
   boardUri: string;
   position: string | null;
   labelIds: string | null;
+  assigneeDids: string | null;
   order: number | null;
   createdAt: string;
   updatedAt: string | null;
@@ -118,6 +129,7 @@ export function upsertTask(
     boardUri: string;
     position?: string;
     labelIds?: string[];
+    assigneeDids?: string[];
     order?: number;
     createdAt: string;
     updatedAt?: string;
@@ -126,12 +138,13 @@ export function upsertTask(
   const db = getDb();
   const uri = buildAtUri(did, "dev.skyboard.task", rkey);
   db.run(
-    `INSERT INTO tasks (uri, did, rkey, title, description, columnId, boardUri, position, labelIds, "order", createdAt, updatedAt)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO tasks (uri, did, rkey, title, description, columnId, boardUri, position, labelIds, assigneeDids, "order", createdAt, updatedAt)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(uri) DO UPDATE SET
        title=excluded.title, description=excluded.description,
        columnId=excluded.columnId, boardUri=excluded.boardUri,
        position=excluded.position, labelIds=excluded.labelIds,
+       assigneeDids=excluded.assigneeDids,
        "order"=excluded."order", createdAt=excluded.createdAt,
        updatedAt=excluded.updatedAt`,
     [
@@ -144,6 +157,7 @@ export function upsertTask(
       record.boardUri,
       record.position ?? null,
       record.labelIds ? JSON.stringify(record.labelIds) : null,
+      record.assigneeDids ? JSON.stringify(record.assigneeDids) : null,
       record.order ?? null,
       record.createdAt,
       record.updatedAt ?? null,
