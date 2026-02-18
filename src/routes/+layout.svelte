@@ -35,7 +35,6 @@
   let showBoardSwitcher = $state(false);
   let boardSubs: AppviewSubscription[] = [];
   let effectGeneration = 0;
-  let discoveryPollTimer: ReturnType<typeof setInterval> | null = null;
 
   const unreadCount = useLiveQuery<number>(() => {
     if (!auth.did) return 0;
@@ -108,28 +107,6 @@
         })
         .catch(console.error);
       startBackgroundSync(userAgent, userDid);
-
-      // Poll for new boards periodically (e.g., if someone adds you to a board)
-      if (discoveryPollTimer) clearInterval(discoveryPollTimer);
-      discoveryPollTimer = setInterval(async () => {
-        if (generation !== effectGeneration) return;
-        try {
-          const newCount = await discoverMyBoards(userAgent, userDid);
-          if (newCount > 0) {
-            const boards = await db.boards.toArray();
-            connectBoardSubs(boards, userDid);
-          }
-        } catch (err) {
-          console.error("Board discovery poll failed:", err);
-        }
-      }, 60_000);
-
-      return () => {
-        if (discoveryPollTimer) {
-          clearInterval(discoveryPollTimer);
-          discoveryPollTimer = null;
-        }
-      };
     }
   });
 
