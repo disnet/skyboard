@@ -327,13 +327,22 @@
 
   // Create a new empty card and start inline editing its title.
   // afterRow: insert after this row index. If undefined, insert at bottom.
-  function addNewCard(colIdx: number, afterRow?: number) {
+  // prepend: if true, insert at the top of the column.
+  function addNewCard(
+    colIdx: number,
+    afterRow?: number,
+    { prepend = false }: { prepend?: boolean } = {},
+  ) {
     if (!auth.did) return;
     const colTasks = sortedTasksByColumn[colIdx] ?? [];
     let before: string | null;
     let after: string | null;
     let insertRow: number;
-    if (afterRow !== undefined && colTasks.length > 0) {
+    if (prepend) {
+      before = null;
+      after = colTasks[0]?.effectivePosition ?? null;
+      insertRow = 0;
+    } else if (afterRow !== undefined && colTasks.length > 0) {
       before = colTasks[afterRow]?.effectivePosition ?? null;
       after = colTasks[afterRow + 1]?.effectivePosition ?? null;
       insertRow = afterRow + 1;
@@ -568,6 +577,13 @@
             ? pos.row
             : undefined;
         addNewCard(col, afterRow);
+        break;
+      }
+      case "N": {
+        if (!auth.did || !e.shiftKey) break;
+        e.preventDefault();
+        const prependCol = pos ? pos.col : 0;
+        addNewCard(prependCol, undefined, { prepend: true });
         break;
       }
       case "m": {
