@@ -7,7 +7,12 @@
   import { db } from "$lib/db.js";
   import { useLiveQuery } from "$lib/db.svelte.js";
   import { generateCatchUpNotifications } from "$lib/notifications.js";
-  import { loadBoardFromAppview, AppviewSubscription } from "$lib/appview.js";
+  import {
+    loadBoardFromAppview,
+    AppviewSubscription,
+    discoverMyBoards,
+  } from "$lib/appview.js";
+  import { setDiscovering } from "$lib/discovery.svelte.js";
   import type { Board } from "$lib/types.js";
   import { initTheme, getTheme, cycleTheme } from "$lib/theme.svelte.js";
   import LandingPage from "$lib/components/LandingPage.svelte";
@@ -85,15 +90,23 @@
     if (auth.agent && auth.did) {
       const generation = ++effectGeneration;
       const userDid = auth.did;
+      const userAgent = auth.agent;
       const handle = currentProfile?.data?.handle;
-      catchUpAllBoards(userDid, handle)
+
+      setDiscovering(true);
+      discoverMyBoards(userAgent, userDid)
+        .catch(console.error)
+        .finally(() => {
+          setDiscovering(false);
+        })
+        .then(() => catchUpAllBoards(userDid, handle))
         .then(async () => {
           if (generation !== effectGeneration) return;
           const boards = await db.boards.toArray();
           connectBoardSubs(boards, userDid);
         })
         .catch(console.error);
-      startBackgroundSync(auth.agent, userDid);
+      startBackgroundSync(userAgent, userDid);
     }
   });
 
