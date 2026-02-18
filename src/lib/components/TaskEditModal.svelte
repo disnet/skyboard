@@ -403,6 +403,7 @@
     const initialDoc = untrack(() => editDescription);
     const state = EditorState.create({
       doc: initialDoc,
+      selection: { anchor: initialDoc.length },
       extensions: [
         basicSetup,
         markdown({ codeLanguages: languages, base: markdownLanguage }),
