@@ -38,6 +38,7 @@
         { keys: ["e"], description: "Inline edit task title" },
         { keys: ["t"], description: "Quick label selected task" },
         { keys: ["n"], description: "New task in current column" },
+        { keys: ["\u21E7", "N"], description: "New task at top of column" },
       ],
     },
     {
