@@ -1,4 +1,6 @@
+import type { Agent } from "@atproto/api";
 import { db } from "./db.js";
+import { BOARD_COLLECTION, TRUST_COLLECTION, buildAtUri } from "./tid.js";
 import type {
   Board,
   Task,
@@ -313,6 +315,87 @@ export async function loadBoardFromAppview(
   } catch {
     return false;
   }
+}
+
+/**
+ * Discover all boards the user is connected to by fetching their
+ * board records and trust records from their PDS. For each discovered
+ * board, loads the full board state from the appview into Dexie.
+ * Returns the number of newly discovered boards.
+ */
+export async function discoverMyBoards(
+  userAgent: Agent,
+  userDid: string,
+): Promise<number> {
+  const knownBoardUris = new Set<string>();
+  let newCount = 0;
+
+  // Collect boards already in Dexie so we don't re-fetch them
+  const existingBoards = await db.boards.toArray();
+  for (const b of existingBoards) {
+    knownBoardUris.add(buildAtUri(b.did, BOARD_COLLECTION, b.rkey));
+  }
+
+  // Step A: Fetch owned boards from PDS
+  const ownedBoardUris: { ownerDid: string; rkey: string; uri: string }[] = [];
+  let cursor: string | undefined;
+  do {
+    const res = await userAgent.com.atproto.repo.listRecords({
+      repo: userDid,
+      collection: BOARD_COLLECTION,
+      limit: 100,
+      cursor,
+    });
+    for (const record of res.data.records) {
+      const rkey = record.uri.split("/").pop()!;
+      const uri = buildAtUri(userDid, BOARD_COLLECTION, rkey);
+      ownedBoardUris.push({ ownerDid: userDid, rkey, uri });
+    }
+    cursor = res.data.cursor;
+  } while (cursor);
+
+  // Step B: Fetch trust records to find joined boards
+  const joinedBoardUris: { ownerDid: string; rkey: string; uri: string }[] = [];
+  cursor = undefined;
+  do {
+    const res = await userAgent.com.atproto.repo.listRecords({
+      repo: userDid,
+      collection: TRUST_COLLECTION,
+      limit: 100,
+      cursor,
+    });
+    for (const record of res.data.records) {
+      const value = record.value as Record<string, unknown>;
+      const boardUri = value.boardUri as string | undefined;
+      if (!boardUri) continue;
+      // Parse AT URI: at://did/collection/rkey
+      const match = boardUri.match(/^at:\/\/([^/]+)\/([^/]+)\/([^/]+)$/);
+      if (!match) continue;
+      const [, ownerDid, , rkey] = match;
+      joinedBoardUris.push({ ownerDid, rkey, uri: boardUri });
+    }
+    cursor = res.data.cursor;
+  } while (cursor);
+
+  // Deduplicate and load boards not already in Dexie
+  const allBoards = [...ownedBoardUris, ...joinedBoardUris];
+  const seen = new Set<string>();
+  const toLoad: { ownerDid: string; rkey: string; uri: string }[] = [];
+  for (const b of allBoards) {
+    if (seen.has(b.uri) || knownBoardUris.has(b.uri)) continue;
+    seen.add(b.uri);
+    toLoad.push(b);
+  }
+
+  // Load each new board from appview
+  const results = await Promise.allSettled(
+    toLoad.map(async (b) => {
+      const ok = await loadBoardFromAppview(b.ownerDid, b.rkey, b.uri);
+      if (ok) newCount++;
+    }),
+  );
+
+  return newCount;
 }
 
 /**

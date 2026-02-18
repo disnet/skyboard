@@ -7,9 +7,11 @@
   import type { Board, Column } from "$lib/types.js";
   import { loadBoardFromAppview } from "$lib/appview.js";
   import { grantTrust } from "$lib/trust.js";
+  import { getDiscoveryState } from "$lib/discovery.svelte.js";
   import BoardCard from "$lib/components/BoardCard.svelte";
 
   const auth = getAuth();
+  const discovery = getDiscoveryState();
 
   // Show all boards — both owned and joined
   const boards = useLiveQuery<Board[]>(() => db.boards.toArray());
@@ -171,6 +173,11 @@
       {#each boards.current as board (board.id)}
         <BoardCard {board} />
       {/each}
+    {:else if boards.current && discovery.isDiscovering}
+      <p class="empty discovering">
+        <span class="discover-spinner"></span>
+        Discovering your boards...
+      </p>
     {:else if boards.current}
       <p class="empty">
         No boards yet. Create one above or paste a board link to join.
@@ -295,5 +302,27 @@
     text-align: center;
     color: var(--color-text-secondary);
     padding: 3rem 0;
+  }
+
+  .discovering {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+  }
+
+  .discover-spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--color-border);
+    border-top-color: var(--color-primary);
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
   }
 </style>
