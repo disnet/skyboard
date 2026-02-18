@@ -5,7 +5,7 @@
   import { createOp } from "$lib/ops.js";
   import { createComment, deleteComment } from "$lib/comments.js";
   import { getAuth } from "$lib/auth.svelte.js";
-  import { deleteTaskFromPDS } from "$lib/sync.js";
+  import { deleteTaskFromPDS, notifyPendingWrite } from "$lib/sync.js";
   import { getActionStatus, isContentVisible } from "$lib/permissions.js";
   import type { PermissionStatus } from "$lib/permissions.js";
   import { COMMENT_COLLECTION, buildAtUri, generateTID } from "$lib/tid.js";
@@ -379,6 +379,7 @@
       labels: [...existingLabels, newLabel],
       syncStatus: "pending",
     });
+    notifyPendingWrite();
 
     // Auto-select the newly created label
     editLabelIds = [...editLabelIds, newLabel.id];
