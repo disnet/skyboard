@@ -1,6 +1,6 @@
 import { db } from "./db.js";
 import { generateTID } from "./tid.js";
-import { deleteTrustFromPDS } from "./sync.js";
+import { deleteTrustFromPDS, notifyPendingWrite } from "./sync.js";
 import { getAuth } from "./auth.svelte.js";
 import type { Trust, TrustRecord } from "./types.js";
 
@@ -23,6 +23,7 @@ export async function grantTrust(
     createdAt: new Date().toISOString(),
     syncStatus: "pending",
   });
+  notifyPendingWrite();
 }
 
 export async function revokeTrust(

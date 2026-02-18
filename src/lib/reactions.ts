@@ -2,6 +2,7 @@ import { db } from "./db.js";
 import { generateTID, REACTION_COLLECTION } from "./tid.js";
 import { getAuth } from "./auth.svelte.js";
 import type { Reaction, ReactionRecord } from "./types.js";
+import { notifyPendingWrite } from "./sync.js";
 
 export async function toggleReaction(
   did: string,
@@ -26,6 +27,7 @@ export async function toggleReaction(
       createdAt: new Date().toISOString(),
       syncStatus: "pending",
     });
+    notifyPendingWrite();
   }
 }
 

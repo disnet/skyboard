@@ -1,6 +1,7 @@
 import { db } from "./db.js";
 import { generateTID, buildAtUri, TASK_COLLECTION } from "./tid.js";
 import type { Op, OpFields, OpRecord, Task } from "./types.js";
+import { notifyPendingWrite } from "./sync.js";
 
 export async function createOp(
   authorDid: string,
@@ -23,6 +24,7 @@ export async function createOp(
     createdAt: new Date().toISOString(),
     syncStatus: "pending",
   });
+  notifyPendingWrite();
 }
 
 export function opToRecord(op: Op): OpRecord {

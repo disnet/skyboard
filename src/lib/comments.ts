@@ -2,6 +2,7 @@ import { db } from "./db.js";
 import { generateTID, COMMENT_COLLECTION } from "./tid.js";
 import { getAuth } from "./auth.svelte.js";
 import type { Comment, CommentRecord } from "./types.js";
+import { notifyPendingWrite } from "./sync.js";
 
 export async function createComment(
   authorDid: string,
@@ -18,6 +19,7 @@ export async function createComment(
     createdAt: new Date().toISOString(),
     syncStatus: "pending",
   });
+  notifyPendingWrite();
 }
 
 export async function deleteComment(comment: Comment): Promise<void> {

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { db } from "$lib/db.js";
   import { generateTID } from "$lib/tid.js";
+  import { notifyPendingWrite } from "$lib/sync.js";
   import type { Board, Column, Label } from "$lib/types.js";
 
   let {
@@ -83,6 +84,7 @@
       labels: labels.length > 0 ? labels.map((l) => ({ ...l })) : undefined,
       syncStatus: "pending",
     });
+    notifyPendingWrite();
 
     onclose();
   }

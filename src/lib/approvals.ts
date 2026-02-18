@@ -2,6 +2,7 @@ import { db } from "./db.js";
 import { generateTID, APPROVAL_COLLECTION } from "./tid.js";
 import { getAuth } from "./auth.svelte.js";
 import type { Approval, ApprovalRecord } from "./types.js";
+import { notifyPendingWrite } from "./sync.js";
 
 export async function createApproval(
   ownerDid: string,
@@ -16,6 +17,7 @@ export async function createApproval(
     createdAt: new Date().toISOString(),
     syncStatus: "pending",
   });
+  notifyPendingWrite();
 }
 
 export async function deleteApproval(approval: Approval): Promise<void> {

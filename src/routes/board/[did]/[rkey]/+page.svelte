@@ -13,7 +13,7 @@
   } from "$lib/tid.js";
   import { materializeTasks } from "$lib/materialize.js";
   import { isTrusted, isContentVisible } from "$lib/permissions.js";
-  import { deleteBoardFromPDS } from "$lib/sync.js";
+  import { deleteBoardFromPDS, notifyPendingWrite } from "$lib/sync.js";
   import { loadBoardFromAppview } from "$lib/appview.js";
   import type {
     Board,
@@ -354,6 +354,7 @@
       createdAt: new Date().toISOString(),
       syncStatus: "pending",
     });
+    notifyPendingWrite();
     setSelectedPos({ col: colIdx, row: insertRow });
     requestAnimationFrame(() => {
       inlineEditPos = { col: colIdx, row: insertRow };
@@ -720,6 +721,7 @@
       // (tasks with empty titles are excluded from PDS sync)
       if (!task.sourceTask.title && task.sourceTask.id) {
         db.tasks.update(task.sourceTask.id, { title, syncStatus: "pending" });
+        notifyPendingWrite();
       }
     }
     inlineEditPos = null;
@@ -757,9 +759,11 @@
         createOp(auth.did!, taskData as Task, boardUri, { title: line });
         // Update the task record's title so it passes the sync filter
         db.tasks.update(id, { title: line, syncStatus: "pending" });
+        notifyPendingWrite();
       });
       prevPos = newPosition;
     }
+    notifyPendingWrite();
   }
 
   function openTaskEditor(task: MaterializedTask) {

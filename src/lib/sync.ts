@@ -28,6 +28,12 @@ import { approvalToRecord } from "./approvals.js";
 import { reactionToRecord } from "./reactions.js";
 
 let syncInterval: ReturnType<typeof setInterval> | null = null;
+let syncInProgress = false;
+let currentAgent: Agent | null = null;
+let currentDid: string | null = null;
+let pendingWriteTimer: ReturnType<typeof setTimeout> | null = null;
+let visibilityHandler: (() => void) | null = null;
+let pagehideHandler: (() => void) | null = null;
 
 function boardToRecord(board: Board): BoardRecord {
   return {
@@ -72,7 +78,16 @@ export async function syncPendingToPDS(
   did: string,
 ): Promise<void> {
   if (!navigator.onLine) return;
+  if (syncInProgress) return;
+  syncInProgress = true;
+  try {
+    await syncPendingToPDSInner(agent, did);
+  } finally {
+    syncInProgress = false;
+  }
+}
 
+async function syncPendingToPDSInner(agent: Agent, did: string): Promise<void> {
   const pendingBoards = await db.boards
     .where("syncStatus")
     .equals("pending")
@@ -478,8 +493,21 @@ async function resetErrorsToPending(did: string): Promise<void> {
 
 let onlineHandler: (() => void) | null = null;
 
+export function notifyPendingWrite(): void {
+  if (pendingWriteTimer) return;
+  pendingWriteTimer = setTimeout(() => {
+    pendingWriteTimer = null;
+    if (currentAgent && currentDid) {
+      syncPendingToPDS(currentAgent, currentDid).catch(console.error);
+    }
+  }, 300);
+}
+
 export function startBackgroundSync(agent: Agent, did: string): void {
   stopBackgroundSync();
+  currentAgent = agent;
+  currentDid = did;
+
   syncInterval = setInterval(() => {
     resetErrorsToPending(did).then(() => {
       syncPendingToPDS(agent, did).catch(console.error);
@@ -498,6 +526,18 @@ export function startBackgroundSync(agent: Agent, did: string): void {
     }, 1000);
   };
   window.addEventListener("online", onlineHandler);
+
+  // Flush pending records when tab visibility changes (critical for mobile Safari)
+  visibilityHandler = () => {
+    syncPendingToPDS(agent, did).catch(console.error);
+  };
+  document.addEventListener("visibilitychange", visibilityHandler);
+
+  // Flush on pagehide (more reliable than beforeunload on iOS Safari)
+  pagehideHandler = () => {
+    syncPendingToPDS(agent, did).catch(console.error);
+  };
+  window.addEventListener("pagehide", pagehideHandler);
 }
 
 export function stopBackgroundSync(): void {
@@ -509,4 +549,18 @@ export function stopBackgroundSync(): void {
     window.removeEventListener("online", onlineHandler);
     onlineHandler = null;
   }
+  if (visibilityHandler) {
+    document.removeEventListener("visibilitychange", visibilityHandler);
+    visibilityHandler = null;
+  }
+  if (pagehideHandler) {
+    window.removeEventListener("pagehide", pagehideHandler);
+    pagehideHandler = null;
+  }
+  if (pendingWriteTimer) {
+    clearTimeout(pendingWriteTimer);
+    pendingWriteTimer = null;
+  }
+  currentAgent = null;
+  currentDid = null;
 }
