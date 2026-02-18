@@ -409,6 +409,7 @@ export class AppviewSubscription {
   private reconnectDelay = 1000;
   private maxReconnectDelay = 30000;
   private onlineListener: (() => void) | null = null;
+  private visibilityListener: (() => void) | null = null;
 
   constructor(
     private boardUri: string,
@@ -430,6 +431,8 @@ export class AppviewSubscription {
 
     this.ws.onopen = () => {
       this.reconnectDelay = 1000;
+      // Refresh board to catch up on any changes missed during disconnect
+      this.onUpdate();
     };
 
     this.ws.onmessage = (event: MessageEvent) => {
@@ -442,6 +445,19 @@ export class AppviewSubscription {
         // Ignore malformed messages
       }
     };
+
+    // Refresh board when tab becomes visible after being backgrounded
+    if (!this.visibilityListener) {
+      this.visibilityListener = () => {
+        if (
+          document.visibilityState === "visible" &&
+          this.ws?.readyState === WebSocket.OPEN
+        ) {
+          this.onUpdate();
+        }
+      };
+      document.addEventListener("visibilitychange", this.visibilityListener);
+    }
 
     this.ws.onclose = () => {
       if (!this.shouldReconnect) return;
@@ -475,6 +491,10 @@ export class AppviewSubscription {
     if (this.onlineListener) {
       window.removeEventListener("online", this.onlineListener);
       this.onlineListener = null;
+    }
+    if (this.visibilityListener) {
+      document.removeEventListener("visibilitychange", this.visibilityListener);
+      this.visibilityListener = null;
     }
     this.ws?.close();
     this.ws = null;
