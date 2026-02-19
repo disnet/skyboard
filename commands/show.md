@@ -17,7 +17,7 @@ sb show <ref> --json
 
 Options:
 
-- `--board <ref>` — override default board
+- `--board <ref>` — override default board (AT URI, `did:plc:xxx:rkey`, or board name)
 
 Always use `--json`. Returns: `rkey`, `did`, `title`, `description`, `column`, `labels[]`, `createdAt`, `lastModifiedAt`, `lastModifiedBy`, `opsApplied`, `comments[]`.
 

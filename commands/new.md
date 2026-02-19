@@ -17,7 +17,7 @@ Options:
 
 - `-c, --column <column>` — target column (default: first column). Column by name, prefix, or 1-based index.
 - `-d, --description <desc>` — card description
-- `--board <ref>` — override default board
+- `--board <ref>` — override default board (AT URI, `did:plc:xxx:rkey`, or board name)
 
 Always use `--json`. Returns: `rkey`, `title`, `column`, `position`.
 

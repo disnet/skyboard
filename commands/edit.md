@@ -20,7 +20,7 @@ Options:
 - `-t, --title <title>` — new title
 - `-d, --description <desc>` — new description
 - `-l, --label <label...>` — set labels (can be specified multiple times)
-- `--board <ref>` — override default board
+- `--board <ref>` — override default board (AT URI, `did:plc:xxx:rkey`, or board name)
 
 At least one of `-t`, `-d`, or `-l` must be provided. Always use `--json`. Returns: `rkey`, `fields`.
 
