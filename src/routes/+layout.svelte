@@ -567,5 +567,13 @@
       padding: 0.3125rem 0.5rem;
       font-size: 0.75rem;
     }
+
+    .github-link {
+      display: none;
+    }
+
+    .help-btn {
+      display: none;
+    }
   }
 </style>
