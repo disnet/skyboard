@@ -43,12 +43,29 @@ export async function deleteComment(comment: Comment): Promise<void> {
   await db.comments.delete(comment.id);
 }
 
+export async function updateComment(
+  comment: Comment,
+  newText: string,
+): Promise<void> {
+  if (!comment.id) return;
+  await db.comments.update(comment.id, {
+    text: newText,
+    updatedAt: new Date().toISOString(),
+    syncStatus: "pending",
+  });
+  notifyPendingWrite();
+}
+
 export function commentToRecord(comment: Comment): CommentRecord {
-  return {
+  const record: CommentRecord = {
     $type: "dev.skyboard.comment",
     targetTaskUri: comment.targetTaskUri,
     boardUri: comment.boardUri,
     text: comment.text,
     createdAt: comment.createdAt,
   };
+  if (comment.updatedAt) {
+    record.updatedAt = comment.updatedAt;
+  }
+  return record;
 }

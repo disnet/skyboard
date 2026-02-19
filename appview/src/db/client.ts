@@ -19,6 +19,14 @@ export function getDb(): Database {
     const schemaPath = new URL("schema.sql", import.meta.url).pathname;
     const schema = readFileSync(schemaPath, "utf-8");
     _db.exec(schema);
+
+    // Add updatedAt column to comments if missing (migration)
+    const cols = _db
+      .query<{ name: string }, []>("PRAGMA table_info(comments)")
+      .all();
+    if (!cols.some((c) => c.name === "updatedAt")) {
+      _db.exec("ALTER TABLE comments ADD COLUMN updatedAt TEXT");
+    }
   }
   return _db;
 }
@@ -304,6 +312,7 @@ export interface CommentRow {
   boardUri: string;
   text: string;
   createdAt: string;
+  updatedAt: string | null;
 }
 
 export function upsertComment(
@@ -314,16 +323,18 @@ export function upsertComment(
     boardUri: string;
     text: string;
     createdAt: string;
+    updatedAt?: string;
   },
 ): void {
   const db = getDb();
   const uri = buildAtUri(did, "dev.skyboard.comment", rkey);
   db.run(
-    `INSERT INTO comments (uri, did, rkey, targetTaskUri, boardUri, text, createdAt)
-     VALUES (?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO comments (uri, did, rkey, targetTaskUri, boardUri, text, createdAt, updatedAt)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(uri) DO UPDATE SET
        targetTaskUri=excluded.targetTaskUri, boardUri=excluded.boardUri,
-       text=excluded.text, createdAt=excluded.createdAt`,
+       text=excluded.text, createdAt=excluded.createdAt,
+       updatedAt=excluded.updatedAt`,
     [
       uri,
       did,
@@ -332,6 +343,7 @@ export function upsertComment(
       record.boardUri,
       record.text,
       record.createdAt,
+      record.updatedAt ?? null,
     ],
   );
 }

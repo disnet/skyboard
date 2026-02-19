@@ -59,7 +59,8 @@ CREATE TABLE IF NOT EXISTS comments (
   targetTaskUri TEXT NOT NULL,
   boardUri TEXT NOT NULL,
   text TEXT NOT NULL,
-  createdAt TEXT NOT NULL
+  createdAt TEXT NOT NULL,
+  updatedAt TEXT
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_comments_did_rkey ON comments(did, rkey);
 CREATE INDEX IF NOT EXISTS idx_comments_boardUri ON comments(boardUri);

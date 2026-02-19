@@ -124,6 +124,7 @@ export interface Comment {
   boardUri: string;
   text: string;
   createdAt: string;
+  updatedAt?: string;
   syncStatus: SyncStatus;
 }
 
@@ -133,6 +134,7 @@ export interface CommentRecord {
   boardUri: string;
   text: string;
   createdAt: string;
+  updatedAt?: string;
 }
 
 // --- Reaction types ---
