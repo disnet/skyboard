@@ -147,7 +147,7 @@ This project uses a Skyboard kanban board to drive an iterative development loop
 
 - Board DID: \`{{boardDid}}\`
 - Board rkey: \`{{boardRkey}}\`
-- Set with: \`sb use {{boardRkey}}\`
+- Board flag: \`--board {{boardDid}}:{{boardRkey}}\` (pass this on every \`sb\` command)
 
 ## Columns (workflow stages)
 
@@ -161,7 +161,7 @@ Each invocation of the loop, follow this protocol:
 
 ### 1. ASSESS
 
-Run \`sb cards --json\` to see the full board state. Identify which cards are in which columns and which have the \`blocked\` label.
+Run \`sb cards --json --board {{boardDid}}:{{boardRkey}}\` to see the full board state. Identify which cards are in which columns and which have the \`blocked\` label.
 
 ### 2. PICK
 
@@ -169,9 +169,9 @@ Select exactly one card to work on. You will only work on this single card durin
 
 ${buildPickPriority(columns)}
 
-**Skip cards with the \`blocked\` label.** These are waiting on human input. However, if a previously-blocked card has a new comment from the human since it was blocked, the human has likely answered — remove the \`blocked\` label (\`sb edit <ref> -l ""\`) and work on it.
+**Skip cards with the \`blocked\` label.** These are waiting on human input. However, if a previously-blocked card has a new comment from the human since it was blocked, the human has likely answered — remove the \`blocked\` label (\`sb edit <ref> -l "" --board {{boardDid}}:{{boardRkey}}\`) and work on it.
 
-Within a column, pick the topmost (first listed) non-blocked card. Use \`sb show <ref> --json\` to read the card's full details and comments before starting.
+Within a column, pick the topmost (first listed) non-blocked card. Use \`sb show <ref> --json --board {{boardDid}}:{{boardRkey}}\` to read the card's full details and comments before starting.
 
 ### 3. DO one transition
 
@@ -189,8 +189,8 @@ ${buildTransitionTable(columns)}
 
 After doing the work:
 
-1. Add a comment to the card describing what you did: \`sb comment <ref> "<summary>"\`
-2. Move the card: \`sb mv <ref> <column>\`
+1. Add a comment to the card describing what you did: \`sb comment <ref> "<summary>" --board {{boardDid}}:{{boardRkey}}\`
+2. Move the card: \`sb mv <ref> <column> --board {{boardDid}}:{{boardRkey}}\`
 
 ### 5. WRITE STATUS AND EXIT
 
@@ -205,7 +205,7 @@ echo "CONTINUE" > .skyboard-ralph/loop-status
 **If blocked on a card:**
 
 1. Comment on the card explaining what's blocking you
-2. Add the \`blocked\` label: \`sb edit <ref> -l blocked\`
+2. Add the \`blocked\` label: \`sb edit <ref> -l blocked --board {{boardDid}}:{{boardRkey}}\`
 3. Do NOT move the card
 4. Try to pick a different non-blocked card instead
 5. If no other non-blocked cards are available:
