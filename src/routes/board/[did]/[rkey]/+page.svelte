@@ -1283,6 +1283,7 @@
           onedit={openTaskEditor}
           onreact={handleReact}
           readonly={!auth.isLoggedIn}
+          isActiveColumn={getSelectedPos()?.col === colIdx}
           selectedTaskIndex={getSelectedPos()?.col === colIdx
             ? (getSelectedPos()?.row ?? null)
             : null}
