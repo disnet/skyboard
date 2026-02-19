@@ -228,6 +228,7 @@ function processComment(
     boardUri,
     text: validated.text,
     createdAt: validated.createdAt,
+    updatedAt: validated.updatedAt,
   });
   upsertParticipant(did, boardUri);
   return boardUri;

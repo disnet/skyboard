@@ -201,6 +201,7 @@ export interface BoardResponse {
     targetTaskUri: string;
     text: string;
     createdAt: string;
+    updatedAt: string | null;
   }>;
   approvals: Array<{
     uri: string;
@@ -287,6 +288,7 @@ export function getBoardData(did: string, rkey: string): BoardResponse | null {
       targetTaskUri: c.targetTaskUri,
       text: c.text,
       createdAt: c.createdAt,
+      updatedAt: c.updatedAt,
     })),
     approvals: approvalRows.map((a) => ({
       uri: a.uri,
