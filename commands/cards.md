@@ -18,7 +18,7 @@ Options:
 - `-c, --column <column>` — filter by column (name, prefix, or 1-based index)
 - `-l, --label <label>` — filter by label name
 - `-s, --search <text>` — search in title and description
-- `--board <ref>` — override default board
+- `--board <ref>` — override default board (AT URI, `did:plc:xxx:rkey`, or board name)
 
 Always use `--json`. Returns an array of column objects, each with a `cards[]` array containing: `rkey`, `shortRef`, `title`, `description`, `labels`, `createdAt`, `lastModifiedAt`.
 

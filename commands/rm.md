@@ -18,7 +18,7 @@ sb rm <ref> --force --json
 Options:
 
 - `-f, --force` — skip interactive confirmation prompt
-- `--board <ref>` — override default board
+- `--board <ref>` — override default board (AT URI, `did:plc:xxx:rkey`, or board name)
 
 **Always pass `--force`** to avoid the interactive prompt (which doesn't work in non-interactive mode). However, **always ask the user to confirm deletion first** in conversation before running the command.
 

@@ -18,7 +18,7 @@ sb mv <ref> <column> --json
 
 Options:
 
-- `--board <ref>` — override default board
+- `--board <ref>` — override default board (AT URI, `did:plc:xxx:rkey`, or board name)
 
 Always use `--json`. Returns: `rkey`, `column`.
 
