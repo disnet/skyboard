@@ -1,6 +1,6 @@
 import { requireAgent } from "../lib/auth.js";
 import { fetchBoardData } from "../lib/pds.js";
-import { getDefaultBoard } from "../lib/config.js";
+import { resolveBoard } from "../lib/board-resolver.js";
 import chalk from "chalk";
 
 export async function colsCommand(opts: {
@@ -49,21 +49,4 @@ export async function colsCommand(opts: {
       `  ${chalk.dim(`${i + 1}.`)} ${col.name} ${chalk.dim(`(${count})`)}`,
     );
   }
-}
-
-function resolveBoard(boardOpt?: string): { did: string; rkey: string } {
-  if (boardOpt) {
-    // TODO: support full board ref parsing like use command
-    const defaultBoard = getDefaultBoard();
-    if (defaultBoard) return defaultBoard;
-  }
-
-  const defaultBoard = getDefaultBoard();
-  if (!defaultBoard) {
-    console.error(
-      chalk.red("No default board set. Run `sb use <board>` first."),
-    );
-    process.exit(1);
-  }
-  return defaultBoard;
 }

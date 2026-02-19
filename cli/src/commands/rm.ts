@@ -1,6 +1,6 @@
 import { requireAgent } from "../lib/auth.js";
 import { fetchBoardData } from "../lib/pds.js";
-import { getDefaultBoard } from "../lib/config.js";
+import { resolveBoard } from "../lib/board-resolver.js";
 import { resolveCardRef } from "../lib/card-ref.js";
 import { shortRkey } from "../lib/display.js";
 import { TASK_COLLECTION } from "../lib/tid.js";
@@ -69,15 +69,4 @@ function confirm(prompt: string): Promise<boolean> {
       resolve(answer.toLowerCase() === "y" || answer.toLowerCase() === "yes");
     });
   });
-}
-
-function resolveBoard(boardOpt?: string): { did: string; rkey: string } {
-  const defaultBoard = getDefaultBoard();
-  if (!defaultBoard) {
-    console.error(
-      chalk.red("No default board set. Run `sb use <board>` first."),
-    );
-    process.exit(1);
-  }
-  return defaultBoard;
 }
