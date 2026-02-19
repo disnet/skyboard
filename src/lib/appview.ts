@@ -227,6 +227,7 @@ export async function loadBoardFromAppview(
             boardUri,
             text: c.text,
             createdAt: c.createdAt,
+            updatedAt: c.updatedAt ?? undefined,
             syncStatus: "synced",
           };
 
@@ -241,6 +242,7 @@ export async function loadBoardFromAppview(
                 "targetTaskUri",
                 "text",
                 "createdAt",
+                "updatedAt",
               ])
             ) {
               await db.comments.update(existing.id, commentData);
