@@ -28,6 +28,7 @@
     onedit,
     onreact,
     readonly = false,
+    isActiveColumn = false,
     selectedTaskIndex = null,
     editingTaskIndex = null,
     onsavetitle,
@@ -53,6 +54,7 @@
     onedit: (task: MaterializedTask) => void;
     onreact?: (taskUri: string, emoji: string) => void;
     readonly?: boolean;
+    isActiveColumn?: boolean;
     selectedTaskIndex?: number | null;
     editingTaskIndex?: number | null;
     onsavetitle?: (task: MaterializedTask, title: string) => void;
@@ -257,6 +259,7 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   class="column"
+  class:column-active={isActiveColumn}
   class:drag-over={dropIndex !== null}
   data-column-id={column.id}
   bind:this={columnEl}
@@ -337,6 +340,20 @@
 
   .column.drag-over {
     background: var(--color-drag-over);
+  }
+
+  .column.column-active .column-header h3 {
+    color: var(--color-primary);
+  }
+
+  .column.column-active .task-list:empty::after {
+    content: "";
+    display: block;
+    height: 3px;
+    border-radius: 2px;
+    background: var(--color-primary);
+    opacity: 0.3;
+    margin: 0.5rem 0;
   }
 
   .column-header {
