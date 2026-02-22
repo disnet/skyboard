@@ -10,6 +10,7 @@
   import type { PermissionStatus } from "$lib/permissions.js";
   import { COMMENT_COLLECTION, buildAtUri, generateTID } from "$lib/tid.js";
   import AuthorBadge from "./AuthorBadge.svelte";
+  import { getProfile, ensureProfile } from "$lib/profile-cache.svelte.js";
   import MentionText from "./MentionText.svelte";
   import MentionTextarea from "./MentionTextarea.svelte";
   import { EditorView, basicSetup } from "codemirror";
@@ -59,6 +60,7 @@
     comments = [],
     reactions,
     boardLabels = [],
+    boardMembers = [],
     boardUri = "",
     columns = [],
     onclose,
@@ -75,6 +77,7 @@
     comments?: Comment[];
     reactions?: Map<string, { count: number; userReacted: boolean }>;
     boardLabels?: Label[];
+    boardMembers?: string[];
     boardUri?: string;
     columns?: Column[];
     onclose: () => void;
@@ -331,6 +334,17 @@
   let editTitle = $state(task.effectiveTitle);
   let editDescription = $state(task.effectiveDescription ?? "");
   let editLabelIds = $state<string[]>([...task.effectiveLabelIds]);
+  let editAssigneeDids = $state<string[]>([
+    ...(task.effectiveAssigneeDids ?? []),
+  ]);
+
+  function toggleAssignee(did: string) {
+    if (editAssigneeDids.includes(did)) {
+      editAssigneeDids = editAssigneeDids.filter((d) => d !== did);
+    } else {
+      editAssigneeDids = [...editAssigneeDids, did];
+    }
+  }
 
   function toggleLabel(id: string) {
     if (editLabelIds.includes(id)) {
@@ -393,6 +407,19 @@
       .map((id) => boardLabels.find((l) => l.id === id))
       .filter((l): l is Label => l !== undefined),
   );
+
+  $effect(() => {
+    for (const did of boardMembers) {
+      ensureProfile(did);
+    }
+  });
+
+  function memberDisplayName(did: string): string {
+    const p = getProfile(did);
+    if (p.data?.displayName) return p.data.displayName;
+    if (p.data?.handle) return `@${p.data.handle}`;
+    return did.slice(0, 20) + "...";
+  }
 
   let editorContainer: HTMLDivElement | undefined = $state();
   let editorView: EditorView | undefined = $state();
@@ -530,6 +557,15 @@
       JSON.stringify(sortedEffectiveLabelIds)
     )
       fields.labelIds = [...editLabelIds];
+    const sortedEditAssigneeDids = [...editAssigneeDids].sort();
+    const sortedEffectiveAssigneeDids = [
+      ...(task.effectiveAssigneeDids ?? []),
+    ].sort();
+    if (
+      JSON.stringify(sortedEditAssigneeDids) !==
+      JSON.stringify(sortedEffectiveAssigneeDids)
+    )
+      fields.assigneeDids = [...editAssigneeDids];
     if (Object.keys(fields).length > 0) {
       await createOp(currentUserDid, task.sourceTask, task.boardUri, fields);
     }
@@ -806,6 +842,41 @@
               >
             </div>
           {/if}
+        </div>
+      {/if}
+
+      {#if !readonly && boardMembers.length > 0}
+        <div class="assignee-section">
+          <div class="assignee-header">
+            <!-- svelte-ignore a11y_label_has_associated_control -->
+            <label>Assignees</label>
+            {#if editStatus === "denied"}
+              <span class="field-status denied">Trusted users only</span>
+            {/if}
+          </div>
+          <div class="assignee-picker" class:disabled={editStatus === "denied"}>
+            {#each boardMembers as did (did)}
+              <button
+                class="assignee-toggle"
+                class:selected={editAssigneeDids.includes(did)}
+                onclick={() => toggleAssignee(did)}
+                disabled={editStatus === "denied"}
+              >
+                <AuthorBadge {did} isCurrentUser={did === currentUserDid} />
+              </button>
+            {/each}
+          </div>
+        </div>
+      {:else if readonly && task.effectiveAssigneeDids && task.effectiveAssigneeDids.length > 0}
+        <div class="assignee-section">
+          <div class="assignee-header">
+            <label>Assignees</label>
+          </div>
+          <div class="assignee-list">
+            {#each task.effectiveAssigneeDids as did (did)}
+              <AuthorBadge {did} isCurrentUser={did === currentUserDid} />
+            {/each}
+          </div>
         </div>
       {/if}
 
@@ -1587,6 +1658,61 @@
     height: 0.5rem;
     border-radius: 50%;
     flex-shrink: 0;
+  }
+
+  .assignee-section {
+    margin-top: 1rem;
+    padding: 0 1.25rem;
+  }
+
+  .assignee-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.375rem;
+  }
+
+  .assignee-header label {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--color-text-secondary);
+  }
+
+  .assignee-picker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+  }
+
+  .assignee-picker.disabled {
+    opacity: 0.6;
+    pointer-events: none;
+  }
+
+  .assignee-toggle {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.625rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .assignee-toggle:hover:not(:disabled) {
+    border-color: var(--color-primary);
+  }
+
+  .assignee-toggle.selected {
+    background: var(--color-primary-alpha, rgba(0, 102, 204, 0.1));
+    border-color: var(--color-primary);
+  }
+
+  .assignee-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
   }
 
   .comments-section {

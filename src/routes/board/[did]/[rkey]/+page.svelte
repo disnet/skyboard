@@ -215,6 +215,16 @@
     return map;
   });
 
+  // Board members: owner + trusted DIDs + active participants (task/op authors)
+  const boardMembers = $derived.by(() => {
+    const members = new Set<string>();
+    if (board.current) members.add(board.current.did);
+    for (const did of ownerTrustedDids) members.add(did);
+    for (const task of allTasks.current ?? []) members.add(task.did);
+    for (const op of allOps.current ?? []) members.add(op.did);
+    return [...members];
+  });
+
   // Materialized view with LWW merge
   const materializedTasks = $derived.by(() => {
     if (!allTasks.current || !allOps.current || !board.current) return [];
@@ -1389,6 +1399,7 @@
         `at://${editingTask.ownerDid}/dev.skyboard.task/${editingTask.rkey}`,
       )}
       boardLabels={board.current.labels ?? []}
+      {boardMembers}
       columns={sortedColumns}
       {boardUri}
       onclose={closeTaskEditor}

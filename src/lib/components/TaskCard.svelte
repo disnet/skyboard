@@ -442,6 +442,23 @@
   {/if}
   <div class="task-meta">
     <AuthorBadge did={task.ownerDid} isCurrentUser={isOwned} />
+    {#if task.effectiveAssigneeDids && task.effectiveAssigneeDids.length > 0}
+      <span class="assignee-badge" title="Assigned">
+        <svg
+          class="assignee-icon"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+        >
+          <circle cx="8" cy="5" r="3" />
+          <path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6" />
+        </svg>
+        {#each task.effectiveAssigneeDids as did (did)}
+          <AuthorBadge {did} isCurrentUser={did === currentUserDid} />
+        {/each}
+      </span>
+    {/if}
     {#if commentCount > 0}
       <span
         class="comment-badge"
@@ -724,6 +741,20 @@
     align-items: center;
     gap: 0.375rem;
     margin-top: 0.375rem;
+  }
+
+  .assignee-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.125rem;
+    font-size: 0.75rem;
+    color: var(--color-text-secondary);
+  }
+
+  .assignee-icon {
+    width: 0.75rem;
+    height: 0.75rem;
+    flex-shrink: 0;
   }
 
   .todo-badge {
