@@ -29,6 +29,11 @@
             "type": "string",
             "format": "datetime",
             "description": "When the comment was created"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "When the comment was last edited"
           }
         }
       }

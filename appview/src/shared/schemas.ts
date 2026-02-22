@@ -68,6 +68,7 @@ export const CommentRecordSchema = z.object({
   boardUri: z.string().max(MAX_STRING),
   text: z.string().max(MAX_STRING),
   createdAt: z.string().max(MAX_STRING),
+  updatedAt: z.string().max(MAX_STRING).optional(),
 });
 
 export const ApprovalRecordSchema = z.object({

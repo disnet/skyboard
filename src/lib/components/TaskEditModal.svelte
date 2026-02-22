@@ -3,7 +3,11 @@
   import { db } from "$lib/db.js";
   import type { MaterializedTask, Comment, Label, Column } from "$lib/types.js";
   import { createOp } from "$lib/ops.js";
-  import { createComment, deleteComment } from "$lib/comments.js";
+  import {
+    createComment,
+    deleteComment,
+    updateComment,
+  } from "$lib/comments.js";
   import { getAuth } from "$lib/auth.svelte.js";
   import { deleteTaskFromPDS, notifyPendingWrite } from "$lib/sync.js";
   import { getActionStatus, isContentVisible } from "$lib/permissions.js";
@@ -295,6 +299,26 @@
 
   let commentText = $state("");
   let submittingComment = $state(false);
+  let editingCommentId = $state<number | null>(null);
+  let editingCommentText = $state("");
+
+  function startEditComment(comment: Comment) {
+    editingCommentId = comment.id ?? null;
+    editingCommentText = comment.text;
+  }
+
+  function cancelEditComment() {
+    editingCommentId = null;
+    editingCommentText = "";
+  }
+
+  async function saveEditComment(comment: Comment) {
+    const text = editingCommentText.trim();
+    if (!text) return;
+    await updateComment(comment, text);
+    editingCommentId = null;
+    editingCommentText = "";
+  }
 
   async function submitComment() {
     const text = commentText.trim();
@@ -854,6 +878,14 @@
                       title={new Date(comment.createdAt).toLocaleString()}
                       >{relativeTime(comment.createdAt)}</span
                     >
+                    {#if comment.updatedAt}
+                      <span
+                        class="comment-edited"
+                        title="Edited {new Date(
+                          comment.updatedAt,
+                        ).toLocaleString()}">(edited)</span
+                      >
+                    {/if}
                     {#if comment.syncStatus === "pending"}
                       <span
                         class="comment-sync-dot pending"
@@ -863,7 +895,12 @@
                       <span class="comment-sync-dot error" title="Sync error"
                       ></span>
                     {/if}
-                    {#if comment.did === currentUserDid}
+                    {#if comment.did === currentUserDid && editingCommentId !== comment.id}
+                      <button
+                        class="comment-edit-btn"
+                        onclick={() => startEditComment(comment)}
+                        title="Edit comment">&#9998;</button
+                      >
                       <button
                         class="comment-delete-btn"
                         onclick={() => handleDeleteComment(comment)}
@@ -871,11 +908,33 @@
                       >
                     {/if}
                   </div>
-                  <div class="comment-text rendered-description">
-                    {@html DOMPurify.sanitize(
-                      markedInstance.parse(comment.text) as string,
-                    )}
-                  </div>
+                  {#if editingCommentId === comment.id}
+                    <div class="comment-edit-form">
+                      <MentionTextarea
+                        bind:value={editingCommentText}
+                        placeholder="Edit comment..."
+                        maxlength={10240}
+                        onsubmit={() => saveEditComment(comment)}
+                      />
+                      <div class="comment-edit-actions">
+                        <button
+                          class="comment-edit-save"
+                          onclick={() => saveEditComment(comment)}
+                          disabled={!editingCommentText.trim()}>Save</button
+                        >
+                        <button
+                          class="comment-edit-cancel"
+                          onclick={cancelEditComment}>Cancel</button
+                        >
+                      </div>
+                    </div>
+                  {:else}
+                    <div class="comment-text rendered-description">
+                      {@html DOMPurify.sanitize(
+                        markedInstance.parse(comment.text) as string,
+                      )}
+                    </div>
+                  {/if}
                 </div>
               {/each}
             </div>
@@ -1643,8 +1702,35 @@
     background: var(--color-error);
   }
 
-  .comment-delete-btn {
+  .comment-edited {
+    font-size: 0.6875rem;
+    color: var(--color-text-secondary);
+    font-style: italic;
+    cursor: help;
+  }
+
+  .comment-edit-btn {
     margin-left: auto;
+    background: none;
+    border: none;
+    font-size: 0.8125rem;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    padding: 0 0.25rem;
+    line-height: 1;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+
+  .comment:hover .comment-edit-btn {
+    opacity: 1;
+  }
+
+  .comment-edit-btn:hover {
+    color: var(--color-primary);
+  }
+
+  .comment-delete-btn {
     background: none;
     border: none;
     font-size: 1rem;
@@ -1652,10 +1738,59 @@
     cursor: pointer;
     padding: 0 0.25rem;
     line-height: 1;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+
+  .comment:hover .comment-delete-btn {
+    opacity: 1;
   }
 
   .comment-delete-btn:hover {
     color: var(--color-error);
+  }
+
+  .comment-edit-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+    margin-top: 0.25rem;
+  }
+
+  .comment-edit-actions {
+    display: flex;
+    gap: 0.375rem;
+    justify-content: flex-end;
+  }
+
+  .comment-edit-save {
+    padding: 0.3rem 0.625rem;
+    background: var(--color-primary);
+    color: white;
+    border: none;
+    border-radius: var(--radius-md);
+    font-size: 0.8125rem;
+    cursor: pointer;
+  }
+
+  .comment-edit-save:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .comment-edit-cancel {
+    padding: 0.3rem 0.625rem;
+    background: var(--color-surface);
+    color: var(--color-text-secondary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    font-size: 0.8125rem;
+    cursor: pointer;
+  }
+
+  .comment-edit-cancel:hover {
+    color: var(--color-text);
+    border-color: var(--color-text-secondary);
   }
 
   .comment-text {
