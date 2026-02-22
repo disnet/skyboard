@@ -23,6 +23,7 @@
     ownerTrustedDids,
     approvedUris,
     commentCounts = new Map(),
+    linkCounts = new Map(),
     reactionsByTask = new Map(),
     boardLabels = [],
     onedit,
@@ -45,6 +46,7 @@
     ownerTrustedDids: Set<string>;
     approvedUris: Set<string>;
     commentCounts?: Map<string, number>;
+    linkCounts?: Map<string, number>;
     reactionsByTask?: Map<
       string,
       Map<string, { count: number; userReacted: boolean }>
@@ -282,6 +284,9 @@
           currentUserDid={did}
           pending={isTaskPending(task)}
           commentCount={commentCounts.get(
+            `at://${task.ownerDid}/dev.skyboard.task/${task.rkey}`,
+          ) ?? 0}
+          linkCount={linkCounts.get(
             `at://${task.ownerDid}/dev.skyboard.task/${task.rkey}`,
           ) ?? 0}
           reactions={reactionsByTask.get(

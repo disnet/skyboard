@@ -1,9 +1,17 @@
 <script lang="ts">
   import { untrack } from "svelte";
   import { db } from "$lib/db.js";
-  import type { MaterializedTask, Comment, Label, Column } from "$lib/types.js";
+  import type {
+    MaterializedTask,
+    Comment,
+    Link,
+    Label,
+    Column,
+  } from "$lib/types.js";
   import { createOp } from "$lib/ops.js";
   import { createComment, deleteComment } from "$lib/comments.js";
+  import { createLink, deleteLink } from "$lib/links.js";
+  import { TASK_COLLECTION } from "$lib/tid.js";
   import { getAuth } from "$lib/auth.svelte.js";
   import { deleteTaskFromPDS, notifyPendingWrite } from "$lib/sync.js";
   import { getActionStatus, isContentVisible } from "$lib/permissions.js";
@@ -58,6 +66,8 @@
     approvedUris,
     comments = [],
     reactions,
+    links = [],
+    allTasks = [],
     boardLabels = [],
     boardUri = "",
     columns = [],
@@ -74,6 +84,8 @@
     approvedUris: Set<string>;
     comments?: Comment[];
     reactions?: Map<string, { count: number; userReacted: boolean }>;
+    links?: Link[];
+    allTasks?: MaterializedTask[];
     boardLabels?: Label[];
     boardUri?: string;
     columns?: Column[];
@@ -393,6 +405,79 @@
       .map((id) => boardLabels.find((l) => l.id === id))
       .filter((l): l is Label => l !== undefined),
   );
+
+  // --- Links ---
+
+  const LINK_TYPE_LABELS: Record<string, string> = {
+    blocks: "blocks",
+    relates_to: "relates to",
+    duplicates: "duplicates",
+  };
+  const INVERSE_LINK_LABELS: Record<string, string> = {
+    blocks: "blocked by",
+    relates_to: "relates to",
+    duplicates: "duplicated by",
+  };
+
+  let showAddLink = $state(false);
+  let newLinkType = $state("relates_to");
+  let newLinkTargetRkey = $state("");
+
+  // Tasks available for linking (exclude current task)
+  const linkableTaskOptions = $derived(
+    allTasks
+      .filter((t) => !(t.rkey === task.rkey && t.ownerDid === task.ownerDid))
+      .map((t) => ({
+        uri: buildAtUri(t.ownerDid, TASK_COLLECTION, t.rkey),
+        rkey: t.rkey,
+        did: t.ownerDid,
+        title: t.effectiveTitle,
+      })),
+  );
+
+  function getLinkLabel(link: Link): string {
+    if (link.sourceTaskUri === taskUri) {
+      return LINK_TYPE_LABELS[link.linkType] ?? link.linkType;
+    }
+    return INVERSE_LINK_LABELS[link.linkType] ?? link.linkType;
+  }
+
+  function getLinkedTaskUri(link: Link): string {
+    return link.sourceTaskUri === taskUri
+      ? link.targetTaskUri
+      : link.sourceTaskUri;
+  }
+
+  function getLinkedTaskTitle(link: Link): string {
+    const linkedUri = getLinkedTaskUri(link);
+    const found = allTasks.find(
+      (t) => buildAtUri(t.ownerDid, TASK_COLLECTION, t.rkey) === linkedUri,
+    );
+    return found?.effectiveTitle ?? "Unknown task";
+  }
+
+  async function handleAddLink() {
+    if (!currentUserDid || !newLinkTargetRkey) return;
+    const target = linkableTaskOptions.find(
+      (t) => t.rkey === newLinkTargetRkey,
+    );
+    if (!target) return;
+
+    await createLink(
+      currentUserDid,
+      taskUri,
+      target.uri,
+      boardUri,
+      newLinkType,
+    );
+    newLinkTargetRkey = "";
+    newLinkType = "relates_to";
+    showAddLink = false;
+  }
+
+  async function handleDeleteLink(link: Link) {
+    await deleteLink(link);
+  }
 
   let editorContainer: HTMLDivElement | undefined = $state();
   let editorView: EditorView | undefined = $state();
@@ -804,6 +889,62 @@
                   newLabelName = "";
                 }}>&times;</button
               >
+            </div>
+          {/if}
+        </div>
+      {/if}
+
+      {#if links.length > 0 || !readonly}
+        <div class="links-section">
+          <div class="links-header">
+            <label>Links ({links.length})</label>
+            {#if !readonly}
+              <button
+                class="add-link-btn"
+                onclick={() => (showAddLink = !showAddLink)}
+              >
+                {showAddLink ? "Cancel" : "+ Add link"}
+              </button>
+            {/if}
+          </div>
+
+          {#if showAddLink}
+            <div class="add-link-form">
+              <select bind:value={newLinkType} class="link-type-select">
+                <option value="relates_to">relates to</option>
+                <option value="blocks">blocks</option>
+                <option value="duplicates">duplicates</option>
+              </select>
+              <select bind:value={newLinkTargetRkey} class="link-target-select">
+                <option value="">Select a task...</option>
+                {#each linkableTaskOptions as opt}
+                  <option value={opt.rkey}>{opt.title}</option>
+                {/each}
+              </select>
+              <button
+                class="add-link-confirm"
+                onclick={handleAddLink}
+                disabled={!newLinkTargetRkey}>Add</button
+              >
+            </div>
+          {/if}
+
+          {#if links.length > 0}
+            <div class="links-list">
+              {#each links as link}
+                <div class="link-item">
+                  <span class="link-type-label">{getLinkLabel(link)}</span>
+                  <span class="link-task-title">{getLinkedTaskTitle(link)}</span
+                  >
+                  {#if !readonly && (link.did === currentUserDid || currentUserDid === boardOwnerDid)}
+                    <button
+                      class="link-delete-btn"
+                      onclick={() => handleDeleteLink(link)}
+                      title="Remove link">&times;</button
+                    >
+                  {/if}
+                </div>
+              {/each}
             </div>
           {/if}
         </div>
@@ -1587,6 +1728,123 @@
     height: 0.5rem;
     border-radius: 50%;
     flex-shrink: 0;
+  }
+
+  .links-section {
+    margin-top: 0.75rem;
+    border-top: 1px solid var(--color-border-light);
+    padding: 0.75rem 1.25rem 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .links-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .links-header label {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--color-text-secondary);
+  }
+
+  .add-link-btn {
+    background: none;
+    border: none;
+    font-size: 0.75rem;
+    color: var(--color-primary);
+    cursor: pointer;
+    font-weight: 500;
+  }
+
+  .add-link-btn:hover {
+    text-decoration: underline;
+  }
+
+  .add-link-form {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+  }
+
+  .link-type-select,
+  .link-target-select {
+    padding: 0.3rem 0.5rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    font-size: 0.8125rem;
+    background: var(--color-surface);
+    color: var(--color-text);
+  }
+
+  .link-target-select {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .add-link-confirm {
+    padding: 0.3rem 0.625rem;
+    background: var(--color-primary);
+    color: white;
+    border: none;
+    border-radius: var(--radius-md);
+    font-size: 0.8125rem;
+    cursor: pointer;
+  }
+
+  .add-link-confirm:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .links-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .link-item {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.25rem 0.5rem;
+    background: var(--color-bg);
+    border-radius: var(--radius-sm);
+    font-size: 0.8125rem;
+  }
+
+  .link-type-label {
+    color: var(--color-text-secondary);
+    font-weight: 500;
+    font-size: 0.75rem;
+    flex-shrink: 0;
+  }
+
+  .link-task-title {
+    color: var(--color-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+  }
+
+  .link-delete-btn {
+    margin-left: auto;
+    background: none;
+    border: none;
+    font-size: 1rem;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    padding: 0 0.25rem;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+
+  .link-delete-btn:hover {
+    color: var(--color-error);
   }
 
   .comments-section {

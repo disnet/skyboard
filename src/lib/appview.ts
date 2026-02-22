@@ -9,6 +9,7 @@ import type {
   Comment,
   Approval,
   Reaction,
+  Link,
 } from "./types.js";
 const APPVIEW_URL =
   typeof window !== "undefined" &&
@@ -79,6 +80,7 @@ export async function loadBoardFromAppview(
         db.comments,
         db.approvals,
         db.reactions,
+        db.links,
       ],
       async () => {
         // Store board
@@ -306,6 +308,40 @@ export async function loadBoardFromAppview(
             }
           } else {
             await db.reactions.add(reactionData as Reaction);
+          }
+        }
+
+        // Store links
+        for (const l of data.links ?? []) {
+          const linkData: Omit<Link, "id"> = {
+            rkey: l.rkey,
+            did: l.did,
+            sourceTaskUri: l.sourceTaskUri,
+            targetTaskUri: l.targetTaskUri,
+            boardUri,
+            linkType: l.linkType,
+            createdAt: l.createdAt,
+            syncStatus: "synced",
+          };
+
+          const existing = await db.links
+            .where("[did+rkey]")
+            .equals([l.did, l.rkey])
+            .first();
+          if (existing?.id) {
+            if (existing.syncStatus === "pending") continue;
+            if (
+              !recordsEqual(existing, linkData, [
+                "sourceTaskUri",
+                "targetTaskUri",
+                "linkType",
+                "createdAt",
+              ])
+            ) {
+              await db.links.update(existing.id, linkData);
+            }
+          } else {
+            await db.links.add(linkData as Link);
           }
         }
       },

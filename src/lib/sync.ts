@@ -8,6 +8,7 @@ import {
   COMMENT_COLLECTION,
   APPROVAL_COLLECTION,
   REACTION_COLLECTION,
+  LINK_COLLECTION,
   buildAtUri,
 } from "./tid.js";
 import type {
@@ -18,6 +19,7 @@ import type {
   Comment,
   Approval,
   Reaction,
+  Link,
   BoardRecord,
   TaskRecord,
 } from "./types.js";
@@ -26,6 +28,7 @@ import { trustToRecord } from "./trust.js";
 import { commentToRecord } from "./comments.js";
 import { approvalToRecord } from "./approvals.js";
 import { reactionToRecord } from "./reactions.js";
+import { linkToRecord } from "./links.js";
 
 let syncInterval: ReturnType<typeof setInterval> | null = null;
 let syncInProgress = false;
@@ -274,6 +277,33 @@ async function syncPendingToPDSInner(agent: Agent, did: string): Promise<void> {
       }
     }
   }
+
+  // Sync pending links
+  const pendingLinks = await db.links
+    .where("syncStatus")
+    .equals("pending")
+    .filter((l) => l.did === did)
+    .toArray();
+
+  for (const link of pendingLinks) {
+    try {
+      await agent.com.atproto.repo.putRecord({
+        repo: did,
+        collection: LINK_COLLECTION,
+        rkey: link.rkey,
+        record: linkToRecord(link),
+        validate: false,
+      });
+      if (link.id) {
+        await db.links.update(link.id, { syncStatus: "synced" });
+      }
+    } catch (err) {
+      console.error("Failed to sync link to PDS:", err);
+      if (link.id && !isNetworkError(err)) {
+        await db.links.update(link.id, { syncStatus: "error" });
+      }
+    }
+  }
 }
 
 export async function deleteBoardFromPDS(
@@ -358,6 +388,27 @@ export async function deleteBoardFromPDS(
         });
       } catch (err) {
         console.error("Failed to delete reaction from PDS:", err);
+      }
+    }
+  }
+
+  // Delete links from PDS
+  const links = await db.links
+    .where("boardUri")
+    .equals(boardUri)
+    .filter((l) => l.did === did)
+    .toArray();
+
+  for (const link of links) {
+    if (link.syncStatus === "synced") {
+      try {
+        await agent.com.atproto.repo.deleteRecord({
+          repo: did,
+          collection: LINK_COLLECTION,
+          rkey: link.rkey,
+        });
+      } catch (err) {
+        console.error("Failed to delete link from PDS:", err);
       }
     }
   }
@@ -466,6 +517,24 @@ export async function deleteReactionFromPDS(
   }
 }
 
+export async function deleteLinkFromPDS(
+  agent: Agent,
+  did: string,
+  link: Link,
+): Promise<void> {
+  if (link.syncStatus === "synced") {
+    try {
+      await agent.com.atproto.repo.deleteRecord({
+        repo: did,
+        collection: LINK_COLLECTION,
+        rkey: link.rkey,
+      });
+    } catch (err) {
+      console.error("Failed to delete link from PDS:", err);
+    }
+  }
+}
+
 async function resetErrorsToPending(did: string): Promise<void> {
   const tables = [
     db.boards,
@@ -475,6 +544,7 @@ async function resetErrorsToPending(did: string): Promise<void> {
     db.comments,
     db.approvals,
     db.reactions,
+    db.links,
   ];
   for (const table of tables) {
     const errored = await (table as any)

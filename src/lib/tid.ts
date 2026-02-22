@@ -7,6 +7,7 @@ export const TRUST_COLLECTION = "dev.skyboard.trust";
 export const COMMENT_COLLECTION = "dev.skyboard.comment";
 export const APPROVAL_COLLECTION = "dev.skyboard.approval";
 export const REACTION_COLLECTION = "dev.skyboard.reaction";
+export const LINK_COLLECTION = "dev.skyboard.link";
 
 export function generateTID(): string {
   return TID.nextStr();
