@@ -235,7 +235,9 @@ export async function requireAgent(): Promise<{
   if (!result) {
     if (authInfo) {
       console.error(
-        "Session expired. Run `sb login " + authInfo.handle + "` to re-authenticate.",
+        "Session expired. Run `sb login " +
+          authInfo.handle +
+          "` to re-authenticate.",
       );
     } else {
       console.error("Not logged in. Run `sb login <handle>` first.");
