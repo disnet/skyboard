@@ -169,6 +169,7 @@ export interface AuthInfo {
   did: string;
   handle: string;
   service: string;
+  oauthPort?: number;
 }
 
 export function loadAuthInfo(): AuthInfo | null {
