@@ -150,7 +150,7 @@ export async function login(
           // fallback to default
         }
 
-        saveAuthInfo({ did, handle: resolvedHandle, service });
+        saveAuthInfo({ did, handle: resolvedHandle, service, oauthPort: port });
 
         res.writeHead(200, { "Content-Type": "text/html" });
         res.end(`
@@ -208,10 +208,11 @@ export async function getAgent(): Promise<{
   if (!authInfo) return null;
 
   try {
-    // We need to create a client to restore the session.
-    // Since we don't know the original port, use a dummy port — session
-    // restoration doesn't need the redirect_uri to match.
-    const client = createOAuthClient(0);
+    // Use the same port from the original login so the client_id matches.
+    // A mismatched client_id causes token refresh to fail after ~1 hour
+    // when the access token expires.
+    const port = authInfo.oauthPort ?? 0;
+    const client = createOAuthClient(port);
     const session = await client.restore(authInfo.did);
     const agent = new Agent(session);
     return { agent, did: authInfo.did, handle: authInfo.handle };
@@ -228,9 +229,16 @@ export async function requireAgent(): Promise<{
   did: string;
   handle: string;
 }> {
+  const authInfo = loadAuthInfo();
   const result = await getAgent();
   if (!result) {
-    console.error("Not logged in. Run `sb login <handle>` first.");
+    if (authInfo) {
+      console.error(
+        "Session expired. Run `sb login " + authInfo.handle + "` to re-authenticate.",
+      );
+    } else {
+      console.error("Not logged in. Run `sb login <handle>` first.");
+    }
     process.exit(1);
   }
   return result;
