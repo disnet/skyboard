@@ -7,6 +7,7 @@ import type {
 import { requestLocalLock } from "@atproto/oauth-client";
 import { createServer } from "node:http";
 import {
+  type AuthInfo,
   writeStateFile,
   readStateFile,
   deleteStateFile,
@@ -199,23 +200,23 @@ export async function login(
  * Get an authenticated Agent for the currently logged-in user.
  * Restores the OAuth session and returns an Agent that auto-refreshes tokens.
  */
-export async function getAgent(): Promise<{
+export async function getAgent(authInfo?: AuthInfo | null): Promise<{
   agent: Agent;
   did: string;
   handle: string;
 } | null> {
-  const authInfo = loadAuthInfo();
-  if (!authInfo) return null;
+  const info = authInfo ?? loadAuthInfo();
+  if (!info) return null;
 
   try {
     // Use the same port from the original login so the client_id matches.
     // A mismatched client_id causes token refresh to fail after ~1 hour
     // when the access token expires.
-    const port = authInfo.oauthPort ?? 0;
+    const port = info.oauthPort ?? 0;
     const client = createOAuthClient(port);
-    const session = await client.restore(authInfo.did);
+    const session = await client.restore(info.did);
     const agent = new Agent(session);
-    return { agent, did: authInfo.did, handle: authInfo.handle };
+    return { agent, did: info.did, handle: info.handle };
   } catch {
     return null;
   }
@@ -230,7 +231,7 @@ export async function requireAgent(): Promise<{
   handle: string;
 }> {
   const authInfo = loadAuthInfo();
-  const result = await getAgent();
+  const result = await getAgent(authInfo);
   if (!result) {
     if (authInfo) {
       console.error(
