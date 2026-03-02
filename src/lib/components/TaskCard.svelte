@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { MaterializedTask, Label } from "$lib/types.js";
+  import type { MaterializedTask, DisplayLabel } from "$lib/types.js";
   import { Marked } from "marked";
   import { getDraggedCard, setDraggedCard } from "$lib/drag-state.svelte.js";
   import { handleTouchStart } from "$lib/touch-drag.svelte.js";
@@ -54,7 +54,7 @@
     reactions?: Map<string, { count: number; userReacted: boolean }>;
     onreact?: (taskUri: string, emoji: string) => void;
     taskUri?: string;
-    boardLabels?: Label[];
+    boardLabels?: DisplayLabel[];
     onedit: (task: MaterializedTask) => void;
     readonly?: boolean;
     selected?: boolean;
@@ -236,8 +236,8 @@
 
   const taskLabels = $derived(
     task.effectiveLabelIds
-      .map((id) => boardLabels.find((l) => l.id === id))
-      .filter((l): l is Label => l !== undefined),
+      .map((id) => boardLabels.find((l) => l.key === id))
+      .filter((l): l is DisplayLabel => l !== undefined),
   );
 
   const renderedDescription = $derived(
@@ -281,7 +281,7 @@
           desc.slice(0, match.index + 1) +
           newChar +
           desc.slice(match.index + 2);
-        createOp(currentUserDid, task.sourceTask, task.boardUri, {
+        createOp(currentUserDid, task.sourceTask, task.boardUri!, {
           description: newDesc,
         });
         break;
@@ -328,7 +328,7 @@
       id: task.sourceTask.id,
       did: task.ownerDid,
       rkey: task.rkey,
-      columnId: task.effectiveColumnId,
+      columnId: task.effectiveColumnId ?? "",
     });
   }
 
@@ -355,7 +355,7 @@
         id: task.sourceTask.id,
         did: task.ownerDid,
         rkey: task.rkey,
-        columnId: task.effectiveColumnId,
+        columnId: task.effectiveColumnId ?? "",
       },
       () => {
         wasDragged = true;
@@ -424,7 +424,7 @@
   </div>
   {#if taskLabels.length > 0}
     <div class="task-labels">
-      {#each taskLabels as label (label.id)}
+      {#each taskLabels as label (label.key)}
         <span
           class="label-pill"
           style="background: {label.color}20; color: {label.color}; border-color: {label.color}40;"

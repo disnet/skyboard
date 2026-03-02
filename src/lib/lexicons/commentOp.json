@@ -1,0 +1,42 @@
+{
+  "lexicon": 1,
+  "id": "dev.skyboard.commentOp",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "An operation modifying a comment (only the comment author can edit)",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": ["targetCommentUri", "fields", "createdAt"],
+        "properties": {
+          "targetCommentUri": {
+            "type": "string",
+            "format": "at-uri",
+            "description": "AT URI of the comment this op targets"
+          },
+          "fields": {
+            "type": "ref",
+            "ref": "#commentOpFields",
+            "description": "The comment fields to change"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "Timestamp of the operation, used for LWW resolution"
+          }
+        }
+      }
+    },
+    "commentOpFields": {
+      "type": "object",
+      "description": "Subset of comment fields to override. Only present fields are applied.",
+      "properties": {
+        "text": {
+          "type": "string",
+          "maxLength": 10240
+        }
+      }
+    }
+  }
+}

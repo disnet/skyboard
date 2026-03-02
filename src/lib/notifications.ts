@@ -63,6 +63,7 @@ export async function generateCatchUpNotifications(
 
   for (const task of recentTasks) {
     if (task.did === currentUserDid) continue;
+    if (!task.boardUri) continue;
 
     const boardRkey = task.boardUri.split("/").pop();
     if (!boardRkey) continue;
@@ -86,6 +87,7 @@ export async function generateCatchUpNotifications(
 
   for (const comment of recentComments) {
     if (comment.did === currentUserDid) continue;
+    if (!comment.boardUri) continue;
 
     const boardRkey = comment.boardUri.split("/").pop();
     if (!boardRkey) continue;

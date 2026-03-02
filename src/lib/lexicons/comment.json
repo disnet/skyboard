@@ -4,11 +4,11 @@
   "defs": {
     "main": {
       "type": "record",
-      "description": "A comment on a task within a board",
+      "description": "A comment on a task. Task-scoped, not board-scoped.",
       "key": "tid",
       "record": {
         "type": "object",
-        "required": ["targetTaskUri", "boardUri", "text", "createdAt"],
+        "required": ["targetTaskUri", "text", "createdAt"],
         "properties": {
           "targetTaskUri": {
             "type": "string",
@@ -18,7 +18,7 @@
           "boardUri": {
             "type": "string",
             "format": "at-uri",
-            "description": "AT URI of the board this comment belongs to"
+            "description": "Legacy: AT URI of the board. Comments are now task-scoped."
           },
           "text": {
             "type": "string",

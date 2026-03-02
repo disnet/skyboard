@@ -55,7 +55,7 @@
   async function acceptTask(task: Task) {
     if (!auth.did) return;
     const taskUri = buildAtUri(task.did, TASK_COLLECTION, task.rkey);
-    await createApproval(auth.did, taskUri, boardUri);
+    await createApproval(auth.did, taskUri);
   }
 
   async function acceptComment(comment: Comment) {
@@ -65,7 +65,7 @@
       COMMENT_COLLECTION,
       comment.rkey,
     );
-    await createApproval(auth.did, commentUri, boardUri);
+    await createApproval(auth.did, commentUri);
   }
 
   async function block(blockedDid: string) {

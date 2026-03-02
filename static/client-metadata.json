@@ -3,7 +3,7 @@
   "client_name": "Skyboard",
   "client_uri": "https://skyboard.dev",
   "redirect_uris": ["https://skyboard.dev/"],
-  "scope": "atproto repo:dev.skyboard.board repo:dev.skyboard.task repo:dev.skyboard.op repo:dev.skyboard.trust repo:dev.skyboard.comment repo:dev.skyboard.approval repo:dev.skyboard.reaction",
+  "scope": "atproto repo:dev.skyboard.board repo:dev.skyboard.task repo:dev.skyboard.op repo:dev.skyboard.trust repo:dev.skyboard.comment repo:dev.skyboard.approval repo:dev.skyboard.reaction repo:dev.skyboard.placement repo:dev.skyboard.placementOp repo:dev.skyboard.taskOp repo:dev.skyboard.taskTrust repo:dev.skyboard.project repo:dev.skyboard.membership repo:dev.skyboard.assignment repo:dev.skyboard.projectTrust repo:dev.skyboard.label repo:dev.skyboard.projectOp repo:dev.skyboard.commentOp",
   "grant_types": ["authorization_code", "refresh_token"],
   "response_types": ["code"],
   "token_endpoint_auth_method": "none",

@@ -56,7 +56,7 @@ export function reactionToRecord(reaction: Reaction): ReactionRecord {
   return {
     $type: "dev.skyboard.reaction",
     targetTaskUri: reaction.targetTaskUri,
-    boardUri: reaction.boardUri,
+    ...(reaction.boardUri ? { boardUri: reaction.boardUri } : {}),
     emoji: reaction.emoji,
     createdAt: reaction.createdAt,
   };

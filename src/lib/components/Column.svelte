@@ -1,7 +1,7 @@
 <script lang="ts">
   import { db } from "$lib/db.js";
   import { generateKeyBetween } from "fractional-indexing";
-  import type { Column, Label, MaterializedTask } from "$lib/types.js";
+  import type { Column, DisplayLabel, MaterializedTask } from "$lib/types.js";
   import { createOp } from "$lib/ops.js";
   import { getActionStatus } from "$lib/permissions.js";
   import type { PermissionStatus } from "$lib/permissions.js";
@@ -49,7 +49,7 @@
       string,
       Map<string, { count: number; userReacted: boolean }>
     >;
-    boardLabels?: Label[];
+    boardLabels?: DisplayLabel[];
     onedit: (task: MaterializedTask) => void;
     onreact?: (taskUri: string, emoji: string) => void;
     readonly?: boolean;
@@ -82,8 +82,10 @@
 
   const sortedTasks = $derived(
     [...tasks].sort((a, b) => {
-      if (a.effectivePosition < b.effectivePosition) return -1;
-      if (a.effectivePosition > b.effectivePosition) return 1;
+      const posA = a.effectivePosition ?? "";
+      const posB = b.effectivePosition ?? "";
+      if (posA < posB) return -1;
+      if (posA > posB) return 1;
       return (a.rkey + a.did).localeCompare(b.rkey + b.did);
     }),
   );

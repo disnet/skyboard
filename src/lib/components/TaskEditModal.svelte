@@ -1,7 +1,13 @@
 <script lang="ts">
   import { untrack } from "svelte";
   import { db } from "$lib/db.js";
-  import type { MaterializedTask, Comment, Label, Column } from "$lib/types.js";
+  import type {
+    MaterializedTask,
+    Comment,
+    DisplayLabel,
+    EmbeddedLabel,
+    Column,
+  } from "$lib/types.js";
   import { createOp } from "$lib/ops.js";
   import { createComment, deleteComment } from "$lib/comments.js";
   import { getAuth } from "$lib/auth.svelte.js";
@@ -74,7 +80,7 @@
     approvedUris: Set<string>;
     comments?: Comment[];
     reactions?: Map<string, { count: number; userReacted: boolean }>;
-    boardLabels?: Label[];
+    boardLabels?: DisplayLabel[];
     boardUri?: string;
     columns?: Column[];
     onclose: () => void;
@@ -369,7 +375,7 @@
     const board = await db.boards.where("rkey").equals(boardRkey).first();
     if (!board?.id) return;
 
-    const newLabel: Label = {
+    const newLabel: EmbeddedLabel = {
       id: generateTID(),
       name: labelName,
       color: newLabelColor,
@@ -390,8 +396,8 @@
 
   const taskLabelsForDisplay = $derived(
     task.effectiveLabelIds
-      .map((id) => boardLabels.find((l) => l.id === id))
-      .filter((l): l is Label => l !== undefined),
+      .map((id) => boardLabels.find((l) => l.key === id))
+      .filter((l): l is DisplayLabel => l !== undefined),
   );
 
   let editorContainer: HTMLDivElement | undefined = $state();
@@ -531,7 +537,7 @@
     )
       fields.labelIds = [...editLabelIds];
     if (Object.keys(fields).length > 0) {
-      await createOp(currentUserDid, task.sourceTask, task.boardUri, fields);
+      await createOp(currentUserDid, task.sourceTask, boardUri, fields);
     }
   }
 
@@ -708,7 +714,7 @@
               <label>Labels</label>
             </div>
             <div class="label-pills">
-              {#each taskLabelsForDisplay as lbl (lbl.id)}
+              {#each taskLabelsForDisplay as lbl (lbl.key)}
                 <span
                   class="label-pill"
                   style="background: {lbl.color}20; color: {lbl.color}; border-color: {lbl.color}40;"
@@ -747,12 +753,12 @@
             {/if}
           </div>
           <div class="label-picker" class:disabled={editStatus === "denied"}>
-            {#each boardLabels as lbl (lbl.id)}
+            {#each boardLabels as lbl (lbl.key)}
               <button
                 class="label-toggle"
-                class:selected={editLabelIds.includes(lbl.id)}
+                class:selected={editLabelIds.includes(lbl.key)}
                 style="--label-color: {lbl.color};"
-                onclick={() => toggleLabel(lbl.id)}
+                onclick={() => toggleLabel(lbl.key)}
                 disabled={editStatus === "denied"}
               >
                 <span class="label-dot" style="background: {lbl.color};"></span>

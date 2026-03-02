@@ -19,6 +19,8 @@
     Board,
     Task,
     Op,
+    TaskOp,
+    TaskTrust,
     Trust,
     Comment,
     Approval,
@@ -26,6 +28,9 @@
     Block,
     MaterializedTask,
     FilterView,
+    DisplayLabel,
+    Assignment,
+    BoardOp,
   } from "$lib/types.js";
   import Column from "$lib/components/Column.svelte";
   import {
@@ -131,6 +136,21 @@
       .toArray();
   });
 
+  const allTaskOps = useLiveQuery<TaskOp[]>(() => {
+    if (!boardUri) return [];
+    // TaskOps are not board-scoped, so we fetch all that target tasks on this board
+    // For now, return all taskOps in the DB (they'll be filtered during materialization)
+    return db.taskOps.toArray();
+  });
+
+  const allTaskTrusts = useLiveQuery<TaskTrust[]>(() => {
+    return db.taskTrusts.toArray();
+  });
+
+  const allAssignments = useLiveQuery<Assignment[]>(() => {
+    return db.assignments.toArray();
+  });
+
   const blockedDids = $derived(
     new Set((allBlocks.current ?? []).map((b) => b.blockedDid)),
   );
@@ -141,8 +161,26 @@
 
   const boardOpen = $derived(board.current?.open ?? false);
 
+  const boardLabels: DisplayLabel[] = $derived(
+    (board.current?.labels ?? []).map((l) => ({
+      key: l.id,
+      name: l.name,
+      color: l.color,
+      description: l.description,
+    })),
+  );
+
+  // Approved URIs: only include approvals from board owner or board-trusted users
   const approvedUris = $derived(
-    new Set((allApprovals.current ?? []).map((a) => a.targetUri)),
+    new Set(
+      (allApprovals.current ?? [])
+        .filter(
+          (a) =>
+            a.did === board.current?.did ||
+            isTrusted(a.did, board.current?.did ?? "", ownerTrustedDids),
+        )
+        .map((a) => a.targetUri),
+    ),
   );
 
   const isBoardOwner = $derived(
@@ -157,6 +195,16 @@
   // Detect if reactions are failing to sync (likely a scope/auth issue requiring re-login)
   const hasReactionSyncErrors = $derived(
     (allReactions.current ?? []).some((r) => r.syncStatus === "error"),
+  );
+
+  // Detect if board ops are failing to sync
+  const allBoardOps = useLiveQuery<BoardOp[]>(() =>
+    auth.did
+      ? db.boardOps.where("did").equals(auth.did).toArray()
+      : Promise.resolve([]),
+  );
+  const hasBoardOpSyncErrors = $derived(
+    (allBoardOps.current ?? []).some((o) => o.syncStatus === "error"),
   );
 
   // Comment counts grouped by targetTaskUri — only count visible comments
@@ -215,15 +263,47 @@
     return map;
   });
 
+  // Build task trust map: taskUri → Set<trustedDid>
+  const taskTrustsByTask = $derived.by(() => {
+    const map = new Map<string, Set<string>>();
+    for (const trust of allTaskTrusts.current ?? []) {
+      let set = map.get(trust.taskUri);
+      if (!set) {
+        set = new Set();
+        map.set(trust.taskUri, set);
+      }
+      set.add(trust.trustedDid);
+    }
+    return map;
+  });
+
+  // Build assignment map: taskUri → Set<assigneeDid>
+  const assignmentsByTask = $derived.by(() => {
+    const map = new Map<string, Set<string>>();
+    for (const assignment of allAssignments.current ?? []) {
+      let set = map.get(assignment.taskUri);
+      if (!set) {
+        set = new Set();
+        map.set(assignment.taskUri, set);
+      }
+      set.add(assignment.assigneeDid);
+    }
+    return map;
+  });
+
   // Materialized view with LWW merge
   const materializedTasks = $derived.by(() => {
     if (!allTasks.current || !allOps.current || !board.current) return [];
     return materializeTasks(
       allTasks.current,
       allOps.current,
+      allTaskOps.current ?? [],
       ownerTrustedDids,
       auth.did ?? "",
       board.current.did,
+      taskTrustsByTask,
+      assignmentsByTask,
+      approvedUris,
     );
   });
 
@@ -293,7 +373,7 @@
             continue;
           }
         }
-        const list = map.get(task.effectiveColumnId);
+        const list = map.get(task.effectiveColumnId ?? "");
         if (list) list.push(task);
       }
     }
@@ -313,8 +393,10 @@
       const tasks = tasksByColumn.get(col.id) ?? [];
       result.push(
         [...tasks].sort((a, b) => {
-          if (a.effectivePosition < b.effectivePosition) return -1;
-          if (a.effectivePosition > b.effectivePosition) return 1;
+          const posA = a.effectivePosition ?? "";
+          const posB = b.effectivePosition ?? "";
+          if (posA < posB) return -1;
+          if (posA > posB) return 1;
           return (a.rkey + a.did).localeCompare(b.rkey + b.did);
         }),
       );
@@ -1259,6 +1341,22 @@
       </div>
     {/if}
 
+    {#if hasBoardOpSyncErrors && auth.isLoggedIn}
+      <div class="reauth-banner">
+        Board edit sync failed. You may need to sign out and re-login to grant
+        updated permissions.
+        <button
+          class="reauth-btn"
+          onclick={async () => {
+            await logout();
+            goto("/");
+          }}
+        >
+          Sign out
+        </button>
+      </div>
+    {/if}
+
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
       class="columns-container"
@@ -1279,7 +1377,7 @@
           {approvedUris}
           commentCounts={commentCountsByTask}
           {reactionsByTask}
-          boardLabels={board.current.labels ?? []}
+          {boardLabels}
           onedit={openTaskEditor}
           onreact={handleReact}
           readonly={!auth.isLoggedIn}
@@ -1339,7 +1437,7 @@
 
   {#if showFilterPanel}
     <FilterPanel
-      labels={board.current.labels ?? []}
+      labels={boardLabels}
       bind:titleFilter={filterTitle}
       bind:selectedLabelIds={filterLabelIds}
       bind:viewName
@@ -1352,7 +1450,7 @@
 
   {#if showQuickLabel && quickLabelTask && board.current && quickLabelAnchorRect}
     <QuickLabelPicker
-      labels={board.current.labels ?? []}
+      labels={boardLabels}
       activeLabelIds={quickLabelTask.effectiveLabelIds}
       anchorRect={quickLabelAnchorRect}
       ontogglelabel={handleQuickLabelToggle}
@@ -1366,7 +1464,7 @@
   {#if showQuickMove && quickMoveTask && quickMoveAnchorRect}
     <QuickMovePicker
       columns={sortedColumns}
-      currentColumnId={quickMoveTask.effectiveColumnId}
+      currentColumnId={quickMoveTask.effectiveColumnId ?? ""}
       anchorRect={quickMoveAnchorRect}
       onmove={handleQuickMove}
       onclose={() => {
@@ -1388,7 +1486,7 @@
       reactions={reactionsByTask.get(
         `at://${editingTask.ownerDid}/dev.skyboard.task/${editingTask.rkey}`,
       )}
-      boardLabels={board.current.labels ?? []}
+      {boardLabels}
       columns={sortedColumns}
       {boardUri}
       onclose={closeTaskEditor}

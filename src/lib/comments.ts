@@ -47,7 +47,7 @@ export function commentToRecord(comment: Comment): CommentRecord {
   return {
     $type: "dev.skyboard.comment",
     targetTaskUri: comment.targetTaskUri,
-    boardUri: comment.boardUri,
+    ...(comment.boardUri ? { boardUri: comment.boardUri } : {}),
     text: comment.text,
     createdAt: comment.createdAt,
   };

@@ -1,0 +1,51 @@
+{
+  "lexicon": 1,
+  "id": "dev.skyboard.projectOp",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "An operation modifying project-level fields (name, description, labels)",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": ["targetProjectUri", "fields", "createdAt"],
+        "properties": {
+          "targetProjectUri": {
+            "type": "string",
+            "format": "at-uri",
+            "description": "AT URI of the project this op targets"
+          },
+          "fields": {
+            "type": "ref",
+            "ref": "#projectOpFields",
+            "description": "The project fields to change"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "Timestamp of the operation, used for LWW resolution"
+          }
+        }
+      }
+    },
+    "projectOpFields": {
+      "type": "object",
+      "description": "Subset of project fields to override. Only present fields are applied.",
+      "properties": {
+        "name": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 2048
+        },
+        "labelUris": {
+          "type": "array",
+          "maxLength": 50,
+          "items": { "type": "string" }
+        }
+      }
+    }
+  }
+}

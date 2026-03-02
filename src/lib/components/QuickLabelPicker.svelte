@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Label } from "$lib/types.js";
+  import type { DisplayLabel } from "$lib/types.js";
 
   const GAP = 8;
   const PICKER_WIDTH = 220;
@@ -11,7 +11,7 @@
     ontogglelabel,
     onclose,
   }: {
-    labels: Label[];
+    labels: DisplayLabel[];
     activeLabelIds: string[];
     anchorRect: DOMRect;
     ontogglelabel: (id: string) => void;
@@ -57,7 +57,7 @@
     if (num >= 1 && num <= 9 && num <= labels.length) {
       e.preventDefault();
       e.stopPropagation();
-      ontogglelabel(labels[num - 1].id);
+      ontogglelabel(labels[num - 1].key);
     }
   }
 
@@ -91,13 +91,13 @@
     {#if labels.length === 0}
       <div class="empty">No labels on this board</div>
     {:else}
-      {#each labels as lbl, i (lbl.id)}
+      {#each labels as lbl, i (lbl.key)}
         <button
           class="label-option"
-          class:selected={activeLabelIds.includes(lbl.id)}
-          onclick={() => ontogglelabel(lbl.id)}
+          class:selected={activeLabelIds.includes(lbl.key)}
+          onclick={() => ontogglelabel(lbl.key)}
           role="option"
-          aria-selected={activeLabelIds.includes(lbl.id)}
+          aria-selected={activeLabelIds.includes(lbl.key)}
         >
           {#if i < 9}
             <kbd class="label-key">{i + 1}</kbd>
@@ -106,7 +106,7 @@
           {/if}
           <span class="label-dot" style="background: {lbl.color};"></span>
           <span class="label-name">{lbl.name}</span>
-          {#if activeLabelIds.includes(lbl.id)}
+          {#if activeLabelIds.includes(lbl.key)}
             <svg
               class="check"
               width="14"

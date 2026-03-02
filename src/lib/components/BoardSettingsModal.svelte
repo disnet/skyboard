@@ -2,7 +2,7 @@
   import { db } from "$lib/db.js";
   import { generateTID } from "$lib/tid.js";
   import { notifyPendingWrite } from "$lib/sync.js";
-  import type { Board, Column, Label } from "$lib/types.js";
+  import type { Board, Column, EmbeddedLabel } from "$lib/types.js";
 
   let {
     board,
@@ -18,7 +18,9 @@
   let description = $state(board.description ?? "");
   let columns = $state<Column[]>(board.columns.map((c) => ({ ...c })));
   let newColumnName = $state("");
-  let labels = $state<Label[]>((board.labels ?? []).map((l) => ({ ...l })));
+  let labels = $state<EmbeddedLabel[]>(
+    (board.labels ?? []).map((l) => ({ ...l })),
+  );
   let newLabelName = $state("");
   let newLabelColor = $state("#ef4444");
 

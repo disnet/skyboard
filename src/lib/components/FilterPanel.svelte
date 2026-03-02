@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Label } from "$lib/types.js";
+  import type { DisplayLabel } from "$lib/types.js";
 
   let {
     labels,
@@ -11,7 +11,7 @@
     ondelete = null,
     onclose,
   }: {
-    labels: Label[];
+    labels: DisplayLabel[];
     titleFilter: string;
     selectedLabelIds: string[];
     viewName: string;
@@ -80,19 +80,19 @@
           >
             No labels
           </button>
-          {#each labels as label (label.id)}
+          {#each labels as label (label.key)}
             <button
               class="label-pill"
-              class:selected={selectedLabelIds.includes(label.id)}
-              style="background: {selectedLabelIds.includes(label.id)
+              class:selected={selectedLabelIds.includes(label.key)}
+              style="background: {selectedLabelIds.includes(label.key)
                 ? label.color + '30'
                 : label.color +
                   '10'}; color: {label.color}; border-color: {selectedLabelIds.includes(
-                label.id,
+                label.key,
               )
                 ? label.color
                 : label.color + '40'};"
-              onclick={() => toggleLabel(label.id)}
+              onclick={() => toggleLabel(label.key)}
             >
               {label.name}
             </button>

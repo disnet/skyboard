@@ -4,21 +4,16 @@
   "defs": {
     "main": {
       "type": "record",
-      "description": "An approval for a specific task or comment on an open board",
+      "description": "An approval for content (task, comment, placement, taskOp). Scope is determined by who creates it (the approval author's DID).",
       "key": "tid",
       "record": {
         "type": "object",
-        "required": ["targetUri", "boardUri", "createdAt"],
+        "required": ["targetUri", "createdAt"],
         "properties": {
           "targetUri": {
             "type": "string",
             "format": "at-uri",
-            "description": "AT URI of the approved task or comment"
-          },
-          "boardUri": {
-            "type": "string",
-            "format": "at-uri",
-            "description": "AT URI of the board this approval belongs to"
+            "description": "AT URI of the content being approved"
           },
           "createdAt": {
             "type": "string",

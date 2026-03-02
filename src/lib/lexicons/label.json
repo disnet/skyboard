@@ -1,0 +1,37 @@
+{
+  "lexicon": 1,
+  "id": "dev.skyboard.label",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "A standalone label that can be referenced by boards, projects, and tasks",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": ["name", "color", "createdAt"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 256,
+            "description": "Display name of the label"
+          },
+          "color": {
+            "type": "string",
+            "maxLength": 32,
+            "description": "Hex color code for the label"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 1024,
+            "description": "Optional description of the label"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "When the label was created"
+          }
+        }
+      }
+    }
+  }
+}

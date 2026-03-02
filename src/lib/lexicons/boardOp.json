@@ -1,0 +1,59 @@
+{
+  "lexicon": 1,
+  "id": "dev.skyboard.boardOp",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "An operation modifying board-level fields (name, description, columns, labels, open flag)",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": ["targetBoardUri", "fields", "createdAt"],
+        "properties": {
+          "targetBoardUri": {
+            "type": "string",
+            "format": "at-uri",
+            "description": "AT URI of the board this op targets"
+          },
+          "fields": {
+            "type": "ref",
+            "ref": "#boardOpFields",
+            "description": "The board fields to change"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "Timestamp of the operation, used for LWW resolution"
+          }
+        }
+      }
+    },
+    "boardOpFields": {
+      "type": "object",
+      "description": "Subset of board fields to override. Only present fields are applied.",
+      "properties": {
+        "name": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 2048
+        },
+        "columns": {
+          "type": "array",
+          "maxLength": 20,
+          "items": { "type": "ref", "ref": "dev.skyboard.board#column" }
+        },
+        "labelUris": {
+          "type": "array",
+          "maxLength": 50,
+          "items": { "type": "string", "format": "at-uri" }
+        },
+        "open": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

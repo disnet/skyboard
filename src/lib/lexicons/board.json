@@ -31,7 +31,13 @@
             "type": "array",
             "maxLength": 50,
             "items": { "type": "ref", "ref": "#label" },
-            "description": "Labels available on this board"
+            "description": "Deprecated: use labelUris. Embedded labels for backward compat."
+          },
+          "labelUris": {
+            "type": "array",
+            "maxLength": 50,
+            "items": { "type": "string", "format": "at-uri" },
+            "description": "AT URIs of standalone label records"
           },
           "open": {
             "type": "boolean",
@@ -62,6 +68,10 @@
           "type": "integer",
           "minimum": 0,
           "description": "Sort order of the column"
+        },
+        "archived": {
+          "type": "boolean",
+          "description": "If true, the column is hidden from the board but its ID remains valid for existing placements"
         }
       }
     },

@@ -7,13 +7,11 @@ import { notifyPendingWrite } from "./sync.js";
 export async function createApproval(
   ownerDid: string,
   targetUri: string,
-  boardUri: string,
 ): Promise<void> {
   await db.approvals.add({
     rkey: generateTID(),
     did: ownerDid,
     targetUri,
-    boardUri,
     createdAt: new Date().toISOString(),
     syncStatus: "pending",
   });
@@ -45,7 +43,6 @@ export function approvalToRecord(approval: Approval): ApprovalRecord {
   return {
     $type: "dev.skyboard.approval",
     targetUri: approval.targetUri,
-    boardUri: approval.boardUri,
     createdAt: approval.createdAt,
   };
 }

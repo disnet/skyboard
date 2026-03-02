@@ -1,0 +1,32 @@
+{
+  "lexicon": 1,
+  "id": "dev.skyboard.membership",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "Links a task to a project",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": ["taskUri", "projectUri", "createdAt"],
+        "properties": {
+          "taskUri": {
+            "type": "string",
+            "format": "at-uri",
+            "description": "AT URI of the task"
+          },
+          "projectUri": {
+            "type": "string",
+            "format": "at-uri",
+            "description": "AT URI of the project"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "When the membership was created"
+          }
+        }
+      }
+    }
+  }
+}

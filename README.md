@@ -15,9 +15,9 @@ with collaborators. The browser fetches the full board state from the appview in
 a single request and subscribes to real-time updates via WebSocket.
 
 All data is stored locally in IndexedDB (via Dexie). Writes (creating tasks,
-editing, commenting) go to Dexie first, then background sync pushes them to
-the user's PDS. The appview picks up PDS commits via Jetstream and notifies
-connected clients.
+placing them on boards, editing, commenting) go to Dexie first, then background
+sync pushes them to the user's PDS. The appview picks up PDS commits via
+Jetstream and notifies connected clients.
 
 ## Architecture
 
@@ -36,13 +36,13 @@ own PDS.
  │           │ user action                      │ render           │
  │           ▼                                  │                  │
  │   ┌───────────────────┐          ┌───────────┴──────────────┐   │
- │   │  Dexie (IndexedDB)│─────────▶│   materializeTasks()     │   │
+ │   │  Dexie (IndexedDB)│─────────▶│   materialize*()         │   │
  │   │                   │ liveQuery│                          │   │
- │   │  boards           │          │  group ops by task       │   │
- │   │  tasks            │          │  filter by trust +       │   │
- │   │  ops              │          │    permissions           │   │
- │   │  trust            │          │  per-field LWW merge     │   │
- │   │                   │          │  → MaterializedTask[]    │   │
+ │   │  boards,tasks     │          │  group ops by target     │   │
+ │   │  placements       │          │  filter by trust         │   │
+ │   │  taskOps,placOps  │          │  per-field LWW merge     │   │
+ │   │  trusts,taskTrusts│          │  → MaterializedTask[]    │   │
+ │   │  projects,...     │          │  → MaterializedPlacement│   │
  │   │  (syncStatus:     │          └──────────────────────────┘   │
  │   │   pending/synced) │                                         │
  │   └──┬──────────▲─────┘                                         │
@@ -60,8 +60,10 @@ own PDS.
  │   at://did:plc:xxx/          │      │  PDS backfill         │
  │     dev.skyboard.board/*     │      │  SQLite cache         │
  │     dev.skyboard.task/*      │      └───────────┬───────────┘
- │     dev.skyboard.op/*        │                  │
- │     dev.skyboard.trust/*     │                  │ subscribes
+ │     dev.skyboard.placement/* │                  │
+ │     dev.skyboard.taskOp/*    │                  │ subscribes
+ │     dev.skyboard.trust/*     │                  │
+ │     ...                      │                  │
  └──────────────┬───────────────┘                  │
                 │ commit events                    │
                 ▼                                  │
@@ -84,17 +86,17 @@ participant's PDS. Ops reference tasks in any repo via AT URI.
  │                           │  │                        │  │                        │
  │  ┌───────────────────┐    │  │                        │  │                        │
  │  │ Board             │    │  │                        │  │                        │
- │  │ columns, perms    │    │  │                        │  │                        │
+ │  │ columns, labels   │    │  │                        │  │                        │
  │  └───────────────────┘    │  │                        │  │                        │
  │                           │  │                        │  │                        │
- │  ┌────────┐ ┌────────┐    │  │  ┌────────┐ ┌────────┐ │  │  ┌────────┐ ┌────────┐ │
- │  │ Tasks  │ │  Ops   │    │  │  │ Tasks  │ │  Ops   │ │  │  │ Tasks  │ │  Ops   │ │
- │  └───┬────┘ └────────┘    │  │  └────────┘ └───┬────┘ │  │  └────────┘ └───┬────┘ │
- │      │                    │  │                 │      │  │                 │      │
- │  ┌───┴────────────────┐   │  │            ┌────┘      │  │            ┌────┘      │
- │  │ Trust              │   │  │            │           │  │            │           │
- │  │ └ Bob ✓            │   │  │            │           │  │            │           │
- │  └────────────────────┘   │  │            │           │  │            │           │
+ │  ┌────────┐ ┌──────────┐  │  │  ┌────────┐ ┌───────┐ │  │  ┌────────┐ ┌───────┐ │
+ │  │ Tasks  │ │Placements│  │  │  │ Tasks  │ │TaskOps│ │  │  │ Tasks  │ │TaskOps│ │
+ │  └───┬────┘ └──────────┘  │  │  └────────┘ └──┬────┘ │  │  └────────┘ └──┬────┘ │
+ │      │                    │  │                 │      │  │                │      │
+ │  ┌───┴──────┐ ┌────────┐  │  │           ┌────┘      │  │           ┌────┘      │
+ │  │ Trust    │ │TaskTrust│  │  │           │           │  │           │           │
+ │  │ └ Bob ✓  │ │└ Bob ✓  │  │  │           │           │  │           │           │
+ │  └──────────┘ └────────┘  │  │           │           │  │           │           │
  └───────────────────────────┘  └────────────┼───────────┘  └────────────┼───────────┘
           │                                  │                           │
           │     ┌────────────────────────────┘                           │
@@ -129,24 +131,52 @@ participant's PDS. Ops reference tasks in any repo via AT URI.
 
 ## Data model
 
-There are four record types, each stored as AT Protocol records in the user's
-repo:
+The key design principle is **separation of concerns**: tasks are standalone
+entities, and their placement on boards is a separate record. This enables tasks
+to appear on multiple boards and supports independent trust at both the board
+and task level.
 
-- **Board** (`dev.skyboard.board`) — name, description, column configuration,
-  and permission rules. Owned by whoever created it.
-- **Task** (`dev.skyboard.task`) — a card on the board with title, description,
-  column, and fractional index position. Owned by whoever created it.
-  Write-once: the record captures the initial state at creation and is never
-  updated directly.
-- **Op** (`dev.skyboard.op`) — an edit to any task, including your own. Contains
-  partial field updates (title, description, columnId, position) and targets a
-  task by AT URI.
-- **Trust** (`dev.skyboard.trust`) — a per-board grant allowing another user's
-  ops to take effect on your view of the board.
+### Core record types
+
+- **Board** (`dev.skyboard.board`) — name, columns, labels, open flag. Owned by
+  whoever created it.
+- **Task** (`dev.skyboard.task`) — title, description, status (open/closed),
+  open flag, labelIds. Tasks are standalone — they don't embed board, column,
+  or position.
+- **Placement** (`dev.skyboard.placement`) — links a task to a board + column +
+  position. This is how tasks appear on boards. A task can have placements on
+  multiple boards.
+- **Project** (`dev.skyboard.project`) — a flat collection with name,
+  description, labels. Groups tasks outside of boards.
+- **Membership** (`dev.skyboard.membership`) — links a task to a project.
+- **Assignment** (`dev.skyboard.assignment`) — assigns a user (by DID) to a task.
+
+### Op types (CRDT-style per-field LWW edits)
+
+- **Op** (`dev.skyboard.op`) — legacy combined op targeting a task within a
+  board context. Kept for backward compatibility.
+- **TaskOp** (`dev.skyboard.taskOp`) — task-level field changes (title,
+  description, labelIds, status). No board context needed.
+- **PlacementOp** (`dev.skyboard.placementOp`) — placement-level field changes
+  (columnId, position, removed).
+
+### Trust types
+
+- **Trust** (`dev.skyboard.trust`) — board-level trust grant.
+- **TaskTrust** (`dev.skyboard.taskTrust`) — task-level trust grant allowing
+  another user to edit a specific task via TaskOps.
+- **ProjectTrust** (`dev.skyboard.projectTrust`) — project-level trust grant.
+
+### Other record types
+
+- **Comment** (`dev.skyboard.comment`) — task-scoped comment.
+- **Reaction** (`dev.skyboard.reaction`) — task-scoped emoji reaction.
+- **Approval** (`dev.skyboard.approval`) — approves a task, comment, or
+  placement at the board or task level.
 
 Here's how two users coordinate on a single board. Each user can only write
-records to their own PDS — cross-user edits work by writing Ops that reference
-another user's Task by AT URI.
+records to their own PDS — cross-user edits work by writing ops that reference
+another user's records by AT URI.
 
 ```
   Alice's PDS (did:plc:alice)              Bob's PDS (did:plc:bob)
@@ -155,28 +185,33 @@ another user's Task by AT URI.
   Board                                    (Alice owns the board)
   ├ name: "Sprint Board"
   ├ columns: [Todo, Doing, Done]
-  └ permissions: [{move_task: trusted}]
+  └ open: false
 
   Task                                     Task
   ├ title: "Fix login bug"                 ├ title: "Add dark mode"
+  └ status: open                           └ open: true  (anyone can edit)
+
+  Placement                                Placement
+  ├ taskUri: at://alice/task/...           ├ taskUri: at://bob/task/...
+  ├ boardUri: at://alice/board/...         ├ boardUri: at://alice/board/...
   ├ columnId: todo                         ├ columnId: todo
   └ position: "a0"                         └ position: "a1"
        ▲                                        ▲
        │ target                                 │ target
        │                                        │
-  Op   │  (Alice moves her task)           Op   │  (Bob edits his own task)
-  ├ target: at://alice/task/...            ├ target: at://bob/task/...
+  PlacementOp (Alice moves her task)       TaskOp  (Bob edits his own task)
+  ├ target: at://alice/placement/...       ├ target: at://bob/task/...
   ├ columnId: doing                        ├ description: "Support light/dark"
-  └ updatedAt: T1                          └ updatedAt: T3
+  └ createdAt: T1                          └ createdAt: T3
 
-                                           Op      (Bob edits Alice's task)
-                                           ├ target: at://alice/task/...  ◄─ cross-repo
+                                           TaskOp  (Bob edits Alice's task)
+                                           ├ target: at://alice/task/... ◄─ cross-repo
                                            ├ title: "Fix auth bug"
-                                           └ updatedAt: T2
+                                           └ createdAt: T2
 
-  Trust  (Alice grants Bob access)
-  ├ board: at://alice/board/...
-  └ subject: did:plc:bob
+  Trust  (Alice grants Bob board access)   TaskTrust  (Alice grants Bob on task)
+  ├ board: at://alice/board/...            ├ taskUri: at://alice/task/...
+  └ trustedDid: did:plc:bob               └ trustedDid: did:plc:bob
 
 
   Materialization (runs in each browser)
@@ -184,38 +219,51 @@ another user's Task by AT URI.
 
   For Alice's task ("Fix login bug"):
 
-    base     title: "Fix login bug"   columnId: todo   position: "a0"
-               │                        │
-    + op T1    │                        └──▶ doing     (Alice, owner)
-    + op T2    └──▶ "Fix auth bug"                     (Bob, trusted)
-               ─────────────────────    ────────────   ─────────────
-    result     title: "Fix auth bug"   col: doing      position: "a0"
+    base task    title: "Fix login bug"   status: open
+                   │
+    + taskOp T2    └──▶ "Fix auth bug"    (Bob, task-trusted)
+                   ────────────────────   ───────────────────
+    result         title: "Fix auth bug"  status: open
+
+  For Alice's placement on "Sprint Board":
+
+    base         columnId: todo   position: "a0"
+                   │
+    + placOp T1    └──▶ doing     (Alice, board owner)
+                   ────────────   ─────────────
+    result         col: doing     position: "a0"
 
                Per-field LWW: each field resolved independently by timestamp.
-               Bob's op applied because Alice published a Trust record for him.
-               Without trust, it would appear in the Proposals panel instead.
 ```
 
 ### Why ops?
 
-You can only write to your own AT Protocol repo. If you want to move or edit
-someone else's card, you publish an Op record to your repo proposing the change.
-The board owner (and other participants who trust you) will see your edit
-applied; those who don't trust you will see it as a pending proposal.
+You can only write to your own AT Protocol repo. If you want to edit someone
+else's task or move a placement, you publish an op record to your repo proposing
+the change. Users who trust you will see the edit applied; those who don't will
+see it as a pending proposal.
 
-All task edits go through ops — even edits to your own tasks. This ensures
-per-field LWW timestamps are always correct. A single `updatedAt` on the task
-record can't distinguish which fields actually changed, so a direct write to one
-field (e.g. title) would poison the timestamp for all fields, silently reverting
-concurrent ops on other fields (e.g. a collaborator's column move). By routing
-all edits through ops, each field change carries its own timestamp and LWW
-resolves correctly.
+Task-level edits (title, description, status, labels) go through **TaskOps**,
+which are governed by task-level trust. Board-level edits (column, position,
+removal) go through **PlacementOps**, governed by board-level trust. This
+separation means a task author can grant edit access to collaborators without
+involving the board owner, and vice versa.
+
+All edits go through ops — even edits to your own records. This ensures
+per-field LWW timestamps are always correct. Each field change carries its own
+timestamp so LWW resolves correctly without conflicts.
 
 ## Conflict resolution
 
 Edits are resolved using **per-field last-writer-wins** (LWW) with ISO 8601
-timestamps. Each mutable field — `title`, `description`, `columnId`, `position`
-— is independently resolved. The value with the latest timestamp wins.
+timestamps. Two separate materialization passes run:
+
+- **Task materialization**: fields `title`, `description`, `labelIds`, `status`
+  resolved from legacy Ops + TaskOps
+- **Placement materialization**: fields `columnId`, `position`, `removed`
+  resolved from PlacementOps
+
+Each field is independently resolved — the value with the latest timestamp wins.
 
 This is formally an **LWW-Register Map**, a well-known CRDT. The merge function
 is commutative, associative, and idempotent, so all clients converge to the same
@@ -233,72 +281,51 @@ single op with the new position is sufficient.
 
 [fractional indexing]: https://www.npmjs.com/package/fractional-indexing
 
-A trust layer sits on top: only ops from the task owner, the current user, or
-explicitly trusted users are merged into the effective board state. Untrusted
-ops are stored but shown separately in a Proposals panel. Once trust converges
-(all participants agree on who to trust), the underlying LWW properties
-guarantee full convergence.
+A trust layer sits on top: only ops from trusted sources are merged into the
+effective state. Untrusted ops are stored but shown separately in a Proposals
+panel. Once trust converges, the underlying LWW properties guarantee full
+convergence.
 
 ## Trust system
 
+Trust operates at two levels:
+
+### Board-level trust
+
 - The board owner's edits are always trusted on their own board.
 - Your own ops are always applied in your local view.
-- Other users require an explicit trust grant (per-board) before their ops
-  affect your view.
+- Other users require an explicit **Trust** grant (per-board) before their
+  PlacementOps and legacy Ops affect your view.
 - Joining a board auto-trusts the board owner.
-- Untrusted ops and tasks from unknown users appear in the Proposals panel,
-  where you can review them and grant trust.
 
-## Board permissions
+### Task-level trust
 
-On top of the trust system, board authors can configure fine-grained permission
-rules that control what operations are allowed and by whom. Permissions are
-stored on the board record and enforced during operation materialization.
+- The task author's edits are always trusted on their own task.
+- Other users can edit a task if they have a **TaskTrust** grant from the task
+  author, or if the task's `open` flag is true (anyone can edit).
+- This is independent of board-level trust — a task author can grant edit access
+  without involving the board owner.
 
-### Operations
+### Open boards and proposals
 
-Five operation types can be independently controlled:
-
-- `create_task` — creating new cards on the board
-- `edit_title` — changing a card's title
-- `edit_description` — changing a card's description
-- `move_task` — moving a card to a different column
-- `reorder` — reordering cards within a column
-
-### Scopes
-
-Each operation is assigned one of three scopes:
-
-- **author_only** — only the board owner can perform the operation
-- **trusted** — the board owner and explicitly trusted users (default for all
-  operations)
-- **anyone** — any user can perform the operation
-
-### Per-column rules
-
-Permission rules can optionally be scoped to specific columns, allowing patterns
-like "anyone can create tasks in the Inbox column, but only trusted users can
-move tasks to Done."
-
-### Pending operations
-
-When a user performs an action they don't have full permission for (e.g. scope
-is `trusted` but the user hasn't been trusted yet), the operation is stored but
-shown greyed out as pending, awaiting board author approval.
+- Boards with `open: true` allow untrusted users to create tasks and comments,
+  which appear in the Proposals panel pending approval.
+- Untrusted ops from unknown users also appear in Proposals for review.
 
 ## Sync architecture
 
 ```
 Reading board data
   → Browser fetches GET /board/:did/:rkey from appview
-  → Appview returns board + all tasks, ops, trusts, comments, etc.
+  → Appview returns board + tasks, placements, taskOps, placementOps,
+    trusts, taskTrusts, comments, approvals, reactions, assignments
   → Response upserted into Dexie (local pending records take priority)
   → Browser subscribes to appview WebSocket for real-time updates
   → On update notification, re-fetches board from appview
 
-Writing (task creation, edits, comments, etc.)
-  → db.tasks.add() / db.ops.add() in IndexedDB (syncStatus: 'pending')
-  → materializeTasks merges base task + ops via per-field LWW
+Writing (task creation, edits, placements, comments, etc.)
+  → db.tasks.add() / db.taskOps.add() / etc. in IndexedDB (syncStatus: 'pending')
+  → materializeTasks + materializePlacements merge via per-field LWW
   → UI updates immediately from local state
   → Background sync pushes record to user's PDS via putRecord
   → PDS commit picked up by Jetstream → appview → WebSocket notification
@@ -427,10 +454,10 @@ sb whoami --json
 
 The CLI authenticates via OAuth and fetches board data from the appview — no
 local database. Each read command hits the appview for the full board state,
-runs the same `materializeTasks()` merge logic as the web app, and displays
-the result. Write commands (`new`, `mv`, `edit`, `comment`) create AT Protocol
-records (tasks, ops, comments) in your PDS, which the appview picks up via
-Jetstream and serves to other clients.
+runs the same materialization logic as the web app, and displays the result.
+Write commands (`new`, `mv`, `edit`, `comment`) create AT Protocol records
+(tasks, placements, taskOps, placementOps, comments) in your PDS, which the
+appview picks up via Jetstream and serves to other clients.
 
 ## Development
 
