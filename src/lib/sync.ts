@@ -8,6 +8,14 @@ import {
   COMMENT_COLLECTION,
   APPROVAL_COLLECTION,
   REACTION_COLLECTION,
+  PLACEMENT_COLLECTION,
+  PLACEMENT_OP_COLLECTION,
+  TASK_OP_COLLECTION,
+  TASK_TRUST_COLLECTION,
+  PROJECT_COLLECTION,
+  MEMBERSHIP_COLLECTION,
+  ASSIGNMENT_COLLECTION,
+  PROJECT_TRUST_COLLECTION,
   buildAtUri,
 } from "./tid.js";
 import type {
@@ -18,8 +26,24 @@ import type {
   Comment,
   Approval,
   Reaction,
+  Placement,
+  PlacementOp,
+  TaskOp,
+  TaskTrust,
+  Project,
+  Membership,
+  Assignment,
+  ProjectTrust,
   BoardRecord,
   TaskRecord,
+  PlacementRecord,
+  PlacementOpRecord,
+  TaskOpRecord,
+  TaskTrustRecord,
+  ProjectRecord,
+  MembershipRecord,
+  AssignmentRecord,
+  ProjectTrustRecord,
 } from "./types.js";
 import { opToRecord } from "./ops.js";
 import { trustToRecord } from "./trust.js";
@@ -54,15 +78,97 @@ function taskToRecord(task: Task): TaskRecord {
     $type: "dev.skyboard.task",
     title: task.title,
     ...(task.description ? { description: task.description } : {}),
-    columnId: task.columnId,
-    boardUri: task.boardUri,
-    ...(task.position ? { position: task.position } : {}),
+    ...(task.status ? { status: task.status } : {}),
+    ...(task.open ? { open: task.open } : {}),
     ...(task.labelIds && task.labelIds.length > 0
       ? { labelIds: task.labelIds }
       : {}),
+    ...(task.forkedFrom ? { forkedFrom: task.forkedFrom } : {}),
+    ...(task.columnId ? { columnId: task.columnId } : {}),
+    ...(task.boardUri ? { boardUri: task.boardUri } : {}),
+    ...(task.position ? { position: task.position } : {}),
     order: task.order ?? 0,
     createdAt: task.createdAt,
     ...(task.updatedAt ? { updatedAt: task.updatedAt } : {}),
+  };
+}
+
+function placementToRecord(placement: Placement): PlacementRecord {
+  return {
+    $type: "dev.skyboard.placement",
+    taskUri: placement.taskUri,
+    boardUri: placement.boardUri,
+    columnId: placement.columnId,
+    position: placement.position,
+    createdAt: placement.createdAt,
+  };
+}
+
+function placementOpToRecord(op: PlacementOp): PlacementOpRecord {
+  return {
+    $type: "dev.skyboard.placementOp",
+    targetPlacementUri: op.targetPlacementUri,
+    boardUri: op.boardUri,
+    fields: op.fields,
+    createdAt: op.createdAt,
+  };
+}
+
+function taskOpToRecord(op: TaskOp): TaskOpRecord {
+  return {
+    $type: "dev.skyboard.taskOp",
+    targetTaskUri: op.targetTaskUri,
+    fields: op.fields,
+    createdAt: op.createdAt,
+  };
+}
+
+function taskTrustToRecord(trust: TaskTrust): TaskTrustRecord {
+  return {
+    $type: "dev.skyboard.taskTrust",
+    taskUri: trust.taskUri,
+    trustedDid: trust.trustedDid,
+    createdAt: trust.createdAt,
+  };
+}
+
+function projectToRecord(project: Project): ProjectRecord {
+  return {
+    $type: "dev.skyboard.project",
+    name: project.name,
+    ...(project.description ? { description: project.description } : {}),
+    ...(project.labels && project.labels.length > 0
+      ? { labels: project.labels }
+      : {}),
+    ...(project.open ? { open: project.open } : {}),
+    createdAt: project.createdAt,
+  };
+}
+
+function membershipToRecord(membership: Membership): MembershipRecord {
+  return {
+    $type: "dev.skyboard.membership",
+    taskUri: membership.taskUri,
+    projectUri: membership.projectUri,
+    createdAt: membership.createdAt,
+  };
+}
+
+function assignmentToRecord(assignment: Assignment): AssignmentRecord {
+  return {
+    $type: "dev.skyboard.assignment",
+    taskUri: assignment.taskUri,
+    assigneeDid: assignment.assigneeDid,
+    createdAt: assignment.createdAt,
+  };
+}
+
+function projectTrustToRecord(trust: ProjectTrust): ProjectTrustRecord {
+  return {
+    $type: "dev.skyboard.projectTrust",
+    projectUri: trust.projectUri,
+    trustedDid: trust.trustedDid,
+    createdAt: trust.createdAt,
   };
 }
 
@@ -274,6 +380,222 @@ async function syncPendingToPDSInner(agent: Agent, did: string): Promise<void> {
       }
     }
   }
+
+  // Sync pending placements
+  const pendingPlacements = await db.placements
+    .where("syncStatus")
+    .equals("pending")
+    .filter((p) => p.did === did)
+    .toArray();
+
+  for (const placement of pendingPlacements) {
+    try {
+      await agent.com.atproto.repo.putRecord({
+        repo: did,
+        collection: PLACEMENT_COLLECTION,
+        rkey: placement.rkey,
+        record: placementToRecord(placement),
+        validate: false,
+      });
+      if (placement.id) {
+        await db.placements.update(placement.id, { syncStatus: "synced" });
+      }
+    } catch (err) {
+      console.error("Failed to sync placement to PDS:", err);
+      if (placement.id && !isNetworkError(err)) {
+        await db.placements.update(placement.id, { syncStatus: "error" });
+      }
+    }
+  }
+
+  // Sync pending placement ops
+  const pendingPlacementOps = await db.placementOps
+    .where("syncStatus")
+    .equals("pending")
+    .filter((o) => o.did === did)
+    .toArray();
+
+  for (const op of pendingPlacementOps) {
+    try {
+      await agent.com.atproto.repo.putRecord({
+        repo: did,
+        collection: PLACEMENT_OP_COLLECTION,
+        rkey: op.rkey,
+        record: placementOpToRecord(op),
+        validate: false,
+      });
+      if (op.id) {
+        await db.placementOps.update(op.id, { syncStatus: "synced" });
+      }
+    } catch (err) {
+      console.error("Failed to sync placement op to PDS:", err);
+      if (op.id && !isNetworkError(err)) {
+        await db.placementOps.update(op.id, { syncStatus: "error" });
+      }
+    }
+  }
+
+  // Sync pending task ops
+  const pendingTaskOps = await db.taskOps
+    .where("syncStatus")
+    .equals("pending")
+    .filter((o) => o.did === did)
+    .toArray();
+
+  for (const op of pendingTaskOps) {
+    try {
+      await agent.com.atproto.repo.putRecord({
+        repo: did,
+        collection: TASK_OP_COLLECTION,
+        rkey: op.rkey,
+        record: taskOpToRecord(op),
+        validate: false,
+      });
+      if (op.id) {
+        await db.taskOps.update(op.id, { syncStatus: "synced" });
+      }
+    } catch (err) {
+      console.error("Failed to sync task op to PDS:", err);
+      if (op.id && !isNetworkError(err)) {
+        await db.taskOps.update(op.id, { syncStatus: "error" });
+      }
+    }
+  }
+
+  // Sync pending task trusts
+  const pendingTaskTrusts = await db.taskTrusts
+    .where("syncStatus")
+    .equals("pending")
+    .filter((t) => t.did === did)
+    .toArray();
+
+  for (const trust of pendingTaskTrusts) {
+    try {
+      await agent.com.atproto.repo.putRecord({
+        repo: did,
+        collection: TASK_TRUST_COLLECTION,
+        rkey: trust.rkey,
+        record: taskTrustToRecord(trust),
+        validate: false,
+      });
+      if (trust.id) {
+        await db.taskTrusts.update(trust.id, { syncStatus: "synced" });
+      }
+    } catch (err) {
+      console.error("Failed to sync task trust to PDS:", err);
+      if (trust.id && !isNetworkError(err)) {
+        await db.taskTrusts.update(trust.id, { syncStatus: "error" });
+      }
+    }
+  }
+
+  // Sync pending projects
+  const pendingProjects = await db.projects
+    .where("syncStatus")
+    .equals("pending")
+    .filter((p) => p.did === did)
+    .toArray();
+
+  for (const project of pendingProjects) {
+    try {
+      await agent.com.atproto.repo.putRecord({
+        repo: did,
+        collection: PROJECT_COLLECTION,
+        rkey: project.rkey,
+        record: projectToRecord(project),
+        validate: false,
+      });
+      if (project.id) {
+        await db.projects.update(project.id, { syncStatus: "synced" });
+      }
+    } catch (err) {
+      console.error("Failed to sync project to PDS:", err);
+      if (project.id && !isNetworkError(err)) {
+        await db.projects.update(project.id, { syncStatus: "error" });
+      }
+    }
+  }
+
+  // Sync pending memberships
+  const pendingMemberships = await db.memberships
+    .where("syncStatus")
+    .equals("pending")
+    .filter((m) => m.did === did)
+    .toArray();
+
+  for (const membership of pendingMemberships) {
+    try {
+      await agent.com.atproto.repo.putRecord({
+        repo: did,
+        collection: MEMBERSHIP_COLLECTION,
+        rkey: membership.rkey,
+        record: membershipToRecord(membership),
+        validate: false,
+      });
+      if (membership.id) {
+        await db.memberships.update(membership.id, { syncStatus: "synced" });
+      }
+    } catch (err) {
+      console.error("Failed to sync membership to PDS:", err);
+      if (membership.id && !isNetworkError(err)) {
+        await db.memberships.update(membership.id, { syncStatus: "error" });
+      }
+    }
+  }
+
+  // Sync pending assignments
+  const pendingAssignments = await db.assignments
+    .where("syncStatus")
+    .equals("pending")
+    .filter((a) => a.did === did)
+    .toArray();
+
+  for (const assignment of pendingAssignments) {
+    try {
+      await agent.com.atproto.repo.putRecord({
+        repo: did,
+        collection: ASSIGNMENT_COLLECTION,
+        rkey: assignment.rkey,
+        record: assignmentToRecord(assignment),
+        validate: false,
+      });
+      if (assignment.id) {
+        await db.assignments.update(assignment.id, { syncStatus: "synced" });
+      }
+    } catch (err) {
+      console.error("Failed to sync assignment to PDS:", err);
+      if (assignment.id && !isNetworkError(err)) {
+        await db.assignments.update(assignment.id, { syncStatus: "error" });
+      }
+    }
+  }
+
+  // Sync pending project trusts
+  const pendingProjectTrusts = await db.projectTrusts
+    .where("syncStatus")
+    .equals("pending")
+    .filter((t) => t.did === did)
+    .toArray();
+
+  for (const trust of pendingProjectTrusts) {
+    try {
+      await agent.com.atproto.repo.putRecord({
+        repo: did,
+        collection: PROJECT_TRUST_COLLECTION,
+        rkey: trust.rkey,
+        record: projectTrustToRecord(trust),
+        validate: false,
+      });
+      if (trust.id) {
+        await db.projectTrusts.update(trust.id, { syncStatus: "synced" });
+      }
+    } catch (err) {
+      console.error("Failed to sync project trust to PDS:", err);
+      if (trust.id && !isNetworkError(err)) {
+        await db.projectTrusts.update(trust.id, { syncStatus: "error" });
+      }
+    }
+  }
 }
 
 export async function deleteBoardFromPDS(
@@ -475,6 +797,14 @@ async function resetErrorsToPending(did: string): Promise<void> {
     db.comments,
     db.approvals,
     db.reactions,
+    db.placements,
+    db.placementOps,
+    db.taskOps,
+    db.taskTrusts,
+    db.projects,
+    db.memberships,
+    db.assignments,
+    db.projectTrusts,
   ];
   for (const table of tables) {
     const errored = await (table as any)

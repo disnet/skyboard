@@ -8,7 +8,7 @@
       "key": "tid",
       "record": {
         "type": "object",
-        "required": ["targetUri", "boardUri", "createdAt"],
+        "required": ["targetUri", "createdAt"],
         "properties": {
           "targetUri": {
             "type": "string",
@@ -18,7 +18,12 @@
           "boardUri": {
             "type": "string",
             "format": "at-uri",
-            "description": "AT URI of the board this approval belongs to"
+            "description": "Optional: AT URI of the board for board-level approvals"
+          },
+          "taskUri": {
+            "type": "string",
+            "format": "at-uri",
+            "description": "Optional: AT URI of the task for task-level approvals"
           },
           "createdAt": {
             "type": "string",

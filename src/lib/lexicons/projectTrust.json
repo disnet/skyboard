@@ -1,0 +1,32 @@
+{
+  "lexicon": 1,
+  "id": "dev.skyboard.projectTrust",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "Grants a user access to add/remove tasks in a project",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": ["projectUri", "trustedDid", "createdAt"],
+        "properties": {
+          "projectUri": {
+            "type": "string",
+            "format": "at-uri",
+            "description": "AT URI of the project"
+          },
+          "trustedDid": {
+            "type": "string",
+            "format": "did",
+            "description": "The DID of the user being trusted"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "When the trust was granted"
+          }
+        }
+      }
+    }
+  }
+}

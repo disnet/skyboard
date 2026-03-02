@@ -45,7 +45,8 @@ export function approvalToRecord(approval: Approval): ApprovalRecord {
   return {
     $type: "dev.skyboard.approval",
     targetUri: approval.targetUri,
-    boardUri: approval.boardUri,
+    ...(approval.boardUri ? { boardUri: approval.boardUri } : {}),
+    ...(approval.taskUri ? { taskUri: approval.taskUri } : {}),
     createdAt: approval.createdAt,
   };
 }

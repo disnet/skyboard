@@ -9,6 +9,10 @@ import type {
   Comment,
   Approval,
   Reaction,
+  Placement,
+  PlacementOp,
+  TaskOp,
+  TaskTrust,
 } from "./types.js";
 const APPVIEW_URL =
   typeof window !== "undefined" &&
@@ -79,6 +83,10 @@ export async function loadBoardFromAppview(
         db.comments,
         db.approvals,
         db.reactions,
+        db.placements,
+        db.placementOps,
+        db.taskOps,
+        db.taskTrusts,
       ],
       async () => {
         // Store board
@@ -124,10 +132,13 @@ export async function loadBoardFromAppview(
             did: t.did,
             title: t.title,
             description: t.description ?? undefined,
-            columnId: t.columnId,
-            boardUri: t.boardUri,
-            position: t.position ?? undefined,
+            status: t.status ?? undefined,
+            open: t.open || undefined,
             labelIds: t.labelIds ?? undefined,
+            forkedFrom: t.forkedFrom ?? undefined,
+            columnId: t.columnId ?? undefined,
+            boardUri: t.boardUri ?? undefined,
+            position: t.position ?? undefined,
             order: t.order ?? 0,
             createdAt: t.createdAt,
             updatedAt: t.updatedAt ?? undefined,
@@ -144,6 +155,8 @@ export async function loadBoardFromAppview(
               !recordsEqual(existing, taskData, [
                 "title",
                 "description",
+                "status",
+                "open",
                 "columnId",
                 "position",
                 "labelIds",
@@ -306,6 +319,135 @@ export async function loadBoardFromAppview(
             }
           } else {
             await db.reactions.add(reactionData as Reaction);
+          }
+        }
+
+        // Store placements (new)
+        for (const p of data.placements ?? []) {
+          const placementData: Omit<Placement, "id"> = {
+            rkey: p.rkey,
+            did: p.did,
+            taskUri: p.taskUri,
+            boardUri: p.boardUri,
+            columnId: p.columnId,
+            position: p.position,
+            createdAt: p.createdAt,
+            syncStatus: "synced",
+          };
+
+          const existing = await db.placements
+            .where("[did+rkey]")
+            .equals([p.did, p.rkey])
+            .first();
+          if (existing?.id) {
+            if (existing.syncStatus === "pending") continue;
+            if (
+              !recordsEqual(existing, placementData, [
+                "taskUri",
+                "boardUri",
+                "columnId",
+                "position",
+                "createdAt",
+              ])
+            ) {
+              await db.placements.update(existing.id, placementData);
+            }
+          } else {
+            await db.placements.add(placementData as Placement);
+          }
+        }
+
+        // Store placement ops (new)
+        for (const po of data.placementOps ?? []) {
+          const placementOpData: Omit<PlacementOp, "id"> = {
+            rkey: po.rkey,
+            did: po.did,
+            targetPlacementUri: po.targetPlacementUri,
+            boardUri: po.boardUri,
+            fields: po.fields,
+            createdAt: po.createdAt,
+            syncStatus: "synced",
+          };
+
+          const existing = await db.placementOps
+            .where("[did+rkey]")
+            .equals([po.did, po.rkey])
+            .first();
+          if (existing?.id) {
+            if (existing.syncStatus === "pending") continue;
+            if (
+              !recordsEqual(existing, placementOpData, [
+                "targetPlacementUri",
+                "fields",
+                "createdAt",
+              ])
+            ) {
+              await db.placementOps.update(existing.id, placementOpData);
+            }
+          } else {
+            await db.placementOps.add(placementOpData as PlacementOp);
+          }
+        }
+
+        // Store task ops (new)
+        for (const to of data.taskOps ?? []) {
+          const taskOpData: Omit<TaskOp, "id"> = {
+            rkey: to.rkey,
+            did: to.did,
+            targetTaskUri: to.targetTaskUri,
+            fields: to.fields,
+            createdAt: to.createdAt,
+            syncStatus: "synced",
+          };
+
+          const existing = await db.taskOps
+            .where("[did+rkey]")
+            .equals([to.did, to.rkey])
+            .first();
+          if (existing?.id) {
+            if (existing.syncStatus === "pending") continue;
+            if (
+              !recordsEqual(existing, taskOpData, [
+                "targetTaskUri",
+                "fields",
+                "createdAt",
+              ])
+            ) {
+              await db.taskOps.update(existing.id, taskOpData);
+            }
+          } else {
+            await db.taskOps.add(taskOpData as TaskOp);
+          }
+        }
+
+        // Store task trusts (new)
+        for (const tt of data.taskTrusts ?? []) {
+          const taskTrustData: Omit<TaskTrust, "id"> = {
+            rkey: tt.rkey,
+            did: tt.did,
+            taskUri: tt.taskUri,
+            trustedDid: tt.trustedDid,
+            createdAt: tt.createdAt,
+            syncStatus: "synced",
+          };
+
+          const existing = await db.taskTrusts
+            .where("[did+rkey]")
+            .equals([tt.did, tt.rkey])
+            .first();
+          if (existing?.id) {
+            if (existing.syncStatus === "pending") continue;
+            if (
+              !recordsEqual(existing, taskTrustData, [
+                "taskUri",
+                "trustedDid",
+                "createdAt",
+              ])
+            ) {
+              await db.taskTrusts.update(existing.id, taskTrustData);
+            }
+          } else {
+            await db.taskTrusts.add(taskTrustData as TaskTrust);
           }
         }
       },

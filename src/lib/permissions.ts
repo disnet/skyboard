@@ -11,6 +11,23 @@ export function isTrusted(
 }
 
 /**
+ * Check if a user is trusted to edit a task.
+ * Returns true if the user is the task author, in the task's trust list,
+ * or the task is open (anyone can edit).
+ */
+export function isTaskTrusted(
+  userDid: string,
+  taskAuthorDid: string,
+  taskTrustedDids: Set<string>,
+  taskOpen?: boolean,
+): boolean {
+  if (userDid === taskAuthorDid) return true;
+  if (taskTrustedDids.has(userDid)) return true;
+  if (taskOpen) return true;
+  return false;
+}
+
+/**
  * Determine permission status for a user performing an action.
  *
  * - owner/trusted → always allowed

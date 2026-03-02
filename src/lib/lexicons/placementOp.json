@@ -1,0 +1,54 @@
+{
+  "lexicon": 1,
+  "id": "dev.skyboard.placementOp",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "An operation modifying placement fields (column, position, removal)",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": ["targetPlacementUri", "boardUri", "fields", "createdAt"],
+        "properties": {
+          "targetPlacementUri": {
+            "type": "string",
+            "format": "at-uri",
+            "description": "AT URI of the placement this op targets"
+          },
+          "boardUri": {
+            "type": "string",
+            "format": "at-uri",
+            "description": "AT URI of the board (denormalized for indexing)"
+          },
+          "fields": {
+            "type": "ref",
+            "ref": "#placementOpFields",
+            "description": "The placement fields to change"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "Timestamp of the operation, used for LWW resolution"
+          }
+        }
+      }
+    },
+    "placementOpFields": {
+      "type": "object",
+      "description": "Subset of placement fields to override. Only present fields are applied.",
+      "properties": {
+        "columnId": {
+          "type": "string"
+        },
+        "position": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "removed": {
+          "type": "boolean",
+          "description": "If true, negates the placement (soft delete)"
+        }
+      }
+    }
+  }
+}

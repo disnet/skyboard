@@ -5,6 +5,14 @@ export const TRUST_COLLECTION = "dev.skyboard.trust";
 export const COMMENT_COLLECTION = "dev.skyboard.comment";
 export const APPROVAL_COLLECTION = "dev.skyboard.approval";
 export const REACTION_COLLECTION = "dev.skyboard.reaction";
+export const PLACEMENT_COLLECTION = "dev.skyboard.placement";
+export const PLACEMENT_OP_COLLECTION = "dev.skyboard.placementOp";
+export const TASK_OP_COLLECTION = "dev.skyboard.taskOp";
+export const TASK_TRUST_COLLECTION = "dev.skyboard.taskTrust";
+export const PROJECT_COLLECTION = "dev.skyboard.project";
+export const MEMBERSHIP_COLLECTION = "dev.skyboard.membership";
+export const ASSIGNMENT_COLLECTION = "dev.skyboard.assignment";
+export const PROJECT_TRUST_COLLECTION = "dev.skyboard.projectTrust";
 
 export const ALL_COLLECTIONS = [
   BOARD_COLLECTION,
@@ -14,6 +22,14 @@ export const ALL_COLLECTIONS = [
   COMMENT_COLLECTION,
   APPROVAL_COLLECTION,
   REACTION_COLLECTION,
+  PLACEMENT_COLLECTION,
+  PLACEMENT_OP_COLLECTION,
+  TASK_OP_COLLECTION,
+  TASK_TRUST_COLLECTION,
+  PROJECT_COLLECTION,
+  MEMBERSHIP_COLLECTION,
+  ASSIGNMENT_COLLECTION,
+  PROJECT_TRUST_COLLECTION,
 ];
 
 export function buildAtUri(

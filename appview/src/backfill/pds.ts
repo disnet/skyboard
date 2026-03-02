@@ -6,6 +6,10 @@ import {
   COMMENT_COLLECTION,
   APPROVAL_COLLECTION,
   REACTION_COLLECTION,
+  PLACEMENT_COLLECTION,
+  PLACEMENT_OP_COLLECTION,
+  TASK_OP_COLLECTION,
+  TASK_TRUST_COLLECTION,
 } from "../shared/collections.js";
 import {
   safeParse,
@@ -16,6 +20,10 @@ import {
   CommentRecordSchema,
   ApprovalRecordSchema,
   ReactionRecordSchema,
+  PlacementRecordSchema,
+  PlacementOpRecordSchema,
+  TaskOpRecordSchema,
+  TaskTrustRecordSchema,
 } from "../shared/schemas.js";
 import {
   upsertBoard,
@@ -25,6 +33,10 @@ import {
   upsertComment,
   upsertApproval,
   upsertReaction,
+  upsertPlacement,
+  upsertPlacementOp,
+  upsertTaskOp,
+  upsertTaskTrust,
   upsertParticipant,
   getParticipants,
   markParticipantFetched,
@@ -198,6 +210,7 @@ async function fetchParticipantData(
   did: string,
   boardUri: string,
 ): Promise<void> {
+  // Legacy collections (filter by boardUri)
   await fetchAndStoreCollection(
     did,
     boardUri,
@@ -244,8 +257,70 @@ async function fetchParticipantData(
     },
   );
 
+  // New collections (filter by boardUri)
+  await fetchAndStoreCollection(
+    did,
+    boardUri,
+    PLACEMENT_COLLECTION,
+    PlacementRecordSchema,
+    (rkey, v) => {
+      upsertPlacement(did, rkey, v);
+    },
+  );
+  await fetchAndStoreCollection(
+    did,
+    boardUri,
+    PLACEMENT_OP_COLLECTION,
+    PlacementOpRecordSchema,
+    (rkey, v) => {
+      upsertPlacementOp(did, rkey, v);
+    },
+  );
+
+  // TaskOps and TaskTrusts are task-scoped (not board-scoped),
+  // so we fetch all of them for this participant. They'll be filtered
+  // at query time based on which tasks are in this board.
+  await fetchAllTaskOps(did);
+  await fetchAllTaskTrusts(did);
+
   upsertParticipant(did, boardUri);
   markParticipantFetched(did, boardUri);
+}
+
+async function fetchAllTaskOps(did: string): Promise<void> {
+  const records = await fetchRecordsFromRepo(did, TASK_OP_COLLECTION);
+  for (const record of records) {
+    const validated = safeParse(
+      TaskOpRecordSchema,
+      record.value,
+      TASK_OP_COLLECTION,
+    );
+    if (!validated) continue;
+    const rkey = record.uri.split("/").pop()!;
+    upsertTaskOp(did, rkey, {
+      targetTaskUri: validated.targetTaskUri,
+      fields: validated.fields,
+      createdAt: validated.createdAt,
+    });
+  }
+}
+
+async function fetchAllTaskTrusts(did: string): Promise<void> {
+  const records = await fetchRecordsFromRepo(did, TASK_TRUST_COLLECTION);
+  for (const record of records) {
+    const validated = safeParse(
+      TaskTrustRecordSchema,
+      record.value,
+      TASK_TRUST_COLLECTION,
+    );
+    if (!validated) continue;
+    const rkey = record.uri.split("/").pop()!;
+    upsertTaskTrust(did, rkey, {
+      taskUri: validated.taskUri,
+      trustedDid: validated.trustedDid,
+      createdAt: validated.createdAt,
+    });
+  }
 }
 
 async function fetchAndStoreCollection<T>(

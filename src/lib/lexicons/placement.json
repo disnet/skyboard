@@ -1,0 +1,47 @@
+{
+  "lexicon": 1,
+  "id": "dev.skyboard.placement",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "Links a task to a board with column and position metadata",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": [
+          "taskUri",
+          "boardUri",
+          "columnId",
+          "position",
+          "createdAt"
+        ],
+        "properties": {
+          "taskUri": {
+            "type": "string",
+            "format": "at-uri",
+            "description": "AT URI of the task being placed"
+          },
+          "boardUri": {
+            "type": "string",
+            "format": "at-uri",
+            "description": "AT URI of the board the task is placed on"
+          },
+          "columnId": {
+            "type": "string",
+            "description": "ID of the column within the board"
+          },
+          "position": {
+            "type": "string",
+            "maxLength": 256,
+            "description": "Fractional index position for sort ordering within the column"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "When the placement was created"
+          }
+        }
+      }
+    }
+  }
+}

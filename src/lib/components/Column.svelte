@@ -82,8 +82,10 @@
 
   const sortedTasks = $derived(
     [...tasks].sort((a, b) => {
-      if (a.effectivePosition < b.effectivePosition) return -1;
-      if (a.effectivePosition > b.effectivePosition) return 1;
+      const posA = a.effectivePosition ?? "";
+      const posB = b.effectivePosition ?? "";
+      if (posA < posB) return -1;
+      if (posA > posB) return 1;
       return (a.rkey + a.did).localeCompare(b.rkey + b.did);
     }),
   );

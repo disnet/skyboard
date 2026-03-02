@@ -1,0 +1,32 @@
+{
+  "lexicon": 1,
+  "id": "dev.skyboard.assignment",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "Assigns a user to a task. Can be written by task author or the assignee.",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": ["taskUri", "assigneeDid", "createdAt"],
+        "properties": {
+          "taskUri": {
+            "type": "string",
+            "format": "at-uri",
+            "description": "AT URI of the task"
+          },
+          "assigneeDid": {
+            "type": "string",
+            "format": "did",
+            "description": "The DID of the assigned user"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "When the assignment was created"
+          }
+        }
+      }
+    }
+  }
+}

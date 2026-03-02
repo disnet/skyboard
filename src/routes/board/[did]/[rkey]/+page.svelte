@@ -19,6 +19,8 @@
     Board,
     Task,
     Op,
+    TaskOp,
+    TaskTrust,
     Trust,
     Comment,
     Approval,
@@ -131,6 +133,17 @@
       .toArray();
   });
 
+  const allTaskOps = useLiveQuery<TaskOp[]>(() => {
+    if (!boardUri) return [];
+    // TaskOps are not board-scoped, so we fetch all that target tasks on this board
+    // For now, return all taskOps in the DB (they'll be filtered during materialization)
+    return db.taskOps.toArray();
+  });
+
+  const allTaskTrusts = useLiveQuery<TaskTrust[]>(() => {
+    return db.taskTrusts.toArray();
+  });
+
   const blockedDids = $derived(
     new Set((allBlocks.current ?? []).map((b) => b.blockedDid)),
   );
@@ -215,15 +228,31 @@
     return map;
   });
 
+  // Build task trust map: taskUri → Set<trustedDid>
+  const taskTrustsByTask = $derived.by(() => {
+    const map = new Map<string, Set<string>>();
+    for (const trust of allTaskTrusts.current ?? []) {
+      let set = map.get(trust.taskUri);
+      if (!set) {
+        set = new Set();
+        map.set(trust.taskUri, set);
+      }
+      set.add(trust.trustedDid);
+    }
+    return map;
+  });
+
   // Materialized view with LWW merge
   const materializedTasks = $derived.by(() => {
     if (!allTasks.current || !allOps.current || !board.current) return [];
     return materializeTasks(
       allTasks.current,
       allOps.current,
+      allTaskOps.current ?? [],
       ownerTrustedDids,
       auth.did ?? "",
       board.current.did,
+      taskTrustsByTask,
     );
   });
 
@@ -293,7 +322,7 @@
             continue;
           }
         }
-        const list = map.get(task.effectiveColumnId);
+        const list = map.get(task.effectiveColumnId ?? "");
         if (list) list.push(task);
       }
     }
@@ -313,8 +342,10 @@
       const tasks = tasksByColumn.get(col.id) ?? [];
       result.push(
         [...tasks].sort((a, b) => {
-          if (a.effectivePosition < b.effectivePosition) return -1;
-          if (a.effectivePosition > b.effectivePosition) return 1;
+          const posA = a.effectivePosition ?? "";
+          const posB = b.effectivePosition ?? "";
+          if (posA < posB) return -1;
+          if (posA > posB) return 1;
           return (a.rkey + a.did).localeCompare(b.rkey + b.did);
         }),
       );
@@ -1366,7 +1397,7 @@
   {#if showQuickMove && quickMoveTask && quickMoveAnchorRect}
     <QuickMovePicker
       columns={sortedColumns}
-      currentColumnId={quickMoveTask.effectiveColumnId}
+      currentColumnId={quickMoveTask.effectiveColumnId ?? ""}
       anchorRect={quickMoveAnchorRect}
       onmove={handleQuickMove}
       onclose={() => {

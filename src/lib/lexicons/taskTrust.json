@@ -1,0 +1,32 @@
+{
+  "lexicon": 1,
+  "id": "dev.skyboard.taskTrust",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "Grants a user edit access to a specific task",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": ["taskUri", "trustedDid", "createdAt"],
+        "properties": {
+          "taskUri": {
+            "type": "string",
+            "format": "at-uri",
+            "description": "AT URI of the task this trust applies to"
+          },
+          "trustedDid": {
+            "type": "string",
+            "format": "did",
+            "description": "The DID of the user being granted edit access"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "When the trust was granted"
+          }
+        }
+      }
+    }
+  }
+}

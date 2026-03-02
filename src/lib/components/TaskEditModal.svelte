@@ -531,7 +531,7 @@
     )
       fields.labelIds = [...editLabelIds];
     if (Object.keys(fields).length > 0) {
-      await createOp(currentUserDid, task.sourceTask, task.boardUri, fields);
+      await createOp(currentUserDid, task.sourceTask, boardUri, fields);
     }
   }
 

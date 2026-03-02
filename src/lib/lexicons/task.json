@@ -4,11 +4,11 @@
   "defs": {
     "main": {
       "type": "record",
-      "description": "A task on a kanban board",
+      "description": "A standalone task. May be placed on boards via placement records.",
       "key": "tid",
       "record": {
         "type": "object",
-        "required": ["title", "columnId", "boardUri", "createdAt"],
+        "required": ["title", "createdAt"],
         "properties": {
           "title": {
             "type": "string",
@@ -20,25 +20,39 @@
             "maxLength": 10240,
             "description": "Optional description of the task"
           },
-          "columnId": {
+          "status": {
             "type": "string",
-            "description": "ID of the column this task belongs to"
+            "enum": ["open", "closed"],
+            "description": "Task-level status"
           },
-          "boardUri": {
-            "type": "string",
-            "format": "at-uri",
-            "description": "AT URI of the parent board"
-          },
-          "position": {
-            "type": "string",
-            "maxLength": 256,
-            "description": "Fractional index position for sort ordering within a column"
+          "open": {
+            "type": "boolean",
+            "description": "Permission flag: if true, anyone can edit this task"
           },
           "labelIds": {
             "type": "array",
             "maxLength": 50,
             "items": { "type": "string" },
             "description": "IDs of labels assigned to this task"
+          },
+          "forkedFrom": {
+            "type": "string",
+            "format": "at-uri",
+            "description": "AT URI of the original task this was forked from"
+          },
+          "columnId": {
+            "type": "string",
+            "description": "Legacy: ID of the column this task belongs to"
+          },
+          "boardUri": {
+            "type": "string",
+            "format": "at-uri",
+            "description": "Legacy: AT URI of the parent board. Use placements instead."
+          },
+          "position": {
+            "type": "string",
+            "maxLength": 256,
+            "description": "Legacy: Fractional index position. Use placements instead."
           },
           "order": {
             "type": "integer",

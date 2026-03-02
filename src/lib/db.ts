@@ -10,6 +10,14 @@ import type {
   Block,
   Notification,
   FilterView,
+  Placement,
+  PlacementOp,
+  TaskOp,
+  TaskTrust,
+  Project,
+  Membership,
+  Assignment,
+  ProjectTrust,
 } from "./types.js";
 
 type SkyboardDb = Dexie & {
@@ -23,6 +31,14 @@ type SkyboardDb = Dexie & {
   blocks: EntityTable<Block, "id">;
   notifications: EntityTable<Notification, "id">;
   filterViews: EntityTable<FilterView, "id">;
+  placements: EntityTable<Placement, "id">;
+  placementOps: EntityTable<PlacementOp, "id">;
+  taskOps: EntityTable<TaskOp, "id">;
+  taskTrusts: EntityTable<TaskTrust, "id">;
+  projects: EntityTable<Project, "id">;
+  memberships: EntityTable<Membership, "id">;
+  assignments: EntityTable<Assignment, "id">;
+  projectTrusts: EntityTable<ProjectTrust, "id">;
 };
 
 function createDb(name: string): SkyboardDb {
@@ -166,6 +182,23 @@ function createDb(name: string): SkyboardDb {
   // Drop the knownParticipants table (no longer needed with the appview)
   d.version(10).stores({
     knownParticipants: null,
+  });
+
+  // Add new tables for the generalized task tracker model
+  d.version(11).stores({
+    placements: "++id, rkey, did, taskUri, boardUri, syncStatus, [did+rkey]",
+    placementOps:
+      "++id, rkey, did, targetPlacementUri, boardUri, createdAt, syncStatus, [did+rkey]",
+    taskOps:
+      "++id, rkey, did, targetTaskUri, createdAt, syncStatus, [did+rkey]",
+    taskTrusts:
+      "++id, rkey, did, taskUri, trustedDid, syncStatus, [did+rkey], [did+taskUri+trustedDid]",
+    projects: "++id, rkey, did, syncStatus",
+    memberships: "++id, rkey, did, taskUri, projectUri, syncStatus, [did+rkey]",
+    assignments:
+      "++id, rkey, did, taskUri, assigneeDid, syncStatus, [did+rkey], [did+taskUri+assigneeDid]",
+    projectTrusts:
+      "++id, rkey, did, projectUri, trustedDid, syncStatus, [did+rkey]",
   });
 
   return d;

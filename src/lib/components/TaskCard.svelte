@@ -281,7 +281,7 @@
           desc.slice(0, match.index + 1) +
           newChar +
           desc.slice(match.index + 2);
-        createOp(currentUserDid, task.sourceTask, task.boardUri, {
+        createOp(currentUserDid, task.sourceTask, task.boardUri!, {
           description: newDesc,
         });
         break;
@@ -328,7 +328,7 @@
       id: task.sourceTask.id,
       did: task.ownerDid,
       rkey: task.rkey,
-      columnId: task.effectiveColumnId,
+      columnId: task.effectiveColumnId ?? "",
     });
   }
 
@@ -355,7 +355,7 @@
         id: task.sourceTask.id,
         did: task.ownerDid,
         rkey: task.rkey,
-        columnId: task.effectiveColumnId,
+        columnId: task.effectiveColumnId ?? "",
       },
       () => {
         wasDragged = true;

@@ -1,0 +1,55 @@
+{
+  "lexicon": 1,
+  "id": "dev.skyboard.taskOp",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "An operation modifying task-level fields (title, description, labels, status)",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": ["targetTaskUri", "fields", "createdAt"],
+        "properties": {
+          "targetTaskUri": {
+            "type": "string",
+            "format": "at-uri",
+            "description": "AT URI of the task this op targets"
+          },
+          "fields": {
+            "type": "ref",
+            "ref": "#taskOpFields",
+            "description": "The task fields to change"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "Timestamp of the operation, used for LWW resolution"
+          }
+        }
+      }
+    },
+    "taskOpFields": {
+      "type": "object",
+      "description": "Subset of task fields to override. Only present fields are applied.",
+      "properties": {
+        "title": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 10240
+        },
+        "labelIds": {
+          "type": "array",
+          "maxLength": 50,
+          "items": { "type": "string" }
+        },
+        "status": {
+          "type": "string",
+          "enum": ["open", "closed"]
+        }
+      }
+    }
+  }
+}

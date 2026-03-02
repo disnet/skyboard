@@ -1,0 +1,45 @@
+{
+  "lexicon": 1,
+  "id": "dev.skyboard.project",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "A lightweight flat collection of tasks (no columns or positions)",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": ["name", "createdAt"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 256,
+            "description": "Name of the project"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 2048,
+            "description": "Optional description of the project"
+          },
+          "labels": {
+            "type": "array",
+            "maxLength": 50,
+            "items": {
+              "type": "ref",
+              "ref": "dev.skyboard.board#label"
+            },
+            "description": "Labels available in this project"
+          },
+          "open": {
+            "type": "boolean",
+            "description": "If true, anyone can add tasks to this project"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "When the project was created"
+          }
+        }
+      }
+    }
+  }
+}

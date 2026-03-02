@@ -4,11 +4,11 @@
   "defs": {
     "main": {
       "type": "record",
-      "description": "An emoji reaction on a task within a board",
+      "description": "An emoji reaction on a task. Task-scoped, not board-scoped.",
       "key": "tid",
       "record": {
         "type": "object",
-        "required": ["targetTaskUri", "boardUri", "emoji", "createdAt"],
+        "required": ["targetTaskUri", "emoji", "createdAt"],
         "properties": {
           "targetTaskUri": {
             "type": "string",
@@ -18,7 +18,7 @@
           "boardUri": {
             "type": "string",
             "format": "at-uri",
-            "description": "AT URI of the board this reaction belongs to"
+            "description": "Legacy: AT URI of the board. Reactions are now task-scoped."
           },
           "emoji": {
             "type": "string",
