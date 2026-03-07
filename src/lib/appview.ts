@@ -332,7 +332,7 @@ export async function discoverMyBoards(
   const knownBoardUris = new Set<string>();
   let newCount = 0;
 
-  // Collect boards already in Dexie so we don't re-fetch them
+  // Collect boards already in Dexie (including archived) so we don't re-fetch them
   const existingBoards = await db.boards.toArray();
   for (const b of existingBoards) {
     knownBoardUris.add(buildAtUri(b.did, BOARD_COLLECTION, b.rkey));

@@ -168,6 +168,11 @@ function createDb(name: string): SkyboardDb {
     knownParticipants: null,
   });
 
+  // Add archived index to boards for archive/leave feature
+  d.version(11).stores({
+    boards: "++id, rkey, did, syncStatus, archived",
+  });
+
   return d;
 }
 
