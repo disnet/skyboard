@@ -10,12 +10,11 @@ import type {
   Approval,
   Reaction,
 } from "./types.js";
+declare const __SKYBOARD_APPVIEW_URL__: string;
+
 const APPVIEW_URL =
-  typeof window !== "undefined" &&
-  (window as unknown as Record<string, unknown>).__SKYBOARD_APPVIEW_URL__
-    ? String(
-        (window as unknown as Record<string, unknown>).__SKYBOARD_APPVIEW_URL__,
-      )
+  typeof __SKYBOARD_APPVIEW_URL__ !== "undefined" && __SKYBOARD_APPVIEW_URL__
+    ? __SKYBOARD_APPVIEW_URL__
     : "https://appview.skyboard.dev";
 
 const APPVIEW_WS_URL = APPVIEW_URL.replace(/^http/, "ws");
