@@ -8,14 +8,27 @@
   import { loadBoardFromAppview } from "$lib/appview.js";
   import { grantTrust } from "$lib/trust.js";
   import { getDiscoveryState } from "$lib/discovery.svelte.js";
+  import {
+    archiveBoard,
+    unarchiveBoard,
+    leaveBoard,
+  } from "$lib/board-actions.js";
   import BoardCard from "$lib/components/BoardCard.svelte";
 
   const auth = getAuth();
   const discovery = getDiscoveryState();
 
   // Show all boards — both owned and joined
-  const boards = useLiveQuery<Board[]>(() => db.boards.toArray());
+  const allBoards = useLiveQuery<Board[]>(() => db.boards.toArray());
 
+  const activeBoards = $derived(
+    allBoards.current?.filter((b) => !b.archived) ?? [],
+  );
+  const archivedBoards = $derived(
+    allBoards.current?.filter((b) => b.archived) ?? [],
+  );
+
+  let showArchived = $state(false);
   let newBoardName = $state("");
   let newBoardDescription = $state("");
   let creating = $state(false);
@@ -125,6 +138,19 @@
       joining = false;
     }
   }
+
+  async function handleArchive(board: Board) {
+    await archiveBoard(board);
+  }
+
+  async function handleUnarchive(board: Board) {
+    await unarchiveBoard(board);
+  }
+
+  async function handleLeave(board: Board) {
+    if (!auth.did) return;
+    await leaveBoard(board, auth.did);
+  }
 </script>
 
 <div class="page">
@@ -169,21 +195,48 @@
   {/if}
 
   <div class="board-grid">
-    {#if boards.current && boards.current.length > 0}
-      {#each boards.current as board (board.id)}
-        <BoardCard {board} />
+    {#if activeBoards.length > 0}
+      {#each activeBoards as board (board.id)}
+        <BoardCard
+          {board}
+          userDid={auth.did ?? undefined}
+          onArchive={handleArchive}
+          onLeave={handleLeave}
+        />
       {/each}
-    {:else if boards.current && discovery.isDiscovering}
+    {:else if allBoards.current && discovery.isDiscovering}
       <p class="empty discovering">
         <span class="discover-spinner"></span>
         Discovering your boards...
       </p>
-    {:else if boards.current}
+    {:else if allBoards.current}
       <p class="empty">
         No boards yet. Create one above or paste a board link to join.
       </p>
     {/if}
   </div>
+
+  {#if archivedBoards.length > 0}
+    <div class="archived-section">
+      <button
+        class="archived-toggle"
+        onclick={() => (showArchived = !showArchived)}
+      >
+        {showArchived ? "Hide" : "Show"} Archived ({archivedBoards.length})
+      </button>
+      {#if showArchived}
+        <div class="board-grid">
+          {#each archivedBoards as board (board.id)}
+            <BoardCard
+              {board}
+              userDid={auth.did ?? undefined}
+              onUnarchive={handleUnarchive}
+            />
+          {/each}
+        </div>
+      {/if}
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -324,5 +377,23 @@
     to {
       transform: rotate(360deg);
     }
+  }
+
+  .archived-section {
+    margin-top: 2rem;
+  }
+
+  .archived-toggle {
+    background: none;
+    border: none;
+    padding: 0.5rem 0;
+    font-size: 0.8125rem;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    margin-bottom: 0.75rem;
+  }
+
+  .archived-toggle:hover {
+    color: var(--color-text);
   }
 </style>

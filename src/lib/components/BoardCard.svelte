@@ -1,10 +1,122 @@
 <script lang="ts">
   import type { Board } from "$lib/types.js";
 
-  let { board }: { board: Board } = $props();
+  let {
+    board,
+    userDid,
+    onArchive,
+    onLeave,
+    onUnarchive,
+  }: {
+    board: Board;
+    userDid?: string;
+    onArchive?: (board: Board) => void;
+    onLeave?: (board: Board) => void;
+    onUnarchive?: (board: Board) => void;
+  } = $props();
+
+  let showMenu = $state(false);
+  let confirmingLeave = $state(false);
+
+  const isOwner = $derived(userDid != null && board.did === userDid);
+
+  function handleActionClick(e: MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    showMenu = !showMenu;
+  }
+
+  function handleArchive(e: MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    showMenu = false;
+    onArchive?.(board);
+  }
+
+  function handleUnarchive(e: MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    onUnarchive?.(board);
+  }
+
+  function handleLeaveClick(e: MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    confirmingLeave = true;
+    showMenu = false;
+  }
+
+  function handleLeaveConfirm(e: MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    confirmingLeave = false;
+    onLeave?.(board);
+  }
+
+  function handleLeaveCancel(e: MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    confirmingLeave = false;
+  }
 </script>
 
+<svelte:window
+  onclick={() => {
+    showMenu = false;
+  }}
+/>
+
 <a href="/board/{board.did}/{board.rkey}" class="board-card">
+  {#if board.archived}
+    <div class="archived-actions">
+      <span class="archived-label">Archived</span>
+      <button class="unarchive-btn" onclick={handleUnarchive}>Unarchive</button>
+    </div>
+  {:else if userDid}
+    <button
+      class="action-btn"
+      onclick={handleActionClick}
+      title={isOwner ? "Archive board" : "Leave board"}
+    >
+      &hellip;
+    </button>
+    {#if showMenu}
+      <!-- svelte-ignore a11y_click_events_have_key_events -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div class="action-menu" onclick={(e) => e.stopPropagation()}>
+        {#if isOwner}
+          <button class="menu-item" onclick={handleArchive}>Archive</button>
+        {:else}
+          <button class="menu-item danger" onclick={handleLeaveClick}
+            >Leave Board</button
+          >
+        {/if}
+      </div>
+    {/if}
+  {/if}
+
+  {#if confirmingLeave}
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div
+      class="confirm-overlay"
+      onclick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      }}
+    >
+      <p>Leave <strong>{board.name}</strong>?</p>
+      <p class="confirm-detail">You'll need to rejoin to access it again.</p>
+      <div class="confirm-actions">
+        <button class="confirm-cancel" onclick={handleLeaveCancel}
+          >Cancel</button
+        >
+        <button class="confirm-leave" onclick={handleLeaveConfirm}>Leave</button
+        >
+      </div>
+    </div>
+  {/if}
+
   <h3 class="board-name">{board.name}</h3>
   {#if board.description}
     <p class="board-desc">{board.description}</p>
@@ -36,6 +148,7 @@
 <style>
   .board-card {
     display: block;
+    position: relative;
     background: var(--color-surface);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-lg);
@@ -108,5 +221,145 @@
   .sync-badge.error {
     background: var(--color-error-bg);
     color: var(--color-error);
+  }
+
+  .action-btn {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    background: none;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    padding: 0.125rem 0.375rem;
+    font-size: 1rem;
+    line-height: 1;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    opacity: 0;
+    transition:
+      opacity 0.15s,
+      background 0.15s;
+  }
+
+  .board-card:hover .action-btn {
+    opacity: 1;
+  }
+
+  .action-btn:hover {
+    background: var(--color-border-light, rgba(0, 0, 0, 0.05));
+    border-color: var(--color-border);
+  }
+
+  .action-menu {
+    position: absolute;
+    top: 2rem;
+    right: 0.5rem;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-md);
+    z-index: 10;
+    min-width: 120px;
+  }
+
+  .menu-item {
+    display: block;
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    background: none;
+    border: none;
+    text-align: left;
+    font-size: 0.8125rem;
+    color: var(--color-text);
+    cursor: pointer;
+  }
+
+  .menu-item:hover {
+    background: var(--color-border-light, rgba(0, 0, 0, 0.05));
+  }
+
+  .menu-item.danger {
+    color: var(--color-error, #dc2626);
+  }
+
+  .confirm-overlay {
+    position: absolute;
+    inset: 0;
+    background: var(--color-surface);
+    border-radius: var(--radius-lg);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 20;
+    padding: 1rem;
+  }
+
+  .confirm-overlay p {
+    margin: 0 0 0.25rem;
+    font-size: 0.875rem;
+    text-align: center;
+  }
+
+  .confirm-detail {
+    font-size: 0.75rem !important;
+    color: var(--color-text-secondary);
+    margin-bottom: 0.75rem !important;
+  }
+
+  .confirm-actions {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .confirm-cancel,
+  .confirm-leave {
+    padding: 0.375rem 0.75rem;
+    border-radius: var(--radius-md);
+    font-size: 0.8125rem;
+    cursor: pointer;
+    border: 1px solid var(--color-border);
+  }
+
+  .confirm-cancel {
+    background: var(--color-surface);
+    color: var(--color-text);
+  }
+
+  .confirm-leave {
+    background: var(--color-error, #dc2626);
+    color: white;
+    border-color: var(--color-error, #dc2626);
+  }
+
+  .archived-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+  }
+
+  .archived-label {
+    font-size: 0.6875rem;
+    font-weight: 500;
+    padding: 0.125rem 0.375rem;
+    border-radius: var(--radius-sm);
+    background: var(--color-border-light, rgba(0, 0, 0, 0.05));
+    color: var(--color-text-secondary);
+  }
+
+  .unarchive-btn {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+    background: none;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    color: var(--color-text-secondary);
+    cursor: pointer;
+  }
+
+  .unarchive-btn:hover {
+    background: var(--color-border-light, rgba(0, 0, 0, 0.05));
+    color: var(--color-text);
   }
 </style>

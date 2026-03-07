@@ -22,6 +22,7 @@ export interface Board {
   columns: Column[];
   labels?: Label[];
   open?: boolean;
+  archived?: boolean;
   createdAt: string;
   syncStatus: SyncStatus;
 }
