@@ -436,7 +436,25 @@ Jetstream and serves to other clients.
 
 ```bash
 npm install
-npm run dev      # Start dev server
+npm run dev      # Start dev server at http://127.0.0.1:3001
 npm run build    # Production build
 npm run check    # Type checking
 ```
+
+By default the dev server talks to the production appview at
+`https://appview.skyboard.dev`. To point it at a local appview instead, copy the
+example env file and start the local appview:
+
+```bash
+cp .env.example .env
+```
+
+Then start the local appview in a separate terminal:
+
+```bash
+cd appview
+bun install
+bun run dev      # starts on http://localhost:3002
+```
+
+Remove or empty the `VITE_APPVIEW_URL` value to switch back to production.
