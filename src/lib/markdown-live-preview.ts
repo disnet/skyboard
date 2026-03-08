@@ -177,9 +177,55 @@ function buildDecorations(view: EditorView): DecorationSet {
           }
 
           case "FencedCode": {
-            decs.push(
-              Decoration.mark({ class: "cm-md-fenced-code" }).range(from, to),
-            );
+            const codeMarks = nodeRef.node.getChildren("CodeMark");
+
+            // Hide opening fence line including its trailing newline
+            if (codeMarks.length > 0) {
+              const openMark = codeMarks[0];
+              const openLine = view.state.doc.lineAt(openMark.from);
+              // Include the newline after the fence line to collapse it
+              const hideEnd = Math.min(openLine.to + 1, to);
+              decs.push(Decoration.replace({}).range(openLine.from, hideEnd));
+            }
+
+            // Hide closing fence line including its leading newline
+            if (codeMarks.length > 1) {
+              const closeMark = codeMarks[codeMarks.length - 1];
+              const closeLine = view.state.doc.lineAt(closeMark.from);
+              // Include the newline before the fence line to collapse it
+              const hideStart = Math.max(closeLine.from - 1, from);
+              decs.push(Decoration.replace({}).range(hideStart, closeLine.to));
+            }
+
+            // Apply line decoration with full-width background to each code line
+            const codeTexts = nodeRef.node.getChildren("CodeText");
+            for (const ct of codeTexts) {
+              // CodeText may span multiple lines — iterate each line
+              let pos = ct.from;
+              while (pos <= ct.to) {
+                const line = view.state.doc.lineAt(pos);
+                decs.push(
+                  Decoration.line({ class: "cm-md-fenced-code-line" }).range(
+                    line.from,
+                  ),
+                );
+                // Move to next line
+                if (line.to >= ct.to) break;
+                pos = line.to + 1;
+              }
+            }
+
+            // Also apply mark decoration for monospace font on the code text
+            for (const ct of codeTexts) {
+              if (ct.from < ct.to) {
+                decs.push(
+                  Decoration.mark({ class: "cm-md-fenced-code" }).range(
+                    ct.from,
+                    ct.to,
+                  ),
+                );
+              }
+            }
             break;
           }
 
@@ -254,10 +300,11 @@ const theme = EditorView.baseTheme({
     textDecoration: "underline",
   },
   ".cm-md-fenced-code": {
-    backgroundColor: "rgba(128, 128, 128, 0.08)",
-    borderRadius: "4px",
     fontFamily: "monospace",
     fontSize: "0.9em",
+  },
+  ".cm-md-fenced-code-line": {
+    backgroundColor: "rgba(128, 128, 128, 0.08)",
   },
   ".cm-task-checkbox": {
     cursor: "pointer",
