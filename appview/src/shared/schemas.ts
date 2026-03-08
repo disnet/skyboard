@@ -36,6 +36,10 @@ export const TaskRecordSchema = z.object({
   boardUri: z.string().max(MAX_STRING),
   position: z.string().max(MAX_STRING).optional(),
   labelIds: z.array(z.string().max(MAX_STRING)).max(MAX_LABEL_IDS).optional(),
+  assigneeDids: z
+    .array(z.string().max(MAX_STRING))
+    .max(MAX_LABEL_IDS)
+    .optional(),
   order: z.number().int().min(0).max(MAX_ORDER).optional(),
   createdAt: z.string().max(MAX_STRING),
   updatedAt: z.string().max(MAX_STRING).optional(),
@@ -47,6 +51,10 @@ const OpFieldsSchema = z.object({
   columnId: z.string().max(MAX_STRING).optional(),
   position: z.string().max(MAX_STRING).optional(),
   labelIds: z.array(z.string().max(MAX_STRING)).max(MAX_LABEL_IDS).optional(),
+  assigneeDids: z
+    .array(z.string().max(MAX_STRING))
+    .max(MAX_LABEL_IDS)
+    .optional(),
   order: z.number().int().min(0).max(MAX_ORDER).optional(),
 });
 
