@@ -5,6 +5,11 @@
   import { handleTouchStart } from "$lib/touch-drag.svelte.js";
   import DOMPurify from "dompurify";
   import AuthorBadge from "./AuthorBadge.svelte";
+  import {
+    getProfile,
+    ensureProfile,
+    shortDid,
+  } from "$lib/profile-cache.svelte.js";
   import { createOp } from "$lib/ops.js";
 
   const marked = new Marked({
@@ -71,6 +76,14 @@
   let cardEl: HTMLDivElement | undefined = $state();
   let titleEl: HTMLDivElement | undefined = $state();
   let svelteTextNode: Text | null = null;
+
+  $effect(() => {
+    if (task.effectiveAssigneeDids) {
+      for (const did of task.effectiveAssigneeDids) {
+        ensureProfile(did);
+      }
+    }
+  });
 
   $effect(() => {
     if (selected && cardEl) {
@@ -443,19 +456,40 @@
   <div class="task-meta">
     <AuthorBadge did={task.ownerDid} isCurrentUser={isOwned} />
     {#if task.effectiveAssigneeDids && task.effectiveAssigneeDids.length > 0}
-      <span class="assignee-badge" title="Assigned">
-        <svg
-          class="assignee-icon"
-          viewBox="0 0 16 16"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.5"
-        >
-          <circle cx="8" cy="5" r="3" />
-          <path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6" />
-        </svg>
-        {#each task.effectiveAssigneeDids as did (did)}
-          <AuthorBadge {did} isCurrentUser={did === currentUserDid} />
+      <span class="assignee-avatars">
+        {#each task.effectiveAssigneeDids as assigneeDid (assigneeDid)}
+          {@const profile = getProfile(assigneeDid)}
+          {#if profile.data?.avatar}
+            <img
+              class="assignee-avatar"
+              class:own={assigneeDid === currentUserDid}
+              src={profile.data.avatar}
+              alt={profile.data.displayName ||
+                profile.data.handle ||
+                shortDid(assigneeDid)}
+              title={profile.data.displayName ||
+                `@${profile.data.handle}` ||
+                shortDid(assigneeDid)}
+            />
+          {:else}
+            <span
+              class="assignee-avatar-placeholder"
+              class:own={assigneeDid === currentUserDid}
+              title={profile.data
+                ? profile.data.displayName || `@${profile.data.handle}`
+                : shortDid(assigneeDid)}
+            >
+              <svg
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+              >
+                <circle cx="8" cy="5" r="3" />
+                <path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6" />
+              </svg>
+            </span>
+          {/if}
         {/each}
       </span>
     {/if}
@@ -743,18 +777,52 @@
     margin-top: 0.375rem;
   }
 
-  .assignee-badge {
+  .assignee-avatars {
     display: inline-flex;
     align-items: center;
-    gap: 0.125rem;
-    font-size: 0.75rem;
-    color: var(--color-text-secondary);
   }
 
-  .assignee-icon {
-    width: 0.75rem;
-    height: 0.75rem;
+  .assignee-avatar {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 1.5px solid var(--color-surface);
     flex-shrink: 0;
+  }
+
+  .assignee-avatar:not(:first-child) {
+    margin-left: -6px;
+  }
+
+  .assignee-avatar.own {
+    box-shadow: 0 0 0 1.5px var(--color-primary);
+  }
+
+  .assignee-avatar-placeholder {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--color-border-light);
+    color: var(--color-text-secondary);
+    border: 1.5px solid var(--color-surface);
+    flex-shrink: 0;
+  }
+
+  .assignee-avatar-placeholder:not(:first-child) {
+    margin-left: -6px;
+  }
+
+  .assignee-avatar-placeholder.own {
+    box-shadow: 0 0 0 1.5px var(--color-primary);
+  }
+
+  .assignee-avatar-placeholder svg {
+    width: 12px;
+    height: 12px;
   }
 
   .todo-badge {
