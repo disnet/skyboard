@@ -18,3 +18,18 @@ jobs:
         working-directory: appview
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+      - name: Ensure daily schedule on machine
+        run: |
+          MACHINES_JSON=$(flyctl machines list --json)
+          COUNT=$(echo "$MACHINES_JSON" | jq 'length')
+          if [ "$COUNT" -ne 1 ]; then
+            echo "Expected exactly 1 machine, found $COUNT. Refusing to update schedule." >&2
+            echo "$MACHINES_JSON" | jq -r '.[] | .id' >&2
+            exit 1
+          fi
+          MACHINE_ID=$(echo "$MACHINES_JSON" | jq -r '.[0].id')
+          flyctl machine update "$MACHINE_ID" --schedule daily --yes
+        working-directory: appview
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
