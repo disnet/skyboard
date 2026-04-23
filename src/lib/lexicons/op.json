@@ -58,6 +58,12 @@
           "items": { "type": "string" },
           "description": "IDs of labels assigned to this task"
         },
+        "assigneeDids": {
+          "type": "array",
+          "maxLength": 50,
+          "items": { "type": "string", "format": "did" },
+          "description": "DIDs of users assigned to this task"
+        },
         "order": {
           "type": "integer",
           "minimum": 0
