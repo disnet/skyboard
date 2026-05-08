@@ -17,6 +17,7 @@ interface OpFields {
   title?: string;
   description?: string;
   columnId?: string;
+  parentTaskUri?: string;
   position?: string;
   labelIds?: string[];
   order?: number;
@@ -26,6 +27,7 @@ const MUTABLE_FIELDS: (keyof OpFields)[] = [
   "title",
   "description",
   "columnId",
+  "parentTaskUri",
   "position",
   "labelIds",
 ];
@@ -56,6 +58,7 @@ interface MaterializedTask {
   effectiveTitle: string;
   effectiveDescription: string | undefined;
   effectiveColumnId: string;
+  effectiveParentTaskUri: string | undefined;
   effectivePosition: string;
   effectiveLabelIds: string[];
   createdAt: string;
@@ -148,6 +151,8 @@ function materializeTasks(
       effectiveTitle: fieldStates.title.value as string,
       effectiveDescription: fieldStates.description.value as string | undefined,
       effectiveColumnId: fieldStates.columnId.value as string,
+      effectiveParentTaskUri:
+        (fieldStates.parentTaskUri.value as string | undefined) || undefined,
       effectivePosition: fieldStates.position.value as string,
       effectiveLabelIds:
         (fieldStates.labelIds.value as string[] | undefined) ?? [],
@@ -179,6 +184,7 @@ export interface BoardResponse {
     description: string | null;
     columnId: string;
     boardUri: string;
+    parentTaskUri: string | null;
     position: string | null;
     labelIds: string[] | null;
     order: number | null;
@@ -266,6 +272,7 @@ export function getBoardData(did: string, rkey: string): BoardResponse | null {
       description: t.description,
       columnId: t.columnId,
       boardUri: t.boardUri,
+      parentTaskUri: t.parentTaskUri,
       position: t.position,
       labelIds: t.labelIds ? JSON.parse(t.labelIds) : null,
       order: t.order,

@@ -101,6 +101,7 @@ program
   .argument("<title>", "Card title")
   .option("-c, --column <column>", "Target column (default: first column)")
   .option("-d, --description <desc>", "Card description")
+  .option("-p, --parent <ref>", "Parent card reference")
   .option("--board <ref>", "Override default board")
   .option("--json", "Output as JSON")
   .action(newCommand);
@@ -129,6 +130,8 @@ program
   .option("-t, --title <title>", "New title")
   .option("-d, --description <desc>", "New description")
   .option("-l, --label <label...>", "Set labels (by name)")
+  .option("-p, --parent <ref>", "Set parent card reference")
+  .option("--clear-parent", "Clear parent card")
   .option("--board <ref>", "Override default board")
   .option("--json", "Output as JSON")
   .action(editCommand);

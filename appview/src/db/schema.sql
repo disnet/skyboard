@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   description TEXT,
   columnId TEXT NOT NULL,
   boardUri TEXT NOT NULL,
+  parentTaskUri TEXT,
   position TEXT,
   labelIds TEXT,                         -- JSON
   "order" INTEGER,

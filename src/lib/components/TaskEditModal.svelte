@@ -63,6 +63,7 @@
     comments = [],
     reactions,
     boardLabels = [],
+    allTasks = [],
     boardUri = "",
     columns = [],
     onclose,
@@ -79,6 +80,7 @@
     comments?: Comment[];
     reactions?: Map<string, { count: number; userReacted: boolean }>;
     boardLabels?: Label[];
+    allTasks?: MaterializedTask[];
     boardUri?: string;
     columns?: Column[];
     onclose: () => void;
@@ -242,6 +244,61 @@
     `at://${task.ownerDid}/dev.skyboard.task/${task.rkey}`,
   );
 
+  const taskTitleByUri = $derived.by(() => {
+    const map = new Map<string, string>();
+    for (const t of allTasks) {
+      map.set(
+        `at://${t.ownerDid}/dev.skyboard.task/${t.rkey}`,
+        t.effectiveTitle,
+      );
+    }
+    return map;
+  });
+
+  const parentOptions = $derived.by(() => {
+    const descendants = new Set<string>();
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const t of allTasks) {
+        const uri = `at://${t.ownerDid}/dev.skyboard.task/${t.rkey}`;
+        if (uri === taskUri || descendants.has(uri)) continue;
+        if (
+          t.effectiveParentTaskUri === taskUri ||
+          (t.effectiveParentTaskUri &&
+            descendants.has(t.effectiveParentTaskUri))
+        ) {
+          descendants.add(uri);
+          changed = true;
+        }
+      }
+    }
+    return allTasks
+      .filter((t) => {
+        const uri = `at://${t.ownerDid}/dev.skyboard.task/${t.rkey}`;
+        return (
+          uri !== taskUri &&
+          !descendants.has(uri) &&
+          isContentVisible(
+            t.ownerDid,
+            currentUserDid,
+            boardOwnerDid,
+            ownerTrustedDids,
+            boardOpen,
+            approvedUris,
+            uri,
+          )
+        );
+      })
+      .sort((a, b) => a.effectiveTitle.localeCompare(b.effectiveTitle));
+  });
+
+  const parentTitle = $derived(
+    task.effectiveParentTaskUri
+      ? (taskTitleByUri.get(task.effectiveParentTaskUri) ?? "Unknown task")
+      : "",
+  );
+
   const allTaskComments = $derived(
     comments
       .filter((c) => c.targetTaskUri === taskUri)
@@ -355,6 +412,121 @@
   let editTitle = $state(task.effectiveTitle);
   let editDescription = $state(task.effectiveDescription ?? "");
   let editLabelIds = $state<string[]>([...task.effectiveLabelIds]);
+  let editParentTaskUri = $state(task.effectiveParentTaskUri ?? "");
+  let showParentMenu = $state(false);
+  let parentQuery = $state("");
+  let parentPickerEl: HTMLDivElement | undefined = $state();
+  let parentTriggerEl: HTMLButtonElement | undefined = $state();
+  let parentSearchEl: HTMLInputElement | undefined = $state();
+  let parentMenuEl: HTMLDivElement | undefined = $state();
+  let parentMenuStyle = $state("");
+  let activeParentIndex = $state(0);
+
+  const editParentTitle = $derived(
+    editParentTaskUri
+      ? (taskTitleByUri.get(editParentTaskUri) ?? "Unknown task")
+      : "No parent",
+  );
+
+  const filteredParentOptions = $derived.by(() => {
+    const query = parentQuery.trim().toLowerCase();
+    if (!query) return parentOptions;
+    return parentOptions.filter((option) =>
+      option.effectiveTitle.toLowerCase().includes(query),
+    );
+  });
+
+  const parentMenuOptions = $derived([
+    { uri: "", title: "No parent", meta: "Top-level task" },
+    ...filteredParentOptions.map((option) => ({
+      uri: `at://${option.ownerDid}/dev.skyboard.task/${option.rkey}`,
+      title: option.effectiveTitle,
+      meta: "Parent task",
+    })),
+  ]);
+
+  function selectParent(uri: string) {
+    editParentTaskUri = uri;
+    closeParentMenu();
+  }
+
+  function selectActiveParent() {
+    const option = parentMenuOptions[activeParentIndex];
+    if (option) selectParent(option.uri);
+  }
+
+  function moveActiveParent(delta: number) {
+    const count = parentMenuOptions.length;
+    if (count === 0) return;
+    activeParentIndex = (activeParentIndex + delta + count) % count;
+    requestAnimationFrame(() => {
+      parentMenuEl
+        ?.querySelector<HTMLElement>(
+          `[data-parent-index="${activeParentIndex}"]`,
+        )
+        ?.scrollIntoView({ block: "nearest" });
+    });
+  }
+
+  function positionParentMenu() {
+    if (!parentTriggerEl || !parentMenuEl) return;
+    const trigger = parentTriggerEl.getBoundingClientRect();
+    const margin = 8;
+    const gap = 4;
+    const width = trigger.width;
+    const left = Math.max(
+      margin,
+      Math.min(trigger.left, window.innerWidth - width - margin),
+    );
+    const spaceBelow = window.innerHeight - trigger.bottom - margin - gap;
+    const spaceAbove = trigger.top - margin - gap;
+    const maxHeight = Math.min(224, Math.max(96, spaceBelow, spaceAbove));
+    const menuHeight = Math.min(parentMenuEl.offsetHeight, maxHeight);
+    const openAbove = spaceBelow < 160 && spaceAbove > spaceBelow;
+    const top = openAbove
+      ? Math.max(margin, trigger.top - gap - menuHeight)
+      : trigger.bottom + gap;
+
+    parentMenuStyle = `top: ${top}px; left: ${left}px; width: ${width}px; max-height: ${maxHeight}px;`;
+  }
+
+  function openParentMenu() {
+    showParentMenu = true;
+    activeParentIndex = Math.max(
+      0,
+      parentMenuOptions.findIndex((option) => option.uri === editParentTaskUri),
+    );
+    requestAnimationFrame(() => {
+      positionParentMenu();
+      parentSearchEl?.focus();
+    });
+  }
+
+  function handleParentPickerFocusout() {
+    setTimeout(() => {
+      if (!parentPickerEl?.contains(document.activeElement)) {
+        closeParentMenu();
+      }
+    }, 0);
+  }
+
+  function closeParentMenu() {
+    showParentMenu = false;
+    parentQuery = "";
+    activeParentIndex = 0;
+  }
+
+  $effect(() => {
+    if (showParentMenu && parentMenuEl) {
+      positionParentMenu();
+    }
+  });
+
+  $effect(() => {
+    if (activeParentIndex >= parentMenuOptions.length) {
+      activeParentIndex = Math.max(0, parentMenuOptions.length - 1);
+    }
+  });
 
   function toggleLabel(id: string) {
     if (editLabelIds.includes(id)) {
@@ -547,6 +719,8 @@
     if (title !== task.effectiveTitle) fields.title = title;
     if (description !== task.effectiveDescription)
       fields.description = description;
+    if (editParentTaskUri !== (task.effectiveParentTaskUri ?? ""))
+      fields.parentTaskUri = editParentTaskUri;
     const sortedEditLabelIds = [...editLabelIds].sort();
     const sortedEffectiveLabelIds = [...task.effectiveLabelIds].sort();
     if (
@@ -636,6 +810,12 @@
       handleMoveKeydown(e);
       return;
     }
+    if (showParentMenu && e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      closeParentMenu();
+      return;
+    }
     if (
       e.key === "m" &&
       !readonly &&
@@ -661,7 +841,7 @@
   }
 </script>
 
-<svelte:window onkeydown={handleKeydown} />
+<svelte:window onkeydown={handleKeydown} onresize={positionParentMenu} />
 
 <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
 <div
@@ -718,7 +898,12 @@
       </div>
     </div>
 
-    <div class="modal-body">
+    <div
+      class="modal-body"
+      onscroll={() => {
+        if (showParentMenu) closeParentMenu();
+      }}
+    >
       {#if readonly}
         {#if renderedDescription}
           <div class="rendered-description">{@html renderedDescription}</div>
@@ -741,6 +926,15 @@
                 </span>
               {/each}
             </div>
+          </div>
+        {/if}
+
+        {#if task.effectiveParentTaskUri}
+          <div class="parent-section">
+            <div class="parent-header">
+              <span>Parent</span>
+            </div>
+            <div class="parent-display">{parentTitle}</div>
           </div>
         {/if}
       {:else}
@@ -829,6 +1023,122 @@
                 }}>&times;</button
               >
             </div>
+          {/if}
+        </div>
+
+        <div class="parent-section">
+          <div class="parent-header">
+            <!-- svelte-ignore a11y_label_has_associated_control -->
+            <label>Parent</label>
+            {#if editStatus === "denied"}
+              <span class="field-status denied">Trusted users only</span>
+            {/if}
+          </div>
+          <div
+            class="parent-picker"
+            class:open={showParentMenu}
+            class:disabled={editStatus === "denied"}
+            bind:this={parentPickerEl}
+            onfocusout={handleParentPickerFocusout}
+          >
+            <button
+              class="parent-trigger"
+              type="button"
+              bind:this={parentTriggerEl}
+              aria-haspopup="listbox"
+              aria-expanded={showParentMenu}
+              disabled={editStatus === "denied"}
+              onclick={() => {
+                if (showParentMenu) {
+                  closeParentMenu();
+                } else {
+                  openParentMenu();
+                }
+              }}
+            >
+              <span class="parent-trigger-content">
+                <span class="parent-trigger-label">
+                  {editParentTaskUri ? "Nested under" : "Relationship"}
+                </span>
+                <span class="parent-trigger-title">{editParentTitle}</span>
+              </span>
+              <span class="parent-trigger-chevron"></span>
+            </button>
+            {#if showParentMenu}
+              <div
+                class="parent-menu"
+                role="listbox"
+                aria-label="Parent task"
+                bind:this={parentMenuEl}
+                style={parentMenuStyle}
+              >
+                <div class="parent-search-wrap">
+                  <input
+                    class="parent-search"
+                    type="search"
+                    bind:this={parentSearchEl}
+                    bind:value={parentQuery}
+                    placeholder="Search tasks..."
+                    aria-label="Search parent tasks"
+                    onkeydown={(e) => {
+                      if (e.key === "ArrowDown") {
+                        e.preventDefault();
+                        moveActiveParent(1);
+                      } else if (e.key === "ArrowUp") {
+                        e.preventDefault();
+                        moveActiveParent(-1);
+                      } else if (e.key === "Enter") {
+                        e.preventDefault();
+                        selectActiveParent();
+                      } else if (e.key === "Escape") {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        closeParentMenu();
+                      }
+                    }}
+                  />
+                </div>
+                <button
+                  class="parent-option"
+                  class:selected={editParentTaskUri === ""}
+                  type="button"
+                  role="option"
+                  aria-selected={editParentTaskUri === ""}
+                  data-parent-index={0}
+                  class:active={activeParentIndex === 0}
+                  onclick={() => selectParent("")}
+                  onmouseenter={() => (activeParentIndex = 0)}
+                >
+                  <span class="parent-option-title">No parent</span>
+                  <span class="parent-option-meta">Top-level task</span>
+                </button>
+                {#each filteredParentOptions as option, i (option.ownerDid + option.rkey)}
+                  {@const optionUri = `at://${option.ownerDid}/dev.skyboard.task/${option.rkey}`}
+                  {@const optionIndex = i + 1}
+                  <button
+                    class="parent-option"
+                    class:selected={editParentTaskUri === optionUri}
+                    class:active={activeParentIndex === optionIndex}
+                    type="button"
+                    role="option"
+                    aria-selected={editParentTaskUri === optionUri}
+                    data-parent-index={optionIndex}
+                    onclick={() => selectParent(optionUri)}
+                    onmouseenter={() => (activeParentIndex = optionIndex)}
+                  >
+                    <span class="parent-option-title">
+                      {option.effectiveTitle}
+                    </span>
+                    <span class="parent-option-meta">Parent task</span>
+                  </button>
+                {:else}
+                  <div class="parent-no-results">No matching tasks</div>
+                {/each}
+              </div>
+            {/if}
+          </div>
+          {#if parentOptions.length === 0 && !editParentTaskUri}
+            <div class="parent-empty">No other visible tasks yet</div>
           {/if}
         </div>
       {/if}
@@ -1512,6 +1822,214 @@
     font-size: 0.8125rem;
     font-weight: 500;
     color: var(--color-text-secondary);
+  }
+
+  .parent-section {
+    margin-top: 1rem;
+    padding: 0 1.25rem;
+  }
+
+  .parent-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.375rem;
+  }
+
+  .parent-header label,
+  .parent-header span {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--color-text-secondary);
+  }
+
+  .parent-display {
+    display: inline-flex;
+    max-width: 100%;
+    padding: 0.25rem 0.625rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    color: var(--color-text);
+    background: var(--color-bg);
+    font-size: 0.875rem;
+    font-weight: 500;
+  }
+
+  .parent-picker {
+    position: relative;
+  }
+
+  .parent-picker.disabled {
+    opacity: 0.6;
+  }
+
+  .parent-trigger {
+    width: 100%;
+    min-height: 3rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.5rem 0.625rem 0.5rem 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-bg);
+    color: var(--color-text);
+    cursor: pointer;
+    text-align: left;
+    transition:
+      background 0.15s,
+      border-color 0.15s,
+      box-shadow 0.15s;
+  }
+
+  .parent-trigger:hover:not(:disabled),
+  .parent-picker.open .parent-trigger {
+    background: var(--color-surface);
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px var(--color-primary-alpha, rgba(0, 102, 204, 0.1));
+  }
+
+  .parent-trigger:focus-visible {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px var(--color-primary-alpha, rgba(0, 102, 204, 0.15));
+  }
+
+  .parent-trigger:disabled {
+    cursor: not-allowed;
+  }
+
+  .parent-trigger-content {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+  }
+
+  .parent-trigger-label {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  .parent-trigger-title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--color-text);
+  }
+
+  .parent-trigger-chevron {
+    width: 0.5rem;
+    height: 0.5rem;
+    flex-shrink: 0;
+    border-right: 1.5px solid var(--color-text-secondary);
+    border-bottom: 1.5px solid var(--color-text-secondary);
+    transform: rotate(45deg) translateY(-2px);
+    transition: transform 0.15s;
+  }
+
+  .parent-picker.open .parent-trigger-chevron {
+    transform: rotate(225deg) translate(-2px, -1px);
+  }
+
+  .parent-menu {
+    position: fixed;
+    z-index: 200;
+    overflow-y: auto;
+    padding: 0.25rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-lg);
+  }
+
+  .parent-search-wrap {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    padding-bottom: 0.25rem;
+    background: var(--color-surface);
+  }
+
+  .parent-search {
+    width: 100%;
+    padding: 0.5rem 0.625rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-size: 0.875rem;
+  }
+
+  .parent-search:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px var(--color-primary-alpha, rgba(0, 102, 204, 0.1));
+  }
+
+  .parent-search::placeholder {
+    color: var(--color-text-secondary);
+  }
+
+  .parent-option {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+    padding: 0.5rem 0.625rem;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--color-text);
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .parent-option:hover,
+  .parent-option.active,
+  .parent-option:focus-visible {
+    outline: none;
+    background: var(--color-bg);
+    border-color: var(--color-border-light);
+  }
+
+  .parent-option.selected {
+    background: var(--color-primary-alpha, rgba(0, 102, 204, 0.1));
+    border-color: color-mix(in srgb, var(--color-primary) 40%, transparent);
+  }
+
+  .parent-option-title {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.875rem;
+    font-weight: 500;
+  }
+
+  .parent-option-meta,
+  .parent-empty,
+  .parent-no-results {
+    font-size: 0.6875rem;
+    color: var(--color-text-secondary);
+  }
+
+  .parent-empty {
+    margin-top: 0.375rem;
+    padding-left: 0.125rem;
+  }
+
+  .parent-no-results {
+    padding: 0.625rem;
+    text-align: center;
+    font-style: italic;
   }
 
   .label-pills {

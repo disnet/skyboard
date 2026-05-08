@@ -7,6 +7,7 @@ const MUTABLE_FIELDS: (keyof OpFields)[] = [
   "title",
   "description",
   "columnId",
+  "parentTaskUri",
   "position",
   "labelIds",
 ];
@@ -130,6 +131,7 @@ export function materializeTasks(
       description: task.description,
       columnId: task.columnId,
       boardUri: task.boardUri,
+      parentTaskUri: task.parentTaskUri,
       position: task.position,
       labelIds: task.labelIds,
       order: task.order,
@@ -141,6 +143,8 @@ export function materializeTasks(
       effectiveTitle: fieldStates.title.value as string,
       effectiveDescription: fieldStates.description.value as string | undefined,
       effectiveColumnId: fieldStates.columnId.value as string,
+      effectiveParentTaskUri:
+        (fieldStates.parentTaskUri.value as string | undefined) || undefined,
       effectivePosition: fieldStates.position.value as string,
       effectiveLabelIds:
         (fieldStates.labelIds.value as string[] | undefined) ?? [],

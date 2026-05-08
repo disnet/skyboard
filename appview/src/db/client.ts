@@ -27,6 +27,12 @@ export function getDb(): Database {
     if (!cols.some((c) => c.name === "updatedAt")) {
       _db.exec("ALTER TABLE comments ADD COLUMN updatedAt TEXT");
     }
+    const taskCols = _db
+      .query<{ name: string }, []>("PRAGMA table_info(tasks)")
+      .all();
+    if (!taskCols.some((c) => c.name === "parentTaskUri")) {
+      _db.exec("ALTER TABLE tasks ADD COLUMN parentTaskUri TEXT");
+    }
   }
   return _db;
 }
@@ -109,6 +115,7 @@ export interface TaskRow {
   description: string | null;
   columnId: string;
   boardUri: string;
+  parentTaskUri: string | null;
   position: string | null;
   labelIds: string | null;
   order: number | null;
@@ -124,6 +131,7 @@ export function upsertTask(
     description?: string;
     columnId: string;
     boardUri: string;
+    parentTaskUri?: string;
     position?: string;
     labelIds?: string[];
     order?: number;
@@ -134,11 +142,12 @@ export function upsertTask(
   const db = getDb();
   const uri = buildAtUri(did, "dev.skyboard.task", rkey);
   db.run(
-    `INSERT INTO tasks (uri, did, rkey, title, description, columnId, boardUri, position, labelIds, "order", createdAt, updatedAt)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO tasks (uri, did, rkey, title, description, columnId, boardUri, parentTaskUri, position, labelIds, "order", createdAt, updatedAt)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(uri) DO UPDATE SET
        title=excluded.title, description=excluded.description,
        columnId=excluded.columnId, boardUri=excluded.boardUri,
+       parentTaskUri=excluded.parentTaskUri,
        position=excluded.position, labelIds=excluded.labelIds,
        "order"=excluded."order", createdAt=excluded.createdAt,
        updatedAt=excluded.updatedAt`,
@@ -150,6 +159,7 @@ export function upsertTask(
       record.description ?? null,
       record.columnId,
       record.boardUri,
+      record.parentTaskUri ?? null,
       record.position ?? null,
       record.labelIds ? JSON.stringify(record.labelIds) : null,
       record.order ?? null,

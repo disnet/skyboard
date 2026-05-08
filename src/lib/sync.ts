@@ -56,6 +56,7 @@ function taskToRecord(task: Task): TaskRecord {
     ...(task.description ? { description: task.description } : {}),
     columnId: task.columnId,
     boardUri: task.boardUri,
+    ...(task.parentTaskUri ? { parentTaskUri: task.parentTaskUri } : {}),
     ...(task.position ? { position: task.position } : {}),
     ...(task.labelIds && task.labelIds.length > 0
       ? { labelIds: task.labelIds }
