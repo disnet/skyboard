@@ -2,6 +2,7 @@ import { requireAgent } from "../lib/auth.js";
 import { fetchBoardData } from "../lib/pds.js";
 import { resolveBoard } from "../lib/board-resolver.js";
 import { resolveColumn } from "../lib/column-match.js";
+import { resolveCardRef } from "../lib/card-ref.js";
 import {
   generateTID,
   buildAtUri,
@@ -17,6 +18,7 @@ export async function newCommand(
   opts: {
     column?: string;
     description?: string;
+    parent?: string;
     board?: string;
     json?: boolean;
   },
@@ -60,6 +62,18 @@ export async function newCommand(
   const position = generateKeyBetween(lastPos, null);
 
   const boardUri = buildAtUri(boardRef.did, BOARD_COLLECTION, boardRef.rkey);
+  let parentTaskUri: string | undefined;
+  if (opts.parent) {
+    try {
+      const parent = resolveCardRef(opts.parent, data.tasks);
+      parentTaskUri = buildAtUri(parent.did, TASK_COLLECTION, parent.rkey);
+    } catch (err) {
+      console.error(
+        chalk.red(err instanceof Error ? err.message : String(err)),
+      );
+      process.exit(1);
+    }
+  }
   const rkey = generateTID();
   const now = new Date().toISOString();
 
@@ -73,6 +87,7 @@ export async function newCommand(
       ...(opts.description ? { description: opts.description } : {}),
       columnId: targetCol.id,
       boardUri,
+      ...(parentTaskUri ? { parentTaskUri } : {}),
       position,
       order: 0,
       createdAt: now,
@@ -82,7 +97,13 @@ export async function newCommand(
 
   if (opts.json) {
     console.log(
-      JSON.stringify({ rkey, title, column: targetCol.name, position }),
+      JSON.stringify({
+        rkey,
+        title,
+        column: targetCol.name,
+        parentTaskUri,
+        position,
+      }),
     );
   } else {
     console.log(

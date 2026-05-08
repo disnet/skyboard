@@ -166,6 +166,7 @@ function processTask(
     description: validated.description,
     columnId: validated.columnId,
     boardUri,
+    parentTaskUri: validated.parentTaskUri,
     position: validated.position,
     labelIds: validated.labelIds,
     order: validated.order,

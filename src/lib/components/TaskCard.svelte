@@ -36,6 +36,7 @@
     pending = false,
     commentCount = 0,
     reactions,
+    allTasks = [],
     onreact,
     taskUri = "",
     boardLabels = [],
@@ -52,6 +53,7 @@
     pending?: boolean;
     commentCount?: number;
     reactions?: Map<string, { count: number; userReacted: boolean }>;
+    allTasks?: MaterializedTask[];
     onreact?: (taskUri: string, emoji: string) => void;
     taskUri?: string;
     boardLabels?: Label[];
@@ -240,6 +242,16 @@
       .filter((l): l is Label => l !== undefined),
   );
 
+  const parentTask = $derived(
+    task.effectiveParentTaskUri
+      ? allTasks.find(
+          (t) =>
+            `at://${t.ownerDid}/dev.skyboard.task/${t.rkey}` ===
+            task.effectiveParentTaskUri,
+        )
+      : undefined,
+  );
+
   const renderedDescription = $derived(
     task.effectiveDescription
       ? DOMPurify.sanitize(marked.parse(task.effectiveDescription) as string, {
@@ -422,6 +434,19 @@
   >
     {task.effectiveTitle}
   </div>
+  {#if task.effectiveParentTaskUri}
+    <div
+      class="parent-preview"
+      title={parentTask
+        ? `Parent: ${parentTask.effectiveTitle}`
+        : "Parent task not loaded"}
+    >
+      <span class="parent-marker">Parent</span>
+      <span class="parent-title">
+        {parentTask?.effectiveTitle ?? "Unknown task"}
+      </span>
+    </div>
+  {/if}
   {#if taskLabels.length > 0}
     <div class="task-labels">
       {#each taskLabels as label (label.id)}
@@ -614,6 +639,36 @@
   .task-title[contenteditable] {
     -webkit-user-select: text;
     user-select: text;
+  }
+
+  .parent-preview {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    min-width: 0;
+    margin-top: 0.25rem;
+    color: var(--color-text-secondary);
+    font-size: 0.6875rem;
+    line-height: 1.3;
+  }
+
+  .parent-marker {
+    flex-shrink: 0;
+    padding: 0.0625rem 0.25rem;
+    border-radius: var(--radius-sm);
+    background: var(--color-border-light);
+    color: var(--color-text-secondary);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  .parent-title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 500;
   }
 
   .task-labels {

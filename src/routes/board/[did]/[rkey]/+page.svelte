@@ -1271,6 +1271,7 @@
         <Column
           {column}
           tasks={tasksByColumn.get(column.id) ?? []}
+          allTasks={materializedTasks}
           {boardUri}
           did={auth.did ?? ""}
           boardOwnerDid={board.current.did}
@@ -1390,6 +1391,7 @@
         `at://${editingTask.ownerDid}/dev.skyboard.task/${editingTask.rkey}`,
       )}
       boardLabels={board.current.labels ?? []}
+      allTasks={materializedTasks}
       columns={sortedColumns}
       {boardUri}
       onclose={closeTaskEditor}

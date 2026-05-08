@@ -28,6 +28,7 @@ interface AppviewBoardResponse {
     description?: string | null;
     columnId: string;
     boardUri: string;
+    parentTaskUri?: string | null;
     position?: string | null;
     labelIds?: string[] | null;
     order?: number | null;
@@ -184,6 +185,7 @@ export async function fetchBoardData(
       description: t.description ?? undefined,
       columnId: t.columnId,
       boardUri: t.boardUri,
+      parentTaskUri: t.parentTaskUri ?? undefined,
       position: t.position ?? undefined,
       labelIds: t.labelIds ?? undefined,
       order: t.order ?? undefined,

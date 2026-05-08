@@ -31,6 +31,7 @@ export interface Task {
   description?: string;
   columnId: string;
   boardUri: string;
+  parentTaskUri?: string;
   position?: string;
   labelIds?: string[];
   order?: number;
@@ -54,6 +55,7 @@ export interface TaskRecord {
   description?: string;
   columnId: string;
   boardUri: string;
+  parentTaskUri?: string;
   position?: string;
   labelIds?: string[];
   order?: number;
@@ -65,6 +67,7 @@ export interface OpFields {
   title?: string;
   description?: string;
   columnId?: string;
+  parentTaskUri?: string;
   position?: string;
   labelIds?: string[];
   order?: number;
@@ -126,6 +129,7 @@ export interface MaterializedTask {
   description?: string;
   columnId: string;
   boardUri: string;
+  parentTaskUri?: string;
   position?: string;
   order?: number;
   createdAt: string;
@@ -136,6 +140,7 @@ export interface MaterializedTask {
   effectiveTitle: string;
   effectiveDescription?: string;
   effectiveColumnId: string;
+  effectiveParentTaskUri?: string;
   effectivePosition: string;
   effectiveLabelIds: string[];
   ownerDid: string;

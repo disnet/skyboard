@@ -16,6 +16,7 @@
   let {
     column,
     tasks,
+    allTasks = [],
     boardUri,
     did,
     boardOwnerDid,
@@ -39,6 +40,7 @@
   }: {
     column: Column;
     tasks: MaterializedTask[];
+    allTasks?: MaterializedTask[];
     boardUri: string;
     did: string;
     boardOwnerDid: string;
@@ -282,6 +284,7 @@
       >
         <TaskCard
           {task}
+          {allTasks}
           currentUserDid={did}
           pending={isTaskPending(task)}
           commentCount={commentCounts.get(

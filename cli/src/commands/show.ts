@@ -32,6 +32,13 @@ export async function showCommand(
   const labels = task.effectiveLabelIds
     .map((id) => data.board.labels?.find((l) => l.id === id))
     .filter(Boolean);
+  const parent = task.effectiveParentTaskUri
+    ? data.tasks.find(
+        (t) =>
+          buildAtUri(t.did, TASK_COLLECTION, t.rkey) ===
+          task.effectiveParentTaskUri,
+      )
+    : undefined;
 
   const taskUri = buildAtUri(task.did, TASK_COLLECTION, task.rkey);
   const comments = data.comments
@@ -47,6 +54,13 @@ export async function showCommand(
           title: task.effectiveTitle,
           description: task.effectiveDescription,
           column: col?.name,
+          parent: parent
+            ? {
+                rkey: parent.rkey,
+                title: parent.effectiveTitle,
+                uri: task.effectiveParentTaskUri,
+              }
+            : null,
           labels: labels.map((l) => ({
             id: l!.id,
             name: l!.name,
@@ -80,6 +94,11 @@ export async function showCommand(
 
   if (col) {
     console.log(`${chalk.bold("Column:")}  ${col.name}`);
+  }
+  if (parent) {
+    console.log(
+      `${chalk.bold("Parent:")}  ${shortRkey(parent.rkey)} "${parent.effectiveTitle}"`,
+    );
   }
   if (labels.length > 0) {
     const labelStr = labels

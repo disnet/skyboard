@@ -29,6 +29,11 @@
             "format": "at-uri",
             "description": "AT URI of the parent board"
           },
+          "parentTaskUri": {
+            "type": "string",
+            "format": "at-uri",
+            "description": "AT URI of the parent task"
+          },
           "position": {
             "type": "string",
             "maxLength": 256,

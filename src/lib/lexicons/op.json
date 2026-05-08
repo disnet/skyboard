@@ -48,6 +48,10 @@
         "columnId": {
           "type": "string"
         },
+        "parentTaskUri": {
+          "type": "string",
+          "format": "at-uri"
+        },
         "position": {
           "type": "string",
           "maxLength": 256
