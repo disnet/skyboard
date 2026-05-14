@@ -4,6 +4,7 @@ import {
   buildAtprotoLoopbackClientMetadata,
 } from "@atproto/oauth-client-browser";
 import { openDb, closeDb } from "./db.js";
+import { initMCPProvider, unregisterCardMCPTools } from "../mcp/index.js";
 
 const OAUTH_SCOPE =
   "atproto repo:dev.skyboard.board repo:dev.skyboard.task repo:dev.skyboard.op repo:dev.skyboard.trust repo:dev.skyboard.comment repo:dev.skyboard.approval repo:dev.skyboard.reaction";
@@ -84,6 +85,7 @@ export async function initAuth(): Promise<void> {
       const newAgent = new Agent(result.session);
       agent = newAgent;
       did = result.session.sub;
+      initMCPProvider(result.session.sub);
     }
   } catch (e) {
     console.error("Auth init error:", e);
@@ -128,6 +130,7 @@ export async function login(handle: string): Promise<void> {
 
 export async function logout(): Promise<void> {
   const sub = did;
+  unregisterCardMCPTools();
   await closeDb();
   agent = null;
   did = null;
