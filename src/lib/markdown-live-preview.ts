@@ -176,6 +176,59 @@ function buildDecorations(view: EditorView): DecorationSet {
             return false;
           }
 
+          case "FencedCode": {
+            const codeMarks = nodeRef.node.getChildren("CodeMark");
+
+            // Hide opening fence line including its trailing newline
+            if (codeMarks.length > 0) {
+              const openMark = codeMarks[0];
+              const openLine = view.state.doc.lineAt(openMark.from);
+              // Include the newline after the fence line to collapse it
+              const hideEnd = Math.min(openLine.to + 1, to);
+              decs.push(Decoration.replace({}).range(openLine.from, hideEnd));
+            }
+
+            // Hide closing fence line including its leading newline
+            if (codeMarks.length > 1) {
+              const closeMark = codeMarks[codeMarks.length - 1];
+              const closeLine = view.state.doc.lineAt(closeMark.from);
+              // Include the newline before the fence line to collapse it
+              const hideStart = Math.max(closeLine.from - 1, from);
+              decs.push(Decoration.replace({}).range(hideStart, closeLine.to));
+            }
+
+            // Apply line decoration with full-width background to each code line
+            const codeTexts = nodeRef.node.getChildren("CodeText");
+            for (const ct of codeTexts) {
+              // CodeText may span multiple lines — iterate each line
+              let pos = ct.from;
+              while (pos <= ct.to) {
+                const line = view.state.doc.lineAt(pos);
+                decs.push(
+                  Decoration.line({ class: "cm-md-fenced-code-line" }).range(
+                    line.from,
+                  ),
+                );
+                // Move to next line
+                if (line.to >= ct.to) break;
+                pos = line.to + 1;
+              }
+            }
+
+            // Also apply mark decoration for monospace font on the code text
+            for (const ct of codeTexts) {
+              if (ct.from < ct.to) {
+                decs.push(
+                  Decoration.mark({ class: "cm-md-fenced-code" }).range(
+                    ct.from,
+                    ct.to,
+                  ),
+                );
+              }
+            }
+            break;
+          }
+
           case "Link": {
             const linkMarks = nodeRef.node.getChildren("LinkMark");
             const urls = nodeRef.node.getChildren("URL");
@@ -251,6 +304,13 @@ const theme = EditorView.baseTheme({
     color: "var(--color-primary, #3b82f6)",
     textDecoration: "underline",
   },
+  ".cm-md-fenced-code": {
+    fontFamily: "monospace",
+    fontSize: "0.9em",
+  },
+  ".cm-md-fenced-code-line": {
+    backgroundColor: "rgba(128, 128, 128, 0.08)",
+  },
   ".cm-task-checkbox": {
     cursor: "pointer",
     margin: "0 2px 0 0",
@@ -260,12 +320,30 @@ const theme = EditorView.baseTheme({
   },
 });
 
-const linkHighlight = HighlightStyle.define([
+const codeHighlight = HighlightStyle.define([
   { tag: [tags.link, tags.url], color: "var(--color-primary, #3b82f6)" },
+  { tag: tags.keyword, color: "#8b5cf6" },
+  { tag: tags.string, color: "#16a34a" },
+  { tag: tags.comment, color: "#6b7280", fontStyle: "italic" },
+  { tag: tags.number, color: "#d97706" },
+  { tag: tags.bool, color: "#d97706" },
+  { tag: tags.null, color: "#d97706" },
+  { tag: tags.function(tags.variableName), color: "#2563eb" },
+  { tag: tags.typeName, color: "#0d9488" },
+  { tag: tags.className, color: "#0d9488" },
+  { tag: tags.operator, color: "#dc2626" },
+  { tag: tags.propertyName, color: "#2563eb" },
+  { tag: tags.definition(tags.variableName), color: "#2563eb" },
+  { tag: tags.angleBracket, color: "#6b7280" },
+  { tag: tags.tagName, color: "#dc2626" },
+  { tag: tags.attributeName, color: "#d97706" },
+  { tag: tags.attributeValue, color: "#16a34a" },
+  { tag: tags.regexp, color: "#d97706" },
+  { tag: tags.self, color: "#8b5cf6" },
 ]);
 
 export const markdownLivePreview = [
   plugin,
   theme,
-  syntaxHighlighting(linkHighlight),
+  syntaxHighlighting(codeHighlight),
 ];
