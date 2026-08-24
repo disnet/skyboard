@@ -31,53 +31,165 @@ export class BoardReadError extends Error {
   }
 }
 
-async function resolvePds(did: string): Promise<string | null> {
+/**
+ * An identity that does not exist is a different answer from one we failed to
+ * look up: the first means the records can't exist, the second means we don't
+ * know.
+ */
+type PdsResolution =
+  | { status: "ok"; pds: string }
+  | { status: "missing" }
+  | { status: "failed"; reason: string };
+
+async function resolvePds(did: string): Promise<PdsResolution> {
   const cached = pdsCache.get(did);
-  if (cached) return cached;
-  try {
-    let url: string;
-    if (did.startsWith("did:plc:")) url = `https://plc.directory/${did}`;
-    else if (did.startsWith("did:web:")) {
-      const host = did.slice("did:web:".length).replaceAll(":", "/");
-      url = `https://${host}/.well-known/did.json`;
-    } else return null;
-    const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
-    if (!res.ok) return null;
-    const doc = (await res.json()) as {
-      service?: Array<{ id: string; type: string; serviceEndpoint: string }>;
-    };
-    const service = doc.service?.find(
-      (entry) =>
-        entry.id === "#atproto_pds" ||
-        entry.type === "AtprotoPersonalDataServer",
-    );
-    if (!service?.serviceEndpoint) return null;
-    pdsCache.set(did, service.serviceEndpoint);
-    return service.serviceEndpoint;
-  } catch {
-    return null;
+  if (cached) return { status: "ok", pds: cached };
+
+  let url: string;
+  if (did.startsWith("did:plc:")) url = `https://plc.directory/${did}`;
+  else if (did.startsWith("did:web:")) {
+    const host = did.slice("did:web:".length).replaceAll(":", "/");
+    url = `https://${host}/.well-known/did.json`;
+  } else {
+    return { status: "failed", reason: `unsupported DID method in ${did}` };
   }
+
+  let res: Response;
+  try {
+    res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+  } catch (error) {
+    return {
+      status: "failed",
+      reason: `${did} could not be looked up: ${errorText(error)}`,
+    };
+  }
+  // 404/410 is the directory saying this identity was never registered or was
+  // tombstoned; anything else non-2xx is the directory failing to answer.
+  if (res.status === 404 || res.status === 410) return { status: "missing" };
+  if (!res.ok) {
+    return {
+      status: "failed",
+      reason: `DID directory returned HTTP ${res.status} for ${did}`,
+    };
+  }
+
+  let doc: {
+    service?: Array<{ id: string; type: string; serviceEndpoint: string }>;
+  };
+  try {
+    doc = (await res.json()) as typeof doc;
+  } catch (error) {
+    return {
+      status: "failed",
+      reason: `DID document for ${did} was unreadable: ${errorText(error)}`,
+    };
+  }
+  const service = doc?.service?.find(
+    (entry) =>
+      entry.id === "#atproto_pds" || entry.type === "AtprotoPersonalDataServer",
+  );
+  if (typeof service?.serviceEndpoint !== "string") {
+    return {
+      status: "failed",
+      reason: `DID document for ${did} lists no atproto PDS`,
+    };
+  }
+  pdsCache.set(did, service.serviceEndpoint);
+  return { status: "ok", pds: service.serviceEndpoint };
 }
 
+function errorText(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+// Record key syntax from the atproto spec. A key that can't exist is worth
+// answering locally: `getRecord` rejects it with the same generic
+// `InvalidRequest` a broken request gets, and callers probe with arbitrary
+// strings (see `parseBoardRef` in commands/ralph.ts).
+const RECORD_KEY_RE = /^[a-zA-Z0-9._:~-]{1,512}$/;
+
+function isValidRecordKey(rkey: string): boolean {
+  return rkey !== "." && rkey !== ".." && RECORD_KEY_RE.test(rkey);
+}
+
+/**
+ * Did the PDS say this record is genuinely absent, as opposed to failing to
+ * answer? The reference implementation reports a missing record as HTTP 400
+ * `RecordNotFound` and a missing repo as a generic `InvalidRequest`; other
+ * implementations use 404. Everything else is a failed read.
+ */
+async function isRecordMissing(res: Response): Promise<boolean> {
+  if (res.status === 404) return true;
+  if (res.status !== 400) return false;
+  let body: { error?: unknown; message?: unknown };
+  try {
+    body = (await res.json()) as { error?: unknown; message?: unknown };
+  } catch {
+    return false;
+  }
+  const error = typeof body?.error === "string" ? body.error : "";
+  if (error === "RecordNotFound" || error === "RepoNotFound") return true;
+  const message = typeof body?.message === "string" ? body.message : "";
+  return error === "InvalidRequest" && /could not find repo/i.test(message);
+}
+
+/**
+ * Read one record from a repo. Returns null only when the record, its repo, or
+ * the identity that owns it is reported as missing — a resolution failure,
+ * transport error, server error, or malformed response raises `BoardReadError`
+ * so callers never mistake an unreadable PDS for an empty one.
+ */
 async function getRecord(
   did: string,
   collection: string,
   rkey: string,
 ): Promise<Record<string, unknown> | null> {
-  const pds = await resolvePds(did);
-  if (!pds) return null;
+  if (!isValidRecordKey(rkey)) return null;
+  const resolved = await resolvePds(did);
+  if (resolved.status === "missing") return null;
+  if (resolved.status === "failed") {
+    throw new BoardReadError(
+      `Could not resolve PDS for ${did}: ${resolved.reason}`,
+    );
+  }
+  const pds = resolved.pds;
+
+  const params = new URLSearchParams({ repo: did, collection, rkey });
+  let res: Response;
   try {
-    const params = new URLSearchParams({ repo: did, collection, rkey });
-    const res = await fetch(
+    res = await fetch(
       `${pds}/xrpc/com.atproto.repo.getRecord?${params.toString()}`,
       { signal: AbortSignal.timeout(10_000) },
     );
-    if (!res.ok) return null;
-    const data = (await res.json()) as { value?: Record<string, unknown> };
-    return data.value ?? null;
-  } catch {
-    return null;
+  } catch (error) {
+    throw new BoardReadError(
+      `Could not read ${collection}/${rkey} from ${did}`,
+      { cause: error },
+    );
   }
+
+  if (!res.ok) {
+    if (await isRecordMissing(res)) return null;
+    throw new BoardReadError(
+      `PDS returned HTTP ${res.status} while reading ${collection}/${rkey} from ${did}`,
+    );
+  }
+
+  let data: { value?: unknown };
+  try {
+    data = (await res.json()) as { value?: unknown };
+  } catch (error) {
+    throw new BoardReadError(
+      `PDS returned an unreadable response for ${collection}/${rkey} from ${did}`,
+      { cause: error },
+    );
+  }
+  if (!data || typeof data.value !== "object" || data.value === null) {
+    throw new BoardReadError(
+      `PDS response for ${collection}/${rkey} from ${did} contained no record`,
+    );
+  }
+  return data.value as Record<string, unknown>;
 }
 
 interface RepoRecord {
@@ -90,10 +202,17 @@ async function listRecords(
   did: string,
   collection: string,
 ): Promise<RepoRecord[]> {
-  const pds = await resolvePds(did);
-  if (!pds) {
-    throw new BoardReadError(`Could not resolve PDS for ${did}`);
+  const resolved = await resolvePds(did);
+  if (resolved.status !== "ok") {
+    // Even a participant whose identity has vanished is a hole in the board:
+    // their records may still be referenced, so report rather than skip.
+    throw new BoardReadError(
+      resolved.status === "failed"
+        ? `Could not resolve PDS for ${did}: ${resolved.reason}`
+        : `Could not resolve PDS for ${did}: identity not found`,
+    );
   }
+  const pds = resolved.pds;
   const records: RepoRecord[] = [];
   let cursor: string | undefined;
   try {
@@ -179,31 +298,32 @@ async function linkingDids(boardUri: string): Promise<Set<string>> {
 }
 
 /**
- * Fetch a single board record directly from its owner's PDS.
+ * Fetch a single board record directly from its owner's PDS. Returns null when
+ * the board does not exist; raises `BoardReadError` when it could not be read.
  */
 export async function fetchBoardFromPds(
   ownerDid: string,
   rkey: string,
 ): Promise<Board | null> {
-  try {
-    const value = await getRecord(ownerDid, BOARD_COLLECTION, rkey);
-    if (!value) return null;
-    const data = safeParse(BoardRecordSchema, value, "BoardRecord");
-    if (!data) return null;
-
-    return {
-      rkey,
-      did: ownerDid,
-      name: data.name,
-      description: data.description,
-      columns: data.columns,
-      labels: data.labels,
-      open: inferOpenFromRecord(value),
-      createdAt: data.createdAt,
-    };
-  } catch {
-    return null;
+  const value = await getRecord(ownerDid, BOARD_COLLECTION, rkey);
+  if (!value) return null;
+  const data = safeParse(BoardRecordSchema, value, "BoardRecord");
+  if (!data) {
+    throw new BoardReadError(
+      `Board record ${buildAtUri(ownerDid, BOARD_COLLECTION, rkey)} is not a valid board`,
+    );
   }
+
+  return {
+    rkey,
+    did: ownerDid,
+    name: data.name,
+    description: data.description,
+    columns: data.columns,
+    labels: data.labels,
+    open: inferOpenFromRecord(value),
+    createdAt: data.createdAt,
+  };
 }
 
 function inferOpenFromRecord(
@@ -269,132 +389,130 @@ export interface BoardData {
 
 /**
  * Fetch all data for a board from Constellation and participant PDSes.
+ * Returns null only when the board record itself does not exist; any read that
+ * could not be completed raises `BoardReadError` rather than reporting a
+ * missing or partial board.
  */
 export async function fetchBoardData(
   boardDid: string,
   boardRkey: string,
   currentUserDid: string,
 ): Promise<BoardData | null> {
-  try {
-    const boardUri = buildAtUri(boardDid, BOARD_COLLECTION, boardRkey);
-    const board = await fetchBoardFromPds(boardDid, boardRkey);
-    if (!board) return null;
+  const boardUri = buildAtUri(boardDid, BOARD_COLLECTION, boardRkey);
+  const board = await fetchBoardFromPds(boardDid, boardRkey);
+  if (!board) return null;
 
-    const dids = await linkingDids(boardUri);
-    dids.add(boardDid);
-    if (currentUserDid) dids.add(currentUserDid);
-    const fetched = await Promise.all(
-      [...dids].flatMap((did) =>
-        CHILD_COLLECTIONS.map((collection) => listRecords(did, collection)),
-      ),
-    );
-    const records = fetched
-      .flat()
-      .filter((record) => record.value.boardUri === boardUri);
+  const dids = await linkingDids(boardUri);
+  dids.add(boardDid);
+  if (currentUserDid) dids.add(currentUserDid);
+  const fetched = await Promise.all(
+    [...dids].flatMap((did) =>
+      CHILD_COLLECTIONS.map((collection) => listRecords(did, collection)),
+    ),
+  );
+  const records = fetched
+    .flat()
+    .filter((record) => record.value.boardUri === boardUri);
 
-    const tasks: Task[] = records
-      .filter((r) => r.value.$type === "dev.skyboard.task")
-      .flatMap(({ did, rkey, value }) => {
-        const v = safeParse(TaskRecordSchema, value, "TaskRecord");
-        if (!v) return [];
-        return [
-          {
-            rkey,
-            did,
-            title: v.title,
-            description: v.description,
-            columnId: v.columnId,
-            boardUri,
-            parentTaskUri: v.parentTaskUri,
-            position: v.position,
-            labelIds: v.labelIds,
-            order: v.order,
-            createdAt: v.createdAt,
-            updatedAt: v.updatedAt,
-          },
-        ];
-      });
+  const tasks: Task[] = records
+    .filter((r) => r.value.$type === "dev.skyboard.task")
+    .flatMap(({ did, rkey, value }) => {
+      const v = safeParse(TaskRecordSchema, value, "TaskRecord");
+      if (!v) return [];
+      return [
+        {
+          rkey,
+          did,
+          title: v.title,
+          description: v.description,
+          columnId: v.columnId,
+          boardUri,
+          parentTaskUri: v.parentTaskUri,
+          position: v.position,
+          labelIds: v.labelIds,
+          order: v.order,
+          createdAt: v.createdAt,
+          updatedAt: v.updatedAt,
+        },
+      ];
+    });
 
-    const ops: Op[] = records
-      .filter((r) => r.value.$type === "dev.skyboard.op")
-      .flatMap(({ did, rkey, value }) => {
-        const v = safeParse(OpRecordSchema, value, "OpRecord");
-        if (!v) return [];
-        return [
-          {
-            rkey,
-            did,
-            targetTaskUri: v.targetTaskUri,
-            boardUri,
-            fields: v.fields,
-            createdAt: v.createdAt,
-          },
-        ];
-      });
+  const ops: Op[] = records
+    .filter((r) => r.value.$type === "dev.skyboard.op")
+    .flatMap(({ did, rkey, value }) => {
+      const v = safeParse(OpRecordSchema, value, "OpRecord");
+      if (!v) return [];
+      return [
+        {
+          rkey,
+          did,
+          targetTaskUri: v.targetTaskUri,
+          boardUri,
+          fields: v.fields,
+          createdAt: v.createdAt,
+        },
+      ];
+    });
 
-    const trusts: Trust[] = records
-      .filter((r) => r.value.$type === "dev.skyboard.trust")
-      .flatMap(({ did, rkey, value }) => {
-        const v = safeParse(TrustRecordSchema, value, "TrustRecord");
-        if (!v) return [];
-        return [
-          {
-            rkey,
-            did,
-            trustedDid: v.trustedDid,
-            boardUri,
-            createdAt: v.createdAt,
-          },
-        ];
-      });
+  const trusts: Trust[] = records
+    .filter((r) => r.value.$type === "dev.skyboard.trust")
+    .flatMap(({ did, rkey, value }) => {
+      const v = safeParse(TrustRecordSchema, value, "TrustRecord");
+      if (!v) return [];
+      return [
+        {
+          rkey,
+          did,
+          trustedDid: v.trustedDid,
+          boardUri,
+          createdAt: v.createdAt,
+        },
+      ];
+    });
 
-    const comments: Comment[] = records
-      .filter((r) => r.value.$type === "dev.skyboard.comment")
-      .flatMap(({ did, rkey, value }) => {
-        const v = safeParse(CommentRecordSchema, value, "CommentRecord");
-        if (!v) return [];
-        return [
-          {
-            rkey,
-            did,
-            targetTaskUri: v.targetTaskUri,
-            boardUri,
-            text: v.text,
-            createdAt: v.createdAt,
-          },
-        ];
-      });
+  const comments: Comment[] = records
+    .filter((r) => r.value.$type === "dev.skyboard.comment")
+    .flatMap(({ did, rkey, value }) => {
+      const v = safeParse(CommentRecordSchema, value, "CommentRecord");
+      if (!v) return [];
+      return [
+        {
+          rkey,
+          did,
+          targetTaskUri: v.targetTaskUri,
+          boardUri,
+          text: v.text,
+          createdAt: v.createdAt,
+        },
+      ];
+    });
 
-    const trustedDids = new Set(
-      trusts.filter((t) => t.did === boardDid).map((t) => t.trustedDid),
-    );
+  const trustedDids = new Set(
+    trusts.filter((t) => t.did === boardDid).map((t) => t.trustedDid),
+  );
 
-    const allParticipants = new Set<string>();
-    allParticipants.add(boardDid);
-    for (const d of trustedDids) allParticipants.add(d);
-    for (const t of tasks) allParticipants.add(t.did);
-    for (const o of ops) allParticipants.add(o.did);
-    if (currentUserDid) allParticipants.add(currentUserDid);
+  const allParticipants = new Set<string>();
+  allParticipants.add(boardDid);
+  for (const d of trustedDids) allParticipants.add(d);
+  for (const t of tasks) allParticipants.add(t.did);
+  for (const o of ops) allParticipants.add(o.did);
+  if (currentUserDid) allParticipants.add(currentUserDid);
 
-    const materialized = materializeTasks(
-      tasks,
-      ops,
-      trustedDids,
-      currentUserDid,
-      boardDid,
-    );
+  const materialized = materializeTasks(
+    tasks,
+    ops,
+    trustedDids,
+    currentUserDid,
+    boardDid,
+  );
 
-    return {
-      board,
-      tasks: materialized,
-      trusts,
-      comments,
-      allParticipants: [...allParticipants],
-    };
-  } catch (error) {
-    if (error instanceof BoardReadError) throw error;
-    return null;
-  }
+  return {
+    board,
+    tasks: materialized,
+    trusts,
+    comments,
+    allParticipants: [...allParticipants],
+  };
 }
 
 /**
