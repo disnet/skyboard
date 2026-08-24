@@ -5,7 +5,7 @@
   import { getAuth } from "$lib/auth.svelte.js";
   import { generateTID, BOARD_COLLECTION, buildAtUri } from "$lib/tid.js";
   import type { Board, Column } from "$lib/types.js";
-  import { loadBoardFromAppview } from "$lib/appview.js";
+  import { loadBoardFromConstellation } from "$lib/constellation.js";
   import { grantTrust } from "$lib/trust.js";
   import { getDiscoveryState } from "$lib/discovery.svelte.js";
   import {
@@ -116,9 +116,9 @@
         return;
       }
 
-      // Fetch the board from the appview
+      // Fetch the board from Constellation + the participants' PDSes
       const boardAtUri = buildAtUri(ownerDid, BOARD_COLLECTION, rkey);
-      const ok = await loadBoardFromAppview(ownerDid, rkey, boardAtUri);
+      const ok = await loadBoardFromConstellation(ownerDid, rkey, boardAtUri);
       if (!ok) {
         joinError = "Could not fetch board. Check the URI and try again.";
         return;

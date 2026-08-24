@@ -1,9 +1,9 @@
 # Skyboard
 
 A collaborative kanban board built on [AT Protocol] (Bluesky's decentralized
-data layer). Each user's data lives in their own AT Protocol repository. An
-**appview** server aggregates board data and provides real-time updates, while
-writes go directly to each user's PDS.
+data layer). Each user's data lives in their own AT Protocol repository. There
+is no Skyboard server: the browser assembles board state itself from public
+atproto infrastructure, and writes go directly to each user's PDS.
 
 [AT Protocol]: https://atproto.com/
 
@@ -11,20 +11,30 @@ writes go directly to each user's PDS.
 
 Users sign in with their Bluesky account and create boards. Each board gets an
 AT URI (e.g. `at://did:plc:abc.../dev.skyboard.board/3k...`) that can be shared
-with collaborators. The browser fetches the full board state from the appview in
-a single request and subscribes to real-time updates via WebSocket.
+with collaborators. To open a board the browser asks [Constellation] who
+participates in it, reads those participants' records from their PDSes, and
+subscribes to [Jetstream] for live updates.
 
 All data is stored locally in IndexedDB (via Dexie). Writes (creating tasks,
 editing, commenting) go to Dexie first, then background sync pushes them to
-the user's PDS. The appview picks up PDS commits via Jetstream and notifies
-connected clients.
+the user's PDS. Every participant's browser sees that commit on Jetstream and
+applies it directly.
+
+[Constellation]: https://constellation.microcosm.blue/
+[Jetstream]: https://github.com/bluesky-social/jetstream
 
 ## Architecture
 
-The appview sits between clients and the AT Protocol network. It subscribes to
-Jetstream for real-time ingestion and backfills from PDS endpoints on demand,
-caching everything in SQLite. Clients read from the appview and write to their
-own PDS.
+Three public services divide the work. **Constellation** is a global atproto
+backlink index: every `dev.skyboard.*` record carries a `boardUri`, so asking
+it for links to one board URI reveals every participant and which record types
+they wrote. **Each PDS** remains the source of truth for record content.
+**Jetstream** delivers live commits, which carry the full record body, so a
+change is applied without any refetch.
+
+If Constellation is unreachable, boards already in Dexie keep working and
+writes keep syncing; discovery degrades to the board owner plus participants
+already known locally.
 
 ```
  ┌─ Browser (per user) ────────────────────────────────────────────┐
@@ -46,35 +56,44 @@ own PDS.
  │   │  (syncStatus:     │          └──────────────────────────┘   │
  │   │   pending/synced) │                                         │
  │   └──┬──────────▲─────┘                                         │
- │      │          │ populate from appview response                │
+ │      │          │ hydrate + apply live commits                  │
  └──────┼──────────┼───────────────────────────────────────────────┘
-        │          │
+        │          │                   ┌───────────────────────┐
+        │          └───── REST ───────▶│    Constellation      │
+        │                              │  (backlink index)     │
+        │                              │                       │
+        │                              │  /links/all           │
+        │                              │  /links/distinct-dids │
+        │                              └───────────────────────┘
+        │                                  who participates,
+        │                                  which collections
+        │
         │ background sync              ┌───────────────────────┐
-        │ putRecord / deleteRecord     │      Appview          │
-        │                              │  (Bun + SQLite)       │
-        ▼                              │                       │
- ┌──────────────────────────────┐      │  GET /board/:did/:rk  │◄── REST
- │        User's PDS            │      │  WS  /ws?boardUri=... │◄── WebSocket
- │   (Personal Data Server)     │      │                       │
- │                              │      │  Jetstream consumer   │
- │   at://did:plc:xxx/          │      │  PDS backfill         │
- │     dev.skyboard.board/*     │      │  SQLite cache         │
- │     dev.skyboard.task/*      │      └───────────┬───────────┘
- │     dev.skyboard.op/*        │                  │
- │     dev.skyboard.trust/*     │                  │ subscribes
- └──────────────┬───────────────┘                  │
-                │ commit events                    │
-                ▼                                  │
- ┌──────────────────────────────┐                  │
- │          Jetstream           │──────────────────┘
- │    (AT Protocol firehose)    │
+        │ putRecord / deleteRecord     │  Participants' PDSes  │
+        │                              │                       │
+        ▼                        ◀──── │  getRecord            │
+ ┌──────────────────────────────┐ REST │  listRecords          │
+ │        User's PDS            │      └───────────────────────┘
+ │   (Personal Data Server)     │          record content
+ │                              │
+ │   at://did:plc:xxx/          │
+ │     dev.skyboard.board/*     │
+ │     dev.skyboard.task/*      │
+ │     dev.skyboard.op/*        │
+ │     dev.skyboard.trust/*     │
+ └──────────────┬───────────────┘
+                │ commit events
+                ▼
+ ┌──────────────────────────────┐
+ │          Jetstream           │──── WebSocket ────▶ every browser
+ │    (AT Protocol firehose)    │      (full record bodies)
  └──────────────────────────────┘
 ```
 
 ### Multi-user coordination
 
 When multiple users collaborate on a board, each writes only to their own PDS.
-The appview aggregates records from all participants — the board owner's PDS
+Every browser aggregates records from all participants — the board owner's PDS
 has board configuration and trust grants, while tasks and ops can live in any
 participant's PDS. Ops reference tasks in any repo via AT URI.
 
@@ -108,20 +127,19 @@ participant's PDS. Ops reference tasks in any repo via AT URI.
                         │
                         ▼
               ┌───────────────────┐           ┌───────────────────────┐
-              │     Jetstream     │──────────▶│       Appview         │
-              │  (AT Proto relay) │           │  (aggregates + caches │
-              └───────────────────┘           │   all participants)   │
-                                              └───────────┬───────────┘
-                                                          │
-                                                    REST + WebSocket
-                                                          │
-                                                          ▼
+              │     Jetstream     │           │    Constellation      │
+              │  (AT Proto relay) │           │  (indexes .boardUri   │
+              └─────────┬─────────┘           │   backlinks)          │
+                        │                     └───────────┬───────────┘
+                        │  live commits          who participates
+                        └───────────┬────────────────────┘
+                                    ▼
  ┌─────────────────────────────────────────────────────────────────────────────┐
  │                           Each User's Browser                               │
  │                                                                             │
- │  Fetch board      Filter by          Merge via           Render             │
- │  from appview ──▶ trust + ────────▶ per-field ────────▶ board               │
- │  (one request)    permissions        LWW                 view               │
+ │  Discover         Hydrate from     Filter by      Merge via      Render     │
+ │  participants ──▶ their PDSes ──▶ trust +  ────▶ per-field ──▶  board       │
+ │                                    permissions    LWW            view       │
  │                                                                             │
  │  Bob's ops → applied ✓         Carol's ops → pending proposals              │
  └─────────────────────────────────────────────────────────────────────────────┘
@@ -289,39 +307,38 @@ shown greyed out as pending, awaiting board author approval.
 ## Sync architecture
 
 ```
-Reading board data
-  → Browser fetches GET /board/:did/:rkey from appview
-  → Appview returns board + all tasks, ops, trusts, comments, etc.
-  → Response upserted into Dexie (local pending records take priority)
-  → Browser subscribes to appview WebSocket for real-time updates
-  → On update notification, re-fetches board from appview
+Reading board data (src/lib/constellation.ts)
+  → Browser reads the board record from the owner's PDS (getRecord)
+  → GET /links/all?target=<boardUri> → which collections are non-empty
+  → GET /links/distinct-dids per collection → who participates
+  → listRecords on each participant's PDS, kept if value.boardUri matches
+  → Upserted into Dexie in one transaction (local pending records take
+    priority); records gone from a repo we listed are pruned
+
+Real-time (src/lib/jetstream.ts)
+  → One WebSocket to Jetstream, wantedCollections=dev.skyboard.*
+  → Commit events carry the full record → applied straight to Dexie
+  → Reconnect replays from the last time_us cursor; if the gap is too
+    large, subscribed boards are reloaded instead
 
 Writing (task creation, edits, comments, etc.)
   → db.tasks.add() / db.ops.add() in IndexedDB (syncStatus: 'pending')
   → materializeTasks merges base task + ops via per-field LWW
   → UI updates immediately from local state
   → Background sync pushes record to user's PDS via putRecord
-  → PDS commit picked up by Jetstream → appview → WebSocket notification
-  → Other clients re-fetch from appview, UI updates
+  → PDS commit picked up by Jetstream → every subscribed browser applies it
 ```
 
-The appview handles all cross-PDS aggregation server-side. On startup with
-a stale Jetstream cursor (>48h), the appview serves existing cached data
-immediately while backfilling in the background.
+Cross-PDS aggregation happens in the browser. A cold board load costs one
+Constellation call plus one PDS listing per (participant × non-empty
+collection), run in parallel; DID→PDS lookups are cached in localStorage for a
+day. Boards already in Dexie render instantly while that refresh runs.
 
-## Appview
+## Appview (legacy)
 
-The appview (`appview/`) is a caching aggregation server that sits between
-clients and the AT Protocol network. It runs on Bun with SQLite and deploys
-to Fly.io.
-
-- Subscribes to Jetstream for real-time ingestion of all `dev.skyboard.*`
-  records
-- Backfills from PDS endpoints on demand when a board is first requested
-- Serves full board state via `GET /board/:did/:rkey` (one request replaces many
-  PDS fetches)
-- Pushes real-time update notifications via WebSocket (`WS /ws?boardUri=...`)
-- Persists Jetstream cursor for graceful restart recovery
+The appview (`appview/`) is the caching aggregation server the web app used
+before Constellation. It runs on Bun with SQLite and deploys to Fly.io, and is
+still what `cli/` reads from.
 
 See [`appview/README.md`] for development and deployment details.
 
@@ -432,6 +449,9 @@ the result. Write commands (`new`, `mv`, `edit`, `comment`) create AT Protocol
 records (tasks, ops, comments) in your PDS, which the appview picks up via
 Jetstream and serves to other clients.
 
+The web app no longer uses the appview; the CLI still does, so the appview has
+to stay up until the CLI is moved over too.
+
 ## Development
 
 ```bash
@@ -441,20 +461,13 @@ npm run build    # Production build
 npm run check    # Type checking
 ```
 
-By default the dev server talks to the production appview at
-`https://appview.skyboard.dev`. To point it at a local appview instead, copy the
-example env file and start the local appview:
+By default the dev server reads from `https://constellation.microcosm.blue` and
+`wss://jetstream2.us-east.bsky.network/subscribe`. Both are configurable — copy
+the example env file and edit it to point at your own instances:
 
 ```bash
 cp .env.example .env
 ```
 
-Then start the local appview in a separate terminal:
-
-```bash
-cd appview
-bun install
-bun run dev      # starts on http://localhost:3002
-```
-
-Remove or empty the `VITE_APPVIEW_URL` value to switch back to production.
+Remove or empty `VITE_CONSTELLATION_URL` / `VITE_JETSTREAM_URL` to fall back to
+the defaults.

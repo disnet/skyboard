@@ -8,10 +8,11 @@
   import { useLiveQuery } from "$lib/db.svelte.js";
   import { generateCatchUpNotifications } from "$lib/notifications.js";
   import {
-    loadBoardFromAppview,
-    AppviewSubscription,
+    loadBoardFromConstellation,
     discoverMyBoards,
-  } from "$lib/appview.js";
+  } from "$lib/constellation.js";
+  import { JetstreamSubscription } from "$lib/jetstream.js";
+  import { buildAtUri, BOARD_COLLECTION } from "$lib/tid.js";
   import { setDiscovering } from "$lib/discovery.svelte.js";
   import type { Board } from "$lib/types.js";
   import { initTheme, getTheme, cycleTheme } from "$lib/theme.svelte.js";
@@ -33,7 +34,7 @@
   let showNotifications = $state(false);
   let showShortcuts = $state(false);
   let showBoardSwitcher = $state(false);
-  let boardSubs: AppviewSubscription[] = [];
+  let jetstreamSub: JetstreamSubscription | null = null;
   let effectGeneration = 0;
 
   const unreadCount = useLiveQuery<number>(() => {
@@ -55,35 +56,45 @@
     };
   });
 
-  // Refresh all local boards via appview, then generate catch-up notifications
+  // Refresh all local boards, then generate catch-up notifications
   async function catchUpAllBoards(userDid: string, handle: string | undefined) {
     const boards = await db.boards.toArray();
     await Promise.allSettled(
       boards.map(async (b) => {
-        const boardUri = `at://${b.did}/dev.skyboard.board/${b.rkey}`;
-        await loadBoardFromAppview(b.did, b.rkey, boardUri);
+        const boardUri = buildAtUri(b.did, BOARD_COLLECTION, b.rkey);
+        await loadBoardFromConstellation(b.did, b.rkey, boardUri);
       }),
     );
     await generateCatchUpNotifications(userDid, handle);
   }
 
   function disconnectAllSubs() {
-    for (const sub of boardSubs) sub.disconnect();
-    boardSubs = [];
+    jetstreamSub?.disconnect();
+    jetstreamSub = null;
   }
 
+  // One Jetstream socket covers every board: commit events carry the full
+  // record, so changes are applied directly instead of triggering a refetch.
   function connectBoardSubs(boards: Board[], userDid: string) {
     disconnectAllSubs();
-    for (const b of boards) {
-      const boardUri = `at://${b.did}/dev.skyboard.board/${b.rkey}`;
-      const sub = new AppviewSubscription(boardUri, async () => {
-        await loadBoardFromAppview(b.did, b.rkey, boardUri);
+
+    const sub = new JetstreamSubscription({
+      onBoardUpdate: async () => {
         const handle = getProfile(userDid)?.data?.handle;
         await generateCatchUpNotifications(userDid, handle);
-      });
-      sub.connect();
-      boardSubs.push(sub);
+      },
+      onResync: async (board) => {
+        await loadBoardFromConstellation(board.ownerDid, board.rkey, board.uri);
+        const handle = getProfile(userDid)?.data?.handle;
+        await generateCatchUpNotifications(userDid, handle);
+      },
+    });
+
+    for (const b of boards) {
+      sub.subscribe(buildAtUri(b.did, BOARD_COLLECTION, b.rkey));
     }
+    sub.connect();
+    jetstreamSub = sub;
   }
 
   $effect(() => {
