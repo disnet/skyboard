@@ -1,9 +1,5 @@
 import { requireAgent } from "../lib/auth.js";
-import {
-  fetchMyBoards,
-  fetchBoardFromAppview,
-  resolveHandle,
-} from "../lib/pds.js";
+import { fetchMyBoards, fetchBoardFromPds, resolveHandle } from "../lib/pds.js";
 import { setDefaultBoard, loadConfig } from "../lib/config.js";
 import { BOARD_COLLECTION } from "../lib/tid.js";
 import chalk from "chalk";
@@ -49,7 +45,7 @@ async function parseBoardRef(
   if (nameMatch) return { did: nameMatch.did, rkey: nameMatch.rkey };
 
   // Try as rkey for own board
-  const board = await fetchBoardFromAppview(currentDid, ref);
+  const board = await fetchBoardFromPds(currentDid, ref);
   if (board) return { did: currentDid, rkey: ref };
 
   return null;
@@ -65,7 +61,7 @@ export async function useCommand(boardRef: string): Promise<void> {
     process.exit(1);
   }
 
-  const board = await fetchBoardFromAppview(parsed.did, parsed.rkey);
+  const board = await fetchBoardFromPds(parsed.did, parsed.rkey);
   if (!board) {
     console.error(chalk.red(`Board not found at ${parsed.did}/${parsed.rkey}`));
     process.exit(1);

@@ -1,7 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { OWNER_DID, USER_DID } from "./helpers.js";
+import {
+  BOARD_RKEY,
+  OWNER_DID,
+  PDS_ENDPOINT,
+  TRUSTED_DID,
+  USER_DID,
+  makePLCResponse,
+} from "./helpers.js";
 
 let resolveHandle: typeof import("../lib/pds.js").resolveHandle;
+let fetchBoardData: typeof import("../lib/pds.js").fetchBoardData;
+let fetchBoardFromPds: typeof import("../lib/pds.js").fetchBoardFromPds;
+let BoardReadError: typeof import("../lib/pds.js").BoardReadError;
 
 beforeEach(async () => {
   vi.resetModules();
@@ -9,6 +19,9 @@ beforeEach(async () => {
 
   const mod = await import("../lib/pds.js");
   resolveHandle = mod.resolveHandle;
+  fetchBoardData = mod.fetchBoardData;
+  fetchBoardFromPds = mod.fetchBoardFromPds;
+  BoardReadError = mod.BoardReadError;
 });
 
 function stubFetch(handler: (url: string) => Response | Promise<Response>) {
@@ -23,6 +36,28 @@ function stubFetch(handler: (url: string) => Response | Promise<Response>) {
   });
   vi.stubGlobal("fetch", mockFetch);
   return mockFetch;
+}
+
+const boardRecord = {
+  name: "Test Board",
+  columns: [{ id: "todo", name: "To do", order: 0 }],
+  createdAt: "2025-01-01T00:00:00.000Z",
+};
+
+function successfulBoardReadResponse(url: string): Response {
+  if (url.startsWith(`https://plc.directory/${OWNER_DID}`)) {
+    return jsonResponse(makePLCResponse(OWNER_DID, PDS_ENDPOINT));
+  }
+  if (url.includes("com.atproto.repo.getRecord")) {
+    return jsonResponse({ value: boardRecord });
+  }
+  if (url.includes("links/distinct-dids")) {
+    return jsonResponse({ linking_dids: [] });
+  }
+  if (url.includes("com.atproto.repo.listRecords")) {
+    return jsonResponse({ records: [] });
+  }
+  return new Response("", { status: 404 });
 }
 
 function jsonResponse(data: unknown, status = 200): Response {
@@ -96,5 +131,208 @@ describe("resolveHandle", () => {
 
     const result = await resolveHandle("alice.example.com");
     expect(result).toBeNull();
+  });
+});
+
+describe("fetchBoardFromPds", () => {
+  function stubBoardRead(handler: (url: string) => Response) {
+    return stubFetch((url) => {
+      if (url.startsWith(`https://plc.directory/${OWNER_DID}`)) {
+        return jsonResponse(makePLCResponse(OWNER_DID, PDS_ENDPOINT));
+      }
+      return handler(url);
+    });
+  }
+
+  it("returns the board record", async () => {
+    stubBoardRead(() => jsonResponse({ value: boardRecord }));
+
+    const board = await fetchBoardFromPds(OWNER_DID, BOARD_RKEY);
+    expect(board?.name).toBe("Test Board");
+  });
+
+  it("returns null when the PDS reports the record as missing", async () => {
+    stubBoardRead(() =>
+      jsonResponse(
+        { error: "RecordNotFound", message: "Could not locate record" },
+        400,
+      ),
+    );
+
+    await expect(fetchBoardFromPds(OWNER_DID, BOARD_RKEY)).resolves.toBeNull();
+  });
+
+  it("returns null when the PDS answers 404", async () => {
+    stubBoardRead(() => new Response("", { status: 404 }));
+
+    await expect(fetchBoardFromPds(OWNER_DID, BOARD_RKEY)).resolves.toBeNull();
+  });
+
+  it("returns null when the repo does not exist", async () => {
+    stubBoardRead(() =>
+      jsonResponse(
+        { error: "InvalidRequest", message: "Could not find repo: did:plc:x" },
+        400,
+      ),
+    );
+
+    await expect(fetchBoardFromPds(OWNER_DID, BOARD_RKEY)).resolves.toBeNull();
+  });
+
+  it("returns null for a syntactically impossible record key", async () => {
+    const mockFetch = stubBoardRead(() => jsonResponse({ value: boardRecord }));
+
+    await expect(
+      fetchBoardFromPds(OWNER_DID, "not a rkey"),
+    ).resolves.toBeNull();
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it("rejects instead of reporting a missing board when the PDS is failing", async () => {
+    stubBoardRead(() => new Response("", { status: 503 }));
+
+    await expect(fetchBoardFromPds(OWNER_DID, BOARD_RKEY)).rejects.toThrow(
+      BoardReadError,
+    );
+    await expect(fetchBoardFromPds(OWNER_DID, BOARD_RKEY)).rejects.toThrow(
+      /HTTP 503/,
+    );
+  });
+
+  it("rejects when the request throws", async () => {
+    stubBoardRead(() => {
+      throw new Error("network down");
+    });
+
+    await expect(fetchBoardFromPds(OWNER_DID, BOARD_RKEY)).rejects.toThrow(
+      /Could not read dev\.skyboard\.board/,
+    );
+  });
+
+  it("rejects when the owner's PDS cannot be resolved", async () => {
+    stubFetch(() => new Response("", { status: 503 }));
+
+    await expect(fetchBoardFromPds(OWNER_DID, BOARD_RKEY)).rejects.toThrow(
+      `Could not resolve PDS for ${OWNER_DID}`,
+    );
+  });
+
+  it("returns null when the owner's identity does not exist", async () => {
+    stubFetch((url) =>
+      url.startsWith(`https://plc.directory/${OWNER_DID}`)
+        ? new Response("DID not registered", { status: 404 })
+        : jsonResponse({ value: boardRecord }),
+    );
+
+    await expect(fetchBoardFromPds(OWNER_DID, BOARD_RKEY)).resolves.toBeNull();
+  });
+
+  it("rejects for a DID method it cannot resolve", async () => {
+    stubFetch(() => jsonResponse({ value: boardRecord }));
+
+    await expect(fetchBoardFromPds("did:key:zabc", BOARD_RKEY)).rejects.toThrow(
+      /unsupported DID method/,
+    );
+  });
+
+  it("rejects when the response carries no record", async () => {
+    stubBoardRead(() => jsonResponse({}));
+
+    await expect(fetchBoardFromPds(OWNER_DID, BOARD_RKEY)).rejects.toThrow(
+      /contained no record/,
+    );
+  });
+
+  it("rejects when the response is not JSON", async () => {
+    stubBoardRead(() => textResponse("<html>proxy error</html>"));
+
+    await expect(fetchBoardFromPds(OWNER_DID, BOARD_RKEY)).rejects.toThrow(
+      /unreadable response/,
+    );
+  });
+
+  it("rejects when the board record does not validate", async () => {
+    stubBoardRead(() => jsonResponse({ value: { name: 42 } }));
+
+    await expect(fetchBoardFromPds(OWNER_DID, BOARD_RKEY)).rejects.toThrow(
+      /is not a valid board/,
+    );
+  });
+});
+
+describe("fetchBoardData degraded reads", () => {
+  it("returns null when the board record is genuinely missing", async () => {
+    stubFetch((url) => {
+      if (url.includes("com.atproto.repo.getRecord")) {
+        return jsonResponse({ error: "RecordNotFound" }, 400);
+      }
+      return successfulBoardReadResponse(url);
+    });
+
+    await expect(fetchBoardData(OWNER_DID, BOARD_RKEY, "")).resolves.toBeNull();
+  });
+
+  it("rejects instead of returning null when the owner's PDS is failing", async () => {
+    stubFetch((url) => {
+      if (url.includes("com.atproto.repo.getRecord")) {
+        return new Response("", { status: 503 });
+      }
+      return successfulBoardReadResponse(url);
+    });
+
+    await expect(fetchBoardData(OWNER_DID, BOARD_RKEY, "")).rejects.toThrow(
+      /HTTP 503.*dev\.skyboard\.board/,
+    );
+  });
+
+  it("rejects when Constellation participant discovery fails", async () => {
+    stubFetch((url) => {
+      if (url.includes("links/distinct-dids")) {
+        return new Response("", { status: 503 });
+      }
+      return successfulBoardReadResponse(url);
+    });
+
+    await expect(fetchBoardData(OWNER_DID, BOARD_RKEY, "")).rejects.toThrow(
+      /Constellation returned HTTP 503/,
+    );
+  });
+
+  it("rejects when a participant PDS cannot be resolved", async () => {
+    stubFetch((url) => {
+      if (
+        url.includes("links/distinct-dids") &&
+        url.includes("collection=dev.skyboard.task")
+      ) {
+        return jsonResponse({ linking_dids: [TRUSTED_DID] });
+      }
+      if (url.startsWith(`https://plc.directory/${TRUSTED_DID}`)) {
+        return new Response("", { status: 503 });
+      }
+      return successfulBoardReadResponse(url);
+    });
+
+    await expect(fetchBoardData(OWNER_DID, BOARD_RKEY, "")).rejects.toThrow(
+      `Could not resolve PDS for ${TRUSTED_DID}`,
+    );
+  });
+
+  it("rejects instead of returning records from only the first PDS page", async () => {
+    stubFetch((url) => {
+      if (
+        url.includes("com.atproto.repo.listRecords") &&
+        url.includes("collection=dev.skyboard.task")
+      ) {
+        if (url.includes("cursor=next-page")) {
+          return new Response("", { status: 503 });
+        }
+        return jsonResponse({ records: [], cursor: "next-page" });
+      }
+      return successfulBoardReadResponse(url);
+    });
+
+    await expect(fetchBoardData(OWNER_DID, BOARD_RKEY, "")).rejects.toThrow(
+      /PDS returned HTTP 503.*dev.skyboard.task/,
+    );
   });
 });

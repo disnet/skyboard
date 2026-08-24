@@ -19,6 +19,8 @@ import { editCommand } from "./commands/edit.js";
 import { commentCommand } from "./commands/comment.js";
 import { rmCommand } from "./commands/rm.js";
 import { ralphCommand } from "./commands/ralph.js";
+import { BoardReadError } from "./lib/pds.js";
+import chalk from "chalk";
 
 const program = new Command();
 
@@ -157,4 +159,13 @@ program
 // Autonomous dev loop
 ralphCommand(program);
 
-program.parse();
+program.parseAsync().catch((error: unknown) => {
+  // A board that could not be read fails with its own explanation; anything
+  // else is a bug and keeps its stack.
+  if (error instanceof BoardReadError) {
+    console.error(chalk.red(error.message));
+  } else {
+    console.error(error);
+  }
+  process.exit(1);
+});

@@ -14,7 +14,7 @@
   import { materializeTasks } from "$lib/materialize.js";
   import { isTrusted, isContentVisible } from "$lib/permissions.js";
   import { deleteBoardFromPDS, notifyPendingWrite } from "$lib/sync.js";
-  import { loadBoardFromAppview } from "$lib/appview.js";
+  import { loadBoardFromConstellation } from "$lib/constellation.js";
   import type {
     Board,
     Task,
@@ -60,7 +60,7 @@
   let loading = $state(true);
   let error = $state<string | null>(null);
 
-  // Fetch board data from appview
+  // Fetch board data from Constellation + the participants' PDSes
   $effect(() => {
     if (!ownerDid || !rkey) return;
 
@@ -69,7 +69,7 @@
 
     (async () => {
       try {
-        const ok = await loadBoardFromAppview(ownerDid, rkey, boardUri);
+        const ok = await loadBoardFromConstellation(ownerDid, rkey, boardUri);
         if (!ok) {
           error = "Board not found";
         }
