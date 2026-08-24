@@ -24,6 +24,13 @@ const CHILD_COLLECTIONS = [
 
 const pdsCache = new Map<string, string>();
 
+export class BoardReadError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "BoardReadError";
+  }
+}
+
 async function resolvePds(did: string): Promise<string | null> {
   const cached = pdsCache.get(did);
   if (cached) return cached;
@@ -84,7 +91,9 @@ async function listRecords(
   collection: string,
 ): Promise<RepoRecord[]> {
   const pds = await resolvePds(did);
-  if (!pds) return [];
+  if (!pds) {
+    throw new BoardReadError(`Could not resolve PDS for ${did}`);
+  }
   const records: RepoRecord[] = [];
   let cursor: string | undefined;
   try {
@@ -99,7 +108,11 @@ async function listRecords(
         `${pds}/xrpc/com.atproto.repo.listRecords?${params.toString()}`,
         { signal: AbortSignal.timeout(10_000) },
       );
-      if (!res.ok) return records;
+      if (!res.ok) {
+        throw new BoardReadError(
+          `PDS returned HTTP ${res.status} while reading ${collection} from ${did}`,
+        );
+      }
       const data = (await res.json()) as {
         records?: Array<{ uri: string; value: Record<string, unknown> }>;
         cursor?: string;
@@ -113,8 +126,12 @@ async function listRecords(
       }
       cursor = data.cursor;
     } while (cursor);
-  } catch {
-    // A participant's unavailable PDS should not fail the whole board read.
+  } catch (error) {
+    if (error instanceof BoardReadError) throw error;
+    throw new BoardReadError(
+      `Could not completely read ${collection} from ${did}`,
+      { cause: error },
+    );
   }
   return records;
 }
@@ -137,15 +154,23 @@ async function linkingDids(boardUri: string): Promise<Set<string>> {
             `${CONSTELLATION_URL}/links/distinct-dids?${params.toString()}`,
             { signal: AbortSignal.timeout(10_000) },
           );
-          if (!res.ok) return;
+          if (!res.ok) {
+            throw new BoardReadError(
+              `Constellation returned HTTP ${res.status} while discovering ${collection}`,
+            );
+          }
           const data = (await res.json()) as {
             linking_dids?: string[];
             cursor?: string | null;
           };
           for (const did of data.linking_dids ?? []) dids.add(did);
           cursor = data.cursor ?? undefined;
-        } catch {
-          return;
+        } catch (error) {
+          if (error instanceof BoardReadError) throw error;
+          throw new BoardReadError(
+            `Could not completely discover ${collection} participants`,
+            { cause: error },
+          );
         }
       } while (cursor);
     }),
@@ -366,7 +391,8 @@ export async function fetchBoardData(
       comments,
       allParticipants: [...allParticipants],
     };
-  } catch {
+  } catch (error) {
+    if (error instanceof BoardReadError) throw error;
     return null;
   }
 }

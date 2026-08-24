@@ -1,7 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { OWNER_DID, USER_DID } from "./helpers.js";
+import {
+  BOARD_RKEY,
+  OWNER_DID,
+  PDS_ENDPOINT,
+  TRUSTED_DID,
+  USER_DID,
+  makePLCResponse,
+} from "./helpers.js";
 
 let resolveHandle: typeof import("../lib/pds.js").resolveHandle;
+let fetchBoardData: typeof import("../lib/pds.js").fetchBoardData;
 
 beforeEach(async () => {
   vi.resetModules();
@@ -9,6 +17,7 @@ beforeEach(async () => {
 
   const mod = await import("../lib/pds.js");
   resolveHandle = mod.resolveHandle;
+  fetchBoardData = mod.fetchBoardData;
 });
 
 function stubFetch(handler: (url: string) => Response | Promise<Response>) {
@@ -23,6 +32,28 @@ function stubFetch(handler: (url: string) => Response | Promise<Response>) {
   });
   vi.stubGlobal("fetch", mockFetch);
   return mockFetch;
+}
+
+const boardRecord = {
+  name: "Test Board",
+  columns: [{ id: "todo", name: "To do", order: 0 }],
+  createdAt: "2025-01-01T00:00:00.000Z",
+};
+
+function successfulBoardReadResponse(url: string): Response {
+  if (url.startsWith(`https://plc.directory/${OWNER_DID}`)) {
+    return jsonResponse(makePLCResponse(OWNER_DID, PDS_ENDPOINT));
+  }
+  if (url.includes("com.atproto.repo.getRecord")) {
+    return jsonResponse({ value: boardRecord });
+  }
+  if (url.includes("links/distinct-dids")) {
+    return jsonResponse({ linking_dids: [] });
+  }
+  if (url.includes("com.atproto.repo.listRecords")) {
+    return jsonResponse({ records: [] });
+  }
+  return new Response("", { status: 404 });
 }
 
 function jsonResponse(data: unknown, status = 200): Response {
@@ -96,5 +127,58 @@ describe("resolveHandle", () => {
 
     const result = await resolveHandle("alice.example.com");
     expect(result).toBeNull();
+  });
+});
+
+describe("fetchBoardData degraded reads", () => {
+  it("rejects when Constellation participant discovery fails", async () => {
+    stubFetch((url) => {
+      if (url.includes("links/distinct-dids")) {
+        return new Response("", { status: 503 });
+      }
+      return successfulBoardReadResponse(url);
+    });
+
+    await expect(fetchBoardData(OWNER_DID, BOARD_RKEY, "")).rejects.toThrow(
+      /Constellation returned HTTP 503/,
+    );
+  });
+
+  it("rejects when a participant PDS cannot be resolved", async () => {
+    stubFetch((url) => {
+      if (
+        url.includes("links/distinct-dids") &&
+        url.includes("collection=dev.skyboard.task")
+      ) {
+        return jsonResponse({ linking_dids: [TRUSTED_DID] });
+      }
+      if (url.startsWith(`https://plc.directory/${TRUSTED_DID}`)) {
+        return new Response("", { status: 503 });
+      }
+      return successfulBoardReadResponse(url);
+    });
+
+    await expect(fetchBoardData(OWNER_DID, BOARD_RKEY, "")).rejects.toThrow(
+      `Could not resolve PDS for ${TRUSTED_DID}`,
+    );
+  });
+
+  it("rejects instead of returning records from only the first PDS page", async () => {
+    stubFetch((url) => {
+      if (
+        url.includes("com.atproto.repo.listRecords") &&
+        url.includes("collection=dev.skyboard.task")
+      ) {
+        if (url.includes("cursor=next-page")) {
+          return new Response("", { status: 503 });
+        }
+        return jsonResponse({ records: [], cursor: "next-page" });
+      }
+      return successfulBoardReadResponse(url);
+    });
+
+    await expect(fetchBoardData(OWNER_DID, BOARD_RKEY, "")).rejects.toThrow(
+      /PDS returned HTTP 503.*dev.skyboard.task/,
+    );
   });
 });
