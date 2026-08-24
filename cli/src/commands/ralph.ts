@@ -8,7 +8,7 @@ import { writeDefaultProtocol } from "../lib/ralph/protocol.js";
 import { runLoop } from "../lib/ralph/runner.js";
 import { getDefaultBoard } from "../lib/config.js";
 import { requireAgent } from "../lib/auth.js";
-import { fetchBoardFromAppview } from "../lib/pds.js";
+import { fetchBoardFromPds } from "../lib/pds.js";
 import { BOARD_COLLECTION } from "../lib/tid.js";
 import { loadConfig } from "../lib/config.js";
 import { select, input, number } from "@inquirer/prompts";
@@ -52,7 +52,7 @@ async function parseBoardRef(
   if (nameMatch) return { did: nameMatch.did, rkey: nameMatch.rkey };
 
   // Try as rkey for own board
-  const board = await fetchBoardFromAppview(currentDid, ref);
+  const board = await fetchBoardFromPds(currentDid, ref);
   if (board) return { did: currentDid, rkey: ref };
 
   return null;
@@ -97,7 +97,7 @@ export function ralphCommand(program: Command): void {
             console.error("Try a board name, rkey, AT URI, or web URL.");
             process.exit(1);
           }
-          const board = await fetchBoardFromAppview(parsed.did, parsed.rkey);
+          const board = await fetchBoardFromPds(parsed.did, parsed.rkey);
           if (!board) {
             console.error(
               chalk.red(`Board not found at ${parsed.did}/${parsed.rkey}`),
@@ -140,10 +140,7 @@ export function ralphCommand(program: Command): void {
                 console.error(chalk.red(`Could not resolve board: ${ref}`));
                 process.exit(1);
               }
-              const board = await fetchBoardFromAppview(
-                parsed.did,
-                parsed.rkey,
-              );
+              const board = await fetchBoardFromPds(parsed.did, parsed.rkey);
               if (!board) {
                 console.error(
                   chalk.red(`Board not found at ${parsed.did}/${parsed.rkey}`),
@@ -175,7 +172,7 @@ export function ralphCommand(program: Command): void {
               console.error(chalk.red(`Could not resolve board: ${ref}`));
               process.exit(1);
             }
-            const board = await fetchBoardFromAppview(parsed.did, parsed.rkey);
+            const board = await fetchBoardFromPds(parsed.did, parsed.rkey);
             if (!board) {
               console.error(
                 chalk.red(`Board not found at ${parsed.did}/${parsed.rkey}`),
@@ -192,7 +189,7 @@ export function ralphCommand(program: Command): void {
         );
 
         // Warn if the board is open
-        const selectedBoard = await fetchBoardFromAppview(
+        const selectedBoard = await fetchBoardFromPds(
           boardRef.did,
           boardRef.rkey,
         );
@@ -374,7 +371,7 @@ export function ralphCommand(program: Command): void {
       await requireAgent();
 
       // Check if the board is open — refuse to run on open boards due to prompt injection risk
-      const board = await fetchBoardFromAppview(
+      const board = await fetchBoardFromPds(
         config.board.did,
         config.board.rkey,
       );

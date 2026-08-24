@@ -1,87 +1,180 @@
-// Board data fetching — uses the appview for board data,
-// PDS only for listing the user's own boards.
+// Board data fetching from Constellation and participant PDSes.
 
 import type { Agent } from "@atproto/api";
 import { BOARD_COLLECTION, buildAtUri } from "./tid.js";
 import type { Board, Task, Op, OpFields, Trust, Comment } from "./types.js";
-import { safeParse, BoardRecordSchema } from "./schemas.js";
+import {
+  safeParse,
+  BoardRecordSchema,
+  TaskRecordSchema,
+  OpRecordSchema,
+  TrustRecordSchema,
+  CommentRecordSchema,
+} from "./schemas.js";
 import { materializeTasks } from "./materialize.js";
 import type { MaterializedTask } from "./types.js";
 
-const APPVIEW_URL = "https://appview.skyboard.dev";
+const CONSTELLATION_URL = "https://constellation.microcosm.blue";
+const CHILD_COLLECTIONS = [
+  "dev.skyboard.task",
+  "dev.skyboard.op",
+  "dev.skyboard.trust",
+  "dev.skyboard.comment",
+] as const;
 
-interface AppviewBoardResponse {
-  board: {
-    rkey: string;
-    did: string;
-    name: string;
-    description?: string | null;
-    columns: Board["columns"];
-    labels?: Board["labels"];
-    open?: boolean;
-    createdAt: string;
-  };
-  rawTasks?: Array<{
-    rkey: string;
-    did: string;
-    title: string;
-    description?: string | null;
-    columnId: string;
-    boardUri: string;
-    parentTaskUri?: string | null;
-    position?: string | null;
-    labelIds?: string[] | null;
-    order?: number | null;
-    createdAt: string;
-    updatedAt?: string | null;
-  }>;
-  rawOps?: Array<{
-    rkey: string;
-    did: string;
-    targetTaskUri: string;
-    boardUri: string;
-    fields: OpFields;
-    createdAt: string;
-  }>;
-  trusts?: Array<{
-    rkey: string;
-    did: string;
-    trustedDid: string;
-    createdAt: string;
-  }>;
-  comments?: Array<{
-    rkey: string;
-    did: string;
-    targetTaskUri: string;
-    text: string;
-    createdAt: string;
-  }>;
+const pdsCache = new Map<string, string>();
+
+async function resolvePds(did: string): Promise<string | null> {
+  const cached = pdsCache.get(did);
+  if (cached) return cached;
+  try {
+    let url: string;
+    if (did.startsWith("did:plc:")) url = `https://plc.directory/${did}`;
+    else if (did.startsWith("did:web:")) {
+      const host = did.slice("did:web:".length).replaceAll(":", "/");
+      url = `https://${host}/.well-known/did.json`;
+    } else return null;
+    const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+    if (!res.ok) return null;
+    const doc = (await res.json()) as {
+      service?: Array<{ id: string; type: string; serviceEndpoint: string }>;
+    };
+    const service = doc.service?.find(
+      (entry) =>
+        entry.id === "#atproto_pds" ||
+        entry.type === "AtprotoPersonalDataServer",
+    );
+    if (!service?.serviceEndpoint) return null;
+    pdsCache.set(did, service.serviceEndpoint);
+    return service.serviceEndpoint;
+  } catch {
+    return null;
+  }
+}
+
+async function getRecord(
+  did: string,
+  collection: string,
+  rkey: string,
+): Promise<Record<string, unknown> | null> {
+  const pds = await resolvePds(did);
+  if (!pds) return null;
+  try {
+    const params = new URLSearchParams({ repo: did, collection, rkey });
+    const res = await fetch(
+      `${pds}/xrpc/com.atproto.repo.getRecord?${params.toString()}`,
+      { signal: AbortSignal.timeout(10_000) },
+    );
+    if (!res.ok) return null;
+    const data = (await res.json()) as { value?: Record<string, unknown> };
+    return data.value ?? null;
+  } catch {
+    return null;
+  }
+}
+
+interface RepoRecord {
+  did: string;
+  rkey: string;
+  value: Record<string, unknown>;
+}
+
+async function listRecords(
+  did: string,
+  collection: string,
+): Promise<RepoRecord[]> {
+  const pds = await resolvePds(did);
+  if (!pds) return [];
+  const records: RepoRecord[] = [];
+  let cursor: string | undefined;
+  try {
+    do {
+      const params = new URLSearchParams({
+        repo: did,
+        collection,
+        limit: "100",
+      });
+      if (cursor) params.set("cursor", cursor);
+      const res = await fetch(
+        `${pds}/xrpc/com.atproto.repo.listRecords?${params.toString()}`,
+        { signal: AbortSignal.timeout(10_000) },
+      );
+      if (!res.ok) return records;
+      const data = (await res.json()) as {
+        records?: Array<{ uri: string; value: Record<string, unknown> }>;
+        cursor?: string;
+      };
+      for (const record of data.records ?? []) {
+        records.push({
+          did,
+          rkey: record.uri.split("/").pop()!,
+          value: record.value,
+        });
+      }
+      cursor = data.cursor;
+    } while (cursor);
+  } catch {
+    // A participant's unavailable PDS should not fail the whole board read.
+  }
+  return records;
+}
+
+async function linkingDids(boardUri: string): Promise<Set<string>> {
+  const dids = new Set<string>();
+  await Promise.all(
+    CHILD_COLLECTIONS.map(async (collection) => {
+      let cursor: string | undefined;
+      do {
+        const params = new URLSearchParams({
+          target: boardUri,
+          collection,
+          path: ".boardUri",
+          limit: "100",
+        });
+        if (cursor) params.set("cursor", cursor);
+        try {
+          const res = await fetch(
+            `${CONSTELLATION_URL}/links/distinct-dids?${params.toString()}`,
+            { signal: AbortSignal.timeout(10_000) },
+          );
+          if (!res.ok) return;
+          const data = (await res.json()) as {
+            linking_dids?: string[];
+            cursor?: string | null;
+          };
+          for (const did of data.linking_dids ?? []) dids.add(did);
+          cursor = data.cursor ?? undefined;
+        } catch {
+          return;
+        }
+      } while (cursor);
+    }),
+  );
+  return dids;
 }
 
 /**
- * Fetch a single board record from the appview.
+ * Fetch a single board record directly from its owner's PDS.
  */
-export async function fetchBoardFromAppview(
+export async function fetchBoardFromPds(
   ownerDid: string,
   rkey: string,
 ): Promise<Board | null> {
   try {
-    const res = await fetch(`${APPVIEW_URL}/board/${ownerDid}/${rkey}`, {
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (!res.ok) return null;
-
-    const data = (await res.json()) as AppviewBoardResponse;
+    const value = await getRecord(ownerDid, BOARD_COLLECTION, rkey);
+    if (!value) return null;
+    const data = safeParse(BoardRecordSchema, value, "BoardRecord");
+    if (!data) return null;
 
     return {
-      rkey: data.board.rkey,
-      did: data.board.did,
-      name: data.board.name,
-      description: data.board.description ?? undefined,
-      columns: data.board.columns,
-      labels: data.board.labels,
-      open: data.board.open || undefined,
-      createdAt: data.board.createdAt,
+      rkey,
+      did: ownerDid,
+      name: data.name,
+      description: data.description,
+      columns: data.columns,
+      labels: data.labels,
+      open: inferOpenFromRecord(value),
+      createdAt: data.createdAt,
     };
   } catch {
     return null;
@@ -150,7 +243,7 @@ export interface BoardData {
 }
 
 /**
- * Fetch all data for a board from the appview (single HTTP request).
+ * Fetch all data for a board from Constellation and participant PDSes.
  */
 export async function fetchBoardData(
   boardDid: string,
@@ -158,66 +251,94 @@ export async function fetchBoardData(
   currentUserDid: string,
 ): Promise<BoardData | null> {
   try {
-    const res = await fetch(`${APPVIEW_URL}/board/${boardDid}/${boardRkey}`, {
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (!res.ok) return null;
-
-    const data = (await res.json()) as AppviewBoardResponse;
-
     const boardUri = buildAtUri(boardDid, BOARD_COLLECTION, boardRkey);
+    const board = await fetchBoardFromPds(boardDid, boardRkey);
+    if (!board) return null;
 
-    const board: Board = {
-      rkey: data.board.rkey,
-      did: data.board.did,
-      name: data.board.name,
-      description: data.board.description ?? undefined,
-      columns: data.board.columns,
-      labels: data.board.labels,
-      open: data.board.open || undefined,
-      createdAt: data.board.createdAt,
-    };
+    const dids = await linkingDids(boardUri);
+    dids.add(boardDid);
+    if (currentUserDid) dids.add(currentUserDid);
+    const fetched = await Promise.all(
+      [...dids].flatMap((did) =>
+        CHILD_COLLECTIONS.map((collection) => listRecords(did, collection)),
+      ),
+    );
+    const records = fetched
+      .flat()
+      .filter((record) => record.value.boardUri === boardUri);
 
-    const tasks: Task[] = (data.rawTasks ?? []).map((t) => ({
-      rkey: t.rkey,
-      did: t.did,
-      title: t.title,
-      description: t.description ?? undefined,
-      columnId: t.columnId,
-      boardUri: t.boardUri,
-      parentTaskUri: t.parentTaskUri ?? undefined,
-      position: t.position ?? undefined,
-      labelIds: t.labelIds ?? undefined,
-      order: t.order ?? undefined,
-      createdAt: t.createdAt,
-      updatedAt: t.updatedAt ?? undefined,
-    }));
+    const tasks: Task[] = records
+      .filter((r) => r.value.$type === "dev.skyboard.task")
+      .flatMap(({ did, rkey, value }) => {
+        const v = safeParse(TaskRecordSchema, value, "TaskRecord");
+        if (!v) return [];
+        return [
+          {
+            rkey,
+            did,
+            title: v.title,
+            description: v.description,
+            columnId: v.columnId,
+            boardUri,
+            parentTaskUri: v.parentTaskUri,
+            position: v.position,
+            labelIds: v.labelIds,
+            order: v.order,
+            createdAt: v.createdAt,
+            updatedAt: v.updatedAt,
+          },
+        ];
+      });
 
-    const ops: Op[] = (data.rawOps ?? []).map((o) => ({
-      rkey: o.rkey,
-      did: o.did,
-      targetTaskUri: o.targetTaskUri,
-      boardUri: o.boardUri,
-      fields: o.fields,
-      createdAt: o.createdAt,
-    }));
+    const ops: Op[] = records
+      .filter((r) => r.value.$type === "dev.skyboard.op")
+      .flatMap(({ did, rkey, value }) => {
+        const v = safeParse(OpRecordSchema, value, "OpRecord");
+        if (!v) return [];
+        return [
+          {
+            rkey,
+            did,
+            targetTaskUri: v.targetTaskUri,
+            boardUri,
+            fields: v.fields,
+            createdAt: v.createdAt,
+          },
+        ];
+      });
 
-    const trusts: Trust[] = (data.trusts ?? []).map((t) => ({
-      rkey: t.rkey,
-      did: t.did,
-      trustedDid: t.trustedDid,
-      boardUri,
-      createdAt: t.createdAt,
-    }));
+    const trusts: Trust[] = records
+      .filter((r) => r.value.$type === "dev.skyboard.trust")
+      .flatMap(({ did, rkey, value }) => {
+        const v = safeParse(TrustRecordSchema, value, "TrustRecord");
+        if (!v) return [];
+        return [
+          {
+            rkey,
+            did,
+            trustedDid: v.trustedDid,
+            boardUri,
+            createdAt: v.createdAt,
+          },
+        ];
+      });
 
-    const comments: Comment[] = (data.comments ?? []).map((c) => ({
-      rkey: c.rkey,
-      did: c.did,
-      targetTaskUri: c.targetTaskUri,
-      boardUri,
-      text: c.text,
-      createdAt: c.createdAt,
-    }));
+    const comments: Comment[] = records
+      .filter((r) => r.value.$type === "dev.skyboard.comment")
+      .flatMap(({ did, rkey, value }) => {
+        const v = safeParse(CommentRecordSchema, value, "CommentRecord");
+        if (!v) return [];
+        return [
+          {
+            rkey,
+            did,
+            targetTaskUri: v.targetTaskUri,
+            boardUri,
+            text: v.text,
+            createdAt: v.createdAt,
+          },
+        ];
+      });
 
     const trustedDids = new Set(
       trusts.filter((t) => t.did === boardDid).map((t) => t.trustedDid),

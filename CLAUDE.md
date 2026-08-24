@@ -15,7 +15,7 @@ Skyboard is a collaborative kanban board built on the AT Protocol (atproto). The
 
 The web app has **no server of its own**. It assembles board state in the browser from public atproto infrastructure: Constellation (backlink index) for discovery, participant PDSes for record content, and Jetstream for real-time updates. Writes go to the user's own PDS.
 
-The `appview/` directory is the legacy aggregation server. The web app no longer uses it, but `cli/` still does, so it has to stay deployed until the CLI is migrated.
+The `appview/` directory is the legacy aggregation server. Neither the web app nor the CLI uses it; retain it only for the rollout soak before decommissioning.
 
 ### Data Model: Four Record Types
 
@@ -60,7 +60,7 @@ Records from other people's repos are shape-checked by `src/lib/record-schemas.t
 
 ### Appview (legacy)
 
-`appview/` is a Bun + SQLite caching server on Fly.io. The web app no longer reads from it — `cli/src/lib/pds.ts` still does. Don't delete it until the CLI is migrated. See `appview/README.md`.
+`appview/` is a Bun + SQLite caching server on Fly.io. It is no longer in any client read path. Keep it during the rollout soak for old web bundles, then decommission it separately. See `appview/README.md`.
 
 ### Materialization and Conflict Resolution
 

@@ -337,8 +337,9 @@ day. Boards already in Dexie render instantly while that refresh runs.
 ## Appview (legacy)
 
 The appview (`appview/`) is the caching aggregation server the web app used
-before Constellation. It runs on Bun with SQLite and deploys to Fly.io, and is
-still what `cli/` reads from.
+before Constellation. It runs on Bun with SQLite and deploys to Fly.io. Neither
+the web app nor the CLI reads from it now; keep it only through the rollout
+soak, then it can be decommissioned.
 
 See [`appview/README.md`] for development and deployment details.
 
@@ -442,15 +443,12 @@ sb whoami --json
 
 ### How it works
 
-The CLI authenticates via OAuth and fetches board data from the appview — no
-local database. Each read command hits the appview for the full board state,
-runs the same `materializeTasks()` merge logic as the web app, and displays
-the result. Write commands (`new`, `mv`, `edit`, `comment`) create AT Protocol
-records (tasks, ops, comments) in your PDS, which the appview picks up via
-Jetstream and serves to other clients.
-
-The web app no longer uses the appview; the CLI still does, so the appview has
-to stay up until the CLI is moved over too.
+The CLI authenticates via OAuth and has no local database. It discovers board
+participants through Constellation, reads records directly from their PDSes,
+runs the same `materializeTasks()` merge logic as the web app, and displays the
+result. Write commands (`new`, `mv`, `edit`, `comment`) create AT Protocol
+records (tasks, ops, comments) in your PDS; other clients receive them through
+Jetstream or their next Constellation-backed refresh.
 
 ## Development
 

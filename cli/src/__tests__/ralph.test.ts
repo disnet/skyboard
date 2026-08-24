@@ -25,7 +25,7 @@ vi.mock("../lib/config.js", () => ({
 }));
 
 vi.mock("../lib/pds.js", () => ({
-  fetchBoardFromAppview: vi.fn(),
+  fetchBoardFromPds: vi.fn(),
 }));
 
 vi.mock("node:fs", async (importOriginal) => {
@@ -39,7 +39,7 @@ vi.mock("node:fs", async (importOriginal) => {
 import { requireAgent } from "../lib/auth.js";
 import { loadRalphConfig } from "../lib/ralph/config.js";
 import { runLoop } from "../lib/ralph/runner.js";
-import { fetchBoardFromAppview } from "../lib/pds.js";
+import { fetchBoardFromPds } from "../lib/pds.js";
 import { ralphCommand } from "../commands/ralph.js";
 import { existsSync } from "node:fs";
 
@@ -114,7 +114,7 @@ describe("ralph start", () => {
       did: "did:plc:test",
       handle: "test.user",
     });
-    vi.mocked(fetchBoardFromAppview).mockResolvedValue({ open: false } as any);
+    vi.mocked(fetchBoardFromPds).mockResolvedValue({ open: false } as any);
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(runLoop).mockResolvedValue("DONE");
 
@@ -138,7 +138,7 @@ describe("ralph start", () => {
       did: "did:plc:test",
       handle: "test.user",
     });
-    vi.mocked(fetchBoardFromAppview).mockResolvedValue({ open: true } as any);
+    vi.mocked(fetchBoardFromPds).mockResolvedValue({ open: true } as any);
 
     const program = makeProgram();
 
@@ -157,7 +157,7 @@ describe("ralph start", () => {
       did: "did:plc:test",
       handle: "test.user",
     });
-    vi.mocked(fetchBoardFromAppview).mockResolvedValue({ open: false } as any);
+    vi.mocked(fetchBoardFromPds).mockResolvedValue({ open: false } as any);
     vi.mocked(existsSync).mockReturnValue(false);
 
     const program = makeProgram();

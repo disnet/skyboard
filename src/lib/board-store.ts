@@ -62,6 +62,8 @@ export interface BoardSnapshot {
    * pruned — a participant whose PDS was unreachable keeps their local data.
    */
   hydrated: Array<{ did: string; collection: string }>;
+  /** Rows that existed before this snapshot's network reads began. */
+  pruneCandidates: Map<string, Set<string>>;
 }
 
 /** A row in any of the board-child tables. */
@@ -478,6 +480,12 @@ export async function applyBoardSnapshot(
         if (!dids.has(row.did)) continue;
         if (row.syncStatus !== "synced") continue;
         if (keep?.get(row.did)?.has(row.rkey)) continue;
+        if (
+          !snapshot.pruneCandidates
+            .get(collection)
+            ?.has(`${row.did}\0${row.rkey}`)
+        )
+          continue;
         if (row.id !== undefined) await table.delete(row.id);
       }
     }
@@ -496,9 +504,11 @@ export async function applyBoardSnapshot(
 export async function localBoardFootprint(boardUri: string): Promise<{
   collections: Set<string>;
   dids: Set<string>;
+  rows: Map<string, Set<string>>;
 }> {
   const collections = new Set<string>();
   const dids = new Set<string>();
+  const rowIdentities = new Map<string, Set<string>>();
 
   await Promise.all(
     BOARD_CHILD_COLLECTIONS.map(async (collection) => {
@@ -509,11 +519,15 @@ export async function localBoardFootprint(boardUri: string): Promise<{
         if (row.syncStatus !== "synced") continue;
         collections.add(collection);
         dids.add(row.did);
+        let identities = rowIdentities.get(collection);
+        if (!identities)
+          rowIdentities.set(collection, (identities = new Set()));
+        identities.add(`${row.did}\0${row.rkey}`);
       }
     }),
   );
 
-  return { collections, dids };
+  return { collections, dids, rows: rowIdentities };
 }
 
 /**

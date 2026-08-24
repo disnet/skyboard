@@ -105,20 +105,25 @@ function writePdsCache(did: string, endpoint: string): void {
 }
 
 /** In-flight and resolved lookups, so N parallel fetches share one round trip. */
-const pdsLookups = new Map<string, Promise<string | null>>();
+const pdsLookups = new Map<
+  string,
+  { lookup: Promise<string | null>; at: number }
+>();
 
 /**
  * Resolve a DID's PDS endpoint from its DID document. Successful lookups are
  * cached in localStorage for a day so cold loads skip the directory hop.
  */
 export async function resolvePds(did: string): Promise<string | null> {
-  const inFlight = pdsLookups.get(did);
-  if (inFlight) return inFlight;
+  const memoized = pdsLookups.get(did);
+  if (memoized && Date.now() - memoized.at < PDS_CACHE_TTL_MS)
+    return memoized.lookup;
+  if (memoized) pdsLookups.delete(did);
 
   const cached = readPdsCache()[did];
   if (cached && Date.now() - cached.at < PDS_CACHE_TTL_MS) {
     const hit = Promise.resolve(cached.endpoint);
-    pdsLookups.set(did, hit);
+    pdsLookups.set(did, { lookup: hit, at: cached.at });
     return hit;
   }
 
@@ -145,7 +150,7 @@ export async function resolvePds(did: string): Promise<string | null> {
     return pds.serviceEndpoint;
   })();
 
-  pdsLookups.set(did, lookup);
+  pdsLookups.set(did, { lookup, at: Date.now() });
   const result = await lookup;
   // Don't memoize failures — a PDS that was down should be retried
   if (!result) pdsLookups.delete(did);
@@ -290,19 +295,10 @@ export async function loadBoardFromConstellation(
     const counts = await fetchLinkCounts(boardUri);
     const local = await localBoardFootprint(boardUri);
 
-    const collections = new Set<string>();
-    if (counts) {
-      for (const collection of BOARD_CHILD_COLLECTIONS) {
-        if ((counts.get(collection) ?? 0) > 0) collections.add(collection);
-      }
-      // Trust drives permissions, and index lag there is the most damaging
-      // thing that can happen on a cold load, so never skip it.
-      collections.add(TRUST_COLLECTION);
-    } else {
-      for (const collection of BOARD_CHILD_COLLECTIONS) {
-        collections.add(collection);
-      }
-    }
+    // Always list every owner collection. A successful but empty links result
+    // is also what Constellation returns before a target has been indexed, so
+    // it cannot safely prove that a new board is empty.
+    const collections = new Set<string>(BOARD_CHILD_COLLECTIONS);
     // Anything already cached has to be re-listed, otherwise a collection that
     // was emptied upstream would never be pruned.
     for (const collection of local.collections) collections.add(collection);
@@ -353,6 +349,7 @@ export async function loadBoardFromConstellation(
       boardValue,
       records,
       hydrated,
+      pruneCandidates: local.rows,
     });
 
     return true;
