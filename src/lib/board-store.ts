@@ -146,6 +146,18 @@ function childTable(collection: string): Table<ChildRow, number> | null {
   }
 }
 
+// A local delete (task, comment, leaving a board, ...) is newer than an
+// in-flight snapshot's listings, just like a live event, and must not be undone
+// by the snapshot re-adding the row as synced. Hooking Dexie covers every
+// delete site, including `Collection.delete()`.
+for (const collection of [BOARD_COLLECTION, ...BOARD_CHILD_COLLECTIONS]) {
+  const table =
+    collection === BOARD_COLLECTION ? db.boards : childTable(collection);
+  table?.hook("deleting", (_key, row: { did?: string; rkey?: string }) => {
+    if (row?.did && row.rkey) touch(collection, row.did, row.rkey);
+  });
+}
+
 function writeTables() {
   return [
     db.boards,

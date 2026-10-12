@@ -109,15 +109,17 @@ type PdsResult<T> =
 /**
  * The reference PDS reports a missing record as HTTP 400 `RecordNotFound` and a
  * missing repo as `RepoNotFound` or a generic `InvalidRequest`; other
- * implementations use 404.
+ * implementations use 404. A 404 only counts when it carries an XRPC error
+ * body: a bare one (a stale endpoint now serving a website, a proxy that
+ * doesn't route xrpc) says nothing about the record and must not prune.
  */
 async function missingKind(res: Response): Promise<"record" | "repo" | null> {
-  if (res.status === 404) return "record";
-  if (res.status !== 400) return null;
+  if (res.status !== 400 && res.status !== 404) return null;
   try {
     const body = (await res.json()) as { error?: unknown; message?: unknown };
-    if (body?.error === "RecordNotFound") return "record";
     if (body?.error === "RepoNotFound") return "repo";
+    if (body?.error === "RecordNotFound") return "record";
+    if (res.status === 404 && typeof body?.error === "string") return "record";
     if (
       body?.error === "InvalidRequest" &&
       typeof body.message === "string" &&

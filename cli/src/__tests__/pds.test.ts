@@ -147,10 +147,18 @@ describe("fetchBoardFromPds", () => {
     await expect(fetchBoardFromPds(OWNER_DID, BOARD_RKEY)).resolves.toBeNull();
   });
 
-  it("returns null when the PDS answers 404", async () => {
-    stubBoardRead(() => new Response("", { status: 404 }));
+  it("returns null when the PDS answers an XRPC 404", async () => {
+    stubBoardRead(() => jsonResponse({ error: "NotFound" }, 404));
 
     await expect(fetchBoardFromPds(OWNER_DID, BOARD_RKEY)).resolves.toBeNull();
+  });
+
+  it("raises on a bare 404, which doesn't come from a PDS lookup", async () => {
+    stubBoardRead(() => new Response("Not Found", { status: 404 }));
+
+    await expect(fetchBoardFromPds(OWNER_DID, BOARD_RKEY)).rejects.toThrow(
+      /PDS returned HTTP 404/,
+    );
   });
 
   it("returns null when the repo does not exist", async () => {
@@ -468,8 +476,9 @@ describe("fetchBoardData", () => {
     );
   });
 
-  it("skips an untrusted participant whose PDS cannot be resolved", async () => {
-    vi.spyOn(console, "warn").mockImplementation(() => {});
+  it("rejects when an untrusted participant with tasks can't be read", async () => {
+    // Their tasks are shown whether or not they're trusted, so dropping them
+    // would hide cards and skew positions computed by `sb mv`
     stubNetwork(
       [
         task(OWNER_DID, "t1", "Owner task"),
@@ -479,6 +488,30 @@ describe("fetchBoardData", () => {
         url.startsWith(`https://plc.directory/${UNTRUSTED_DID}`)
           ? new Response("", { status: 503 })
           : undefined,
+    );
+
+    await expect(fetchBoardData(OWNER_DID, BOARD_RKEY, "")).rejects.toThrow(
+      `Could not resolve PDS for ${UNTRUSTED_DID}`,
+    );
+  });
+
+  it("skips an untrusted participant with only proposals whose PDS cannot be resolved", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const proposal: Stored = {
+      did: UNTRUSTED_DID,
+      collection: "dev.skyboard.op",
+      rkey: "op1",
+      value: {
+        boardUri: BOARD_URI,
+        targetTaskUri: `at://${OWNER_DID}/dev.skyboard.task/t1`,
+        fields: { title: "Renamed" },
+        createdAt: "2025-01-02T00:00:00.000Z",
+      },
+    };
+    stubNetwork([task(OWNER_DID, "t1", "Owner task"), proposal], (url) =>
+      url.startsWith(`https://plc.directory/${UNTRUSTED_DID}`)
+        ? new Response("", { status: 503 })
+        : undefined,
     );
 
     const data = await fetchBoardData(OWNER_DID, BOARD_RKEY, "");

@@ -142,8 +142,7 @@ function isValidRecordKey(rkey: string): boolean {
  * implementations use 404. Everything else is a failed read.
  */
 async function isRecordMissing(res: Response): Promise<boolean> {
-  if (res.status === 404) return true;
-  if (res.status !== 400) return false;
+  if (res.status !== 400 && res.status !== 404) return false;
   let body: { error?: unknown; message?: unknown };
   try {
     body = (await res.json()) as { error?: unknown; message?: unknown };
@@ -152,6 +151,9 @@ async function isRecordMissing(res: Response): Promise<boolean> {
   }
   const error = typeof body?.error === "string" ? body.error : "";
   if (error === "RecordNotFound" || error === "RepoNotFound") return true;
+  // A 404 only counts with an XRPC error body: a bare one comes from a stale
+  // endpoint or a proxy, not from a PDS that looked for the record
+  if (res.status === 404) return error !== "";
   const message = typeof body?.message === "string" ? body.message : "";
   return error === "InvalidRequest" && /could not find repo/i.test(message);
 }
@@ -391,9 +393,10 @@ export interface BoardData {
   allParticipants: string[];
   /**
    * Participants whose repos could not be read. Only untrusted participants
-   * are ever skipped — their records can only be proposals, and anyone can
-   * become a participant by pointing a record at the board, so one broken
-   * identity must not make the board unreadable for everyone.
+   * with no tasks on the board are ever skipped — their ops can only be
+   * proposals, and anyone can become a participant by pointing a record at
+   * the board, so one broken identity must not make the board unreadable for
+   * everyone.
    */
   unreadableParticipants: string[];
 }
@@ -454,6 +457,13 @@ export async function fetchBoardData(
     ) {
       required.add(record.value.trustedDid);
     }
+  }
+
+  // Every author's tasks are materialized whether or not they're trusted, and
+  // an author's own ops apply to their tasks, so anyone with a task on the
+  // board must be read in full too.
+  for (const link of linked) {
+    if (link.collection === "dev.skyboard.task") required.add(link.did);
   }
 
   const unreadableParticipants: string[] = [];
