@@ -4,6 +4,7 @@ import {
   OWNER_DID,
   PDS_ENDPOINT,
   TRUSTED_DID,
+  UNTRUSTED_DID,
   USER_DID,
   makePLCResponse,
 } from "./helpers.js";
@@ -298,13 +299,32 @@ describe("fetchBoardData degraded reads", () => {
     );
   });
 
-  it("rejects when a participant PDS cannot be resolved", async () => {
+  it("rejects when a trusted participant PDS cannot be resolved", async () => {
     stubFetch((url) => {
       if (
         url.includes("links/distinct-dids") &&
         url.includes("collection=dev.skyboard.task")
       ) {
         return jsonResponse({ linking_dids: [TRUSTED_DID] });
+      }
+      if (
+        url.includes("com.atproto.repo.listRecords") &&
+        url.includes("collection=dev.skyboard.trust") &&
+        url.includes(`repo=${encodeURIComponent(OWNER_DID)}`)
+      ) {
+        return jsonResponse({
+          records: [
+            {
+              uri: `at://${OWNER_DID}/dev.skyboard.trust/trust1`,
+              value: {
+                $type: "dev.skyboard.trust",
+                boardUri: `at://${OWNER_DID}/dev.skyboard.board/${BOARD_RKEY}`,
+                trustedDid: TRUSTED_DID,
+                createdAt: "2025-01-01T00:00:00.000Z",
+              },
+            },
+          ],
+        });
       }
       if (url.startsWith(`https://plc.directory/${TRUSTED_DID}`)) {
         return new Response("", { status: 503 });
@@ -314,6 +334,39 @@ describe("fetchBoardData degraded reads", () => {
 
     await expect(fetchBoardData(OWNER_DID, BOARD_RKEY, "")).rejects.toThrow(
       `Could not resolve PDS for ${TRUSTED_DID}`,
+    );
+  });
+
+  it("skips an untrusted participant whose PDS cannot be resolved", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    stubFetch((url) => {
+      if (
+        url.includes("links/distinct-dids") &&
+        url.includes("collection=dev.skyboard.comment")
+      ) {
+        return jsonResponse({ linking_dids: [UNTRUSTED_DID] });
+      }
+      if (url.startsWith(`https://plc.directory/${UNTRUSTED_DID}`)) {
+        return new Response("", { status: 503 });
+      }
+      return successfulBoardReadResponse(url);
+    });
+
+    const data = await fetchBoardData(OWNER_DID, BOARD_RKEY, "");
+    expect(data?.board.name).toBe("Test Board");
+    expect(data?.unreadableParticipants).toEqual([UNTRUSTED_DID]);
+  });
+
+  it("rejects when the owner's own listing fails", async () => {
+    stubFetch((url) => {
+      if (url.includes("com.atproto.repo.listRecords")) {
+        return new Response("", { status: 503 });
+      }
+      return successfulBoardReadResponse(url);
+    });
+
+    await expect(fetchBoardData(OWNER_DID, BOARD_RKEY, "")).rejects.toThrow(
+      /PDS returned HTTP 503/,
     );
   });
 

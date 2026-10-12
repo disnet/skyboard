@@ -8,11 +8,12 @@
   import { useLiveQuery } from "$lib/db.svelte.js";
   import { generateCatchUpNotifications } from "$lib/notifications.js";
   import {
-    loadBoardFromConstellation,
+    loadBoardsFromConstellation,
     discoverMyBoards,
   } from "$lib/constellation.js";
   import { JetstreamSubscription } from "$lib/jetstream.js";
-  import { buildAtUri, BOARD_COLLECTION } from "$lib/tid.js";
+  import { liveQuery, type Subscription } from "dexie";
+  import { buildAtUri, BOARD_COLLECTION, type BoardRef } from "$lib/tid.js";
   import { setDiscovering } from "$lib/discovery.svelte.js";
   import type { Board } from "$lib/types.js";
   import { initTheme, getTheme, cycleTheme } from "$lib/theme.svelte.js";
@@ -35,6 +36,9 @@
   let showShortcuts = $state(false);
   let showBoardSwitcher = $state(false);
   let jetstreamSub: JetstreamSubscription | null = null;
+  let boardListSub: Subscription | null = null;
+  /** How long a login waits for Jetstream before loading boards anyway. */
+  const JETSTREAM_OPEN_TIMEOUT_MS = 5_000;
   let effectGeneration = 0;
 
   const unreadCount = useLiveQuery<number>(() => {
@@ -56,26 +60,30 @@
     };
   });
 
+  function boardRefs(boards: Board[]): BoardRef[] {
+    return boards.map((b) => ({
+      ownerDid: b.did,
+      rkey: b.rkey,
+      uri: buildAtUri(b.did, BOARD_COLLECTION, b.rkey),
+    }));
+  }
+
   // Refresh all local boards, then generate catch-up notifications
   async function catchUpAllBoards(userDid: string, handle: string | undefined) {
-    const boards = await db.boards.toArray();
-    await Promise.allSettled(
-      boards.map(async (b) => {
-        const boardUri = buildAtUri(b.did, BOARD_COLLECTION, b.rkey);
-        await loadBoardFromConstellation(b.did, b.rkey, boardUri);
-      }),
-    );
+    await loadBoardsFromConstellation(boardRefs(await db.boards.toArray()));
     await generateCatchUpNotifications(userDid, handle);
   }
 
   function disconnectAllSubs() {
+    boardListSub?.unsubscribe();
+    boardListSub = null;
     jetstreamSub?.disconnect();
     jetstreamSub = null;
   }
 
   // One Jetstream socket covers every board: commit events carry the full
   // record, so changes are applied directly instead of triggering a refetch.
-  function connectBoardSubs(boards: Board[], userDid: string) {
+  function connectBoardSubs(userDid: string): JetstreamSubscription {
     disconnectAllSubs();
 
     const sub = new JetstreamSubscription({
@@ -83,18 +91,23 @@
         const handle = getProfile(userDid)?.data?.handle;
         await generateCatchUpNotifications(userDid, handle);
       },
-      onResync: async (board) => {
-        await loadBoardFromConstellation(board.ownerDid, board.rkey, board.uri);
+      onResync: async (boards) => {
+        await loadBoardsFromConstellation(boards);
         const handle = getProfile(userDid)?.data?.handle;
         await generateCatchUpNotifications(userDid, handle);
       },
     });
 
-    for (const b of boards) {
-      sub.subscribe(buildAtUri(b.did, BOARD_COLLECTION, b.rkey));
-    }
+    // Follow the board list, so boards created or joined later get events too
+    boardListSub = liveQuery(() => db.boards.toArray()).subscribe({
+      next: (boards) => {
+        for (const ref of boardRefs(boards)) sub.subscribe(ref.uri);
+      },
+      error: console.error,
+    });
     sub.connect();
     jetstreamSub = sub;
+    return sub;
   }
 
   $effect(() => {
@@ -110,11 +123,14 @@
         .finally(() => {
           setDiscovering(false);
         })
-        .then(() => catchUpAllBoards(userDid, handle))
         .then(async () => {
           if (generation !== effectGeneration) return;
-          const boards = await db.boards.toArray();
-          connectBoardSubs(boards, userDid);
+          // Connect before catching up, so a change that lands while the
+          // boards load arrives as an event instead of falling in the gap
+          const sub = connectBoardSubs(userDid);
+          await sub.waitForOpen(JETSTREAM_OPEN_TIMEOUT_MS);
+          if (generation !== effectGeneration) return;
+          await catchUpAllBoards(userDid, handle);
         })
         .catch(console.error);
       startBackgroundSync(userAgent, userDid);

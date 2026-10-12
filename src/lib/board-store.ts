@@ -64,6 +64,57 @@ export interface BoardSnapshot {
   hydrated: Array<{ did: string; collection: string }>;
   /** Rows that existed before this snapshot's network reads began. */
   pruneCandidates: Map<string, Set<string>>;
+  /** `beginSnapshot()` token taken before any listing was fetched. */
+  startedAt: number;
+}
+
+// --- live-write tracking ---
+//
+// A snapshot's listings are fetched before its transaction opens, so a
+// Jetstream event applied in between is newer than what the snapshot holds.
+// Every live write bumps a sequence number for its record; a snapshot leaves
+// alone any record touched after the snapshot began. Touches are only kept
+// while some snapshot that could be affected is still open.
+
+let liveSeq = 0;
+const liveTouches = new Map<string, number>();
+const openSnapshots: number[] = [];
+
+function touchKey(collection: string, did: string, rkey: string): string {
+  return `${collection}\0${did}\0${rkey}`;
+}
+
+function touch(collection: string, did: string, rkey: string): void {
+  if (!openSnapshots.length) return;
+  liveTouches.set(touchKey(collection, did, rkey), ++liveSeq);
+}
+
+function touchedSince(
+  start: number,
+  collection: string,
+  did: string,
+  rkey: string,
+): boolean {
+  return (liveTouches.get(touchKey(collection, did, rkey)) ?? 0) > start;
+}
+
+/**
+ * Mark the start of a snapshot's network reads. Must be called before any
+ * listing is fetched, and paired with `endSnapshot`.
+ */
+export function beginSnapshot(): number {
+  openSnapshots.push(liveSeq);
+  return liveSeq;
+}
+
+export function endSnapshot(start: number): void {
+  const i = openSnapshots.indexOf(start);
+  if (i !== -1) openSnapshots.splice(i, 1);
+  // A touch only matters to snapshots that started before it
+  const oldest = openSnapshots.length ? Math.min(...openSnapshots) : Infinity;
+  for (const [key, seq] of liveTouches) {
+    if (seq <= oldest) liveTouches.delete(key);
+  }
 }
 
 /** A row in any of the board-child tables. */
@@ -441,12 +492,18 @@ export async function applyBoardSnapshot(
   boardUri: string,
   snapshot: BoardSnapshot,
 ): Promise<void> {
+  const start = snapshot.startedAt;
   await db.transaction("rw", writeTables(), async () => {
-    await upsertBoard(ownerDid, rkey, snapshot.boardValue);
+    if (!touchedSince(start, BOARD_COLLECTION, ownerDid, rkey)) {
+      await upsertBoard(ownerDid, rkey, snapshot.boardValue);
+    }
 
     for (const collection of BOARD_CHILD_COLLECTIONS) {
       const upsert = CHILD_UPSERTS[collection];
       for (const record of snapshot.records.get(collection) ?? []) {
+        // A live event since the listing is newer — including a delete,
+        // which this must not undo
+        if (touchedSince(start, collection, record.did, record.rkey)) continue;
         await upsert(record.did, record.rkey, record.value, boardUri);
       }
     }
@@ -480,6 +537,7 @@ export async function applyBoardSnapshot(
         if (!dids.has(row.did)) continue;
         if (row.syncStatus !== "synced") continue;
         if (keep?.get(row.did)?.has(row.rkey)) continue;
+        if (touchedSince(start, collection, row.did, row.rkey)) continue;
         if (
           !snapshot.pruneCandidates
             .get(collection)
@@ -542,6 +600,7 @@ export async function applyRecordUpsert(
   rkey: string,
   value: Record<string, unknown>,
 ): Promise<string | null> {
+  touch(collection, did, rkey);
   if (collection === BOARD_COLLECTION) {
     await db.transaction("rw", [db.boards], async () => {
       await upsertBoard(did, rkey, value);
@@ -571,6 +630,7 @@ export async function applyRecordDelete(
   collection: string,
   rkey: string,
 ): Promise<string | null> {
+  touch(collection, did, rkey);
   if (collection === BOARD_COLLECTION) {
     const existing = await db.boards.where("rkey").equals(rkey).first();
     if (!existing?.id || existing.did !== did) return null;

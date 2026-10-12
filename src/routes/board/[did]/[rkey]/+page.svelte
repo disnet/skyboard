@@ -15,6 +15,7 @@
   import { isTrusted, isContentVisible } from "$lib/permissions.js";
   import { deleteBoardFromPDS, notifyPendingWrite } from "$lib/sync.js";
   import { loadBoardFromConstellation } from "$lib/constellation.js";
+  import { watchBoard } from "$lib/jetstream.js";
   import type {
     Board,
     Task,
@@ -69,6 +70,8 @@
 
     (async () => {
       try {
+        // Subscribe first, so edits made during the load aren't missed
+        watchBoard(boardUri);
         const ok = await loadBoardFromConstellation(ownerDid, rkey, boardUri);
         if (!ok) {
           error = "Board not found";

@@ -27,6 +27,8 @@ import {
 import {
   BOARD_CHILD_COLLECTIONS,
   applyBoardSnapshot,
+  beginSnapshot,
+  endSnapshot,
   localBoardFootprint,
   type RawRecord,
 } from "./board-store.js";
@@ -54,14 +56,18 @@ const waiting: Array<() => void> = [];
 
 async function withSlot<T>(fn: () => Promise<T>): Promise<T> {
   if (activeRequests >= MAX_CONCURRENT_REQUESTS) {
+    // The finishing request hands its slot straight over, so a caller that
+    // arrives before this waiter resumes can't take it too.
     await new Promise<void>((resolve) => waiting.push(resolve));
+  } else {
+    activeRequests++;
   }
-  activeRequests++;
   try {
     return await fn();
   } finally {
-    activeRequests--;
-    waiting.shift()?.();
+    const next = waiting.shift();
+    if (next) next();
+    else activeRequests--;
   }
 }
 
@@ -104,6 +110,28 @@ function writePdsCache(did: string, endpoint: string): void {
   }
 }
 
+function evictPdsCache(did: string): void {
+  pdsLookups.delete(did);
+  if (typeof localStorage === "undefined") return;
+  try {
+    const cache = readPdsCache();
+    if (!(did in cache)) return;
+    delete cache[did];
+    localStorage.setItem(PDS_CACHE_KEY, JSON.stringify(cache));
+  } catch {
+    // As above
+  }
+}
+
+/** `did:web:example.com%3A8080:user` → `example.com:8080/user` */
+function didWebPath(did: string): string {
+  return did
+    .slice("did:web:".length)
+    .split(":")
+    .map((segment) => decodeURIComponent(segment))
+    .join("/");
+}
+
 /** In-flight and resolved lookups, so N parallel fetches share one round trip. */
 const pdsLookups = new Map<
   string,
@@ -133,8 +161,9 @@ export async function resolvePds(did: string): Promise<string | null> {
     if (did.startsWith("did:plc:")) {
       didDoc = await fetchJson(`https://plc.directory/${did}`);
     } else if (did.startsWith("did:web:")) {
-      const host = did.slice("did:web:".length).replaceAll(":", "/");
-      didDoc = await fetchJson(`https://${host}/.well-known/did.json`);
+      didDoc = await fetchJson(
+        `https://${didWebPath(did)}/.well-known/did.json`,
+      );
     }
     if (!didDoc) return null;
 
@@ -159,19 +188,38 @@ export async function resolvePds(did: string): Promise<string | null> {
 
 // --- PDS reads ---
 
+/**
+ * Run a read against a DID's PDS. A failed read may mean the cached endpoint
+ * is stale (the account migrated), so the endpoint is re-resolved and the
+ * read retried once against it if it changed.
+ */
+async function withPds<T>(
+  did: string,
+  read: (pds: string) => Promise<T | null>,
+): Promise<T | null> {
+  const pds = await resolvePds(did);
+  if (!pds) return null;
+  const result = await read(pds);
+  if (result !== null) return result;
+
+  evictPdsCache(did);
+  const fresh = await resolvePds(did);
+  if (!fresh || fresh === pds) return null;
+  return read(fresh);
+}
+
 async function getRecordFromRepo(
   did: string,
   collection: string,
   rkey: string,
 ): Promise<Record<string, unknown> | null> {
-  const pds = await resolvePds(did);
-  if (!pds) return null;
-
   const params = new URLSearchParams({ repo: did, collection, rkey });
-  const data = await fetchJson<{ value?: Record<string, unknown> }>(
-    `${pds}/xrpc/com.atproto.repo.getRecord?${params.toString()}`,
-  );
-  return data?.value ?? null;
+  return withPds(did, async (pds) => {
+    const data = await fetchJson<{ value?: Record<string, unknown> }>(
+      `${pds}/xrpc/com.atproto.repo.getRecord?${params.toString()}`,
+    );
+    return data?.value ?? null;
+  });
 }
 
 /**
@@ -183,9 +231,14 @@ async function listRecordsFromRepo(
   did: string,
   collection: string,
 ): Promise<RawRecord[] | null> {
-  const pds = await resolvePds(did);
-  if (!pds) return null;
+  return withPds(did, (pds) => listRecordsFromPds(pds, did, collection));
+}
 
+async function listRecordsFromPds(
+  pds: string,
+  did: string,
+  collection: string,
+): Promise<RawRecord[] | null> {
   const records: RawRecord[] = [];
   let cursor: string | undefined;
 
@@ -237,7 +290,11 @@ async function fetchLinkCounts(
   return counts;
 }
 
-/** DIDs with at least one `collection` record pointing at `boardUri`. */
+/**
+ * DIDs with at least one `collection` record pointing at `boardUri`, or null
+ * if the full list could not be read. A partial list is never returned: it
+ * would silently drop participants from the board.
+ */
 async function fetchLinkingDids(
   boardUri: string,
   collection: string,
@@ -254,11 +311,11 @@ async function fetchLinkingDids(
     });
     if (cursor) params.set("cursor", cursor);
 
-    const data = await fetchJson<{
-      linking_dids?: string[];
-      cursor?: string | null;
-    }>(`${CONSTELLATION_URL}/links/distinct-dids?${params.toString()}`);
-    if (!data) return dids.length ? dids : null;
+    const url = `${CONSTELLATION_URL}/links/distinct-dids?${params.toString()}`;
+    type Page = { linking_dids?: string[]; cursor?: string | null };
+    // One retry, so a single dropped page doesn't cost a participant
+    const data = (await fetchJson<Page>(url)) ?? (await fetchJson<Page>(url));
+    if (!data) return null;
 
     dids.push(...(data.linking_dids ?? []));
     cursor = data.cursor ?? undefined;
@@ -268,6 +325,76 @@ async function fetchLinkingDids(
 }
 
 // --- board loading ---
+
+/**
+ * Shared state for loading several boards at once. A participant's repo is
+ * listed in full regardless of board, so every board in a session reuses the
+ * same listing instead of fetching it again.
+ *
+ * The session's snapshot token is taken before any of its listings, so live
+ * events that land while it runs still win over what it fetched.
+ */
+export interface LoadSession {
+  readonly startedAt: number;
+  readonly listings: Map<string, Promise<RawRecord[] | null>>;
+  end(): void;
+}
+
+export function createLoadSession(): LoadSession {
+  const startedAt = beginSnapshot();
+  let ended = false;
+  return {
+    startedAt,
+    listings: new Map(),
+    end() {
+      if (ended) return;
+      ended = true;
+      endSnapshot(startedAt);
+    },
+  };
+}
+
+function sessionListing(
+  session: LoadSession,
+  did: string,
+  collection: string,
+): Promise<RawRecord[] | null> {
+  const key = `${did}\0${collection}`;
+  let listing = session.listings.get(key);
+  if (!listing) {
+    listing = listRecordsFromRepo(did, collection);
+    session.listings.set(key, listing);
+  }
+  return listing;
+}
+
+type Footprint = Awaited<ReturnType<typeof localBoardFootprint>>;
+
+/**
+ * Load several boards with one shared session. Returns which loaded.
+ *
+ * Every board's local footprint is read before any listing starts: a shared
+ * listing may predate a board's own load, and a row synced after the listing
+ * was fetched must not be pruned as missing from it.
+ */
+export async function loadBoardsFromConstellation(
+  boards: BoardRef[],
+): Promise<boolean[]> {
+  const session = createLoadSession();
+  try {
+    const footprints = await Promise.all(
+      boards.map((b) => localBoardFootprint(b.uri)),
+    );
+    const results = await Promise.allSettled(
+      boards.map((b, i) =>
+        loadBoard(b.ownerDid, b.rkey, b.uri, session, footprints[i]),
+      ),
+    );
+    return results.map((r) => r.status === "fulfilled" && r.value);
+  } finally {
+    session.end();
+  }
+}
 
 /**
  * Load a board into Dexie from Constellation plus participant PDSes.
@@ -281,6 +408,27 @@ export async function loadBoardFromConstellation(
   rkey: string,
   boardUri: string,
 ): Promise<boolean> {
+  const session = createLoadSession();
+  try {
+    return await loadBoard(
+      ownerDid,
+      rkey,
+      boardUri,
+      session,
+      await localBoardFootprint(boardUri),
+    );
+  } finally {
+    session.end();
+  }
+}
+
+async function loadBoard(
+  ownerDid: string,
+  rkey: string,
+  boardUri: string,
+  session: LoadSession,
+  local: Footprint,
+): Promise<boolean> {
   try {
     // 1. The board record is the link *target*, so Constellation can't return
     //    it — read it straight from the owner's repo.
@@ -293,7 +441,6 @@ export async function loadBoardFromConstellation(
 
     // 2. Which collections actually have records on this board.
     const counts = await fetchLinkCounts(boardUri);
-    const local = await localBoardFootprint(boardUri);
 
     // Always list every owner collection. A successful but empty links result
     // is also what Constellation returns before a target has been indexed, so
@@ -315,6 +462,11 @@ export async function loadBoardFromConstellation(
       for (const list of discovered) {
         for (const did of list ?? []) dids.add(did);
       }
+      if (discovered.some((list) => list === null)) {
+        console.warn(
+          `Constellation discovery incomplete for ${boardUri}; some participants may be missing`,
+        );
+      }
     }
 
     // 4. Hydrate every (participant, collection) pair in parallel. One dead
@@ -325,7 +477,7 @@ export async function loadBoardFromConstellation(
     await Promise.all(
       [...dids].flatMap((did) =>
         [...collections].map(async (collection) => {
-          const listed = await listRecordsFromRepo(did, collection);
+          const listed = await sessionListing(session, did, collection);
           if (listed === null) return;
 
           hydrated.push({ did, collection });
@@ -350,6 +502,7 @@ export async function loadBoardFromConstellation(
       records,
       hydrated,
       pruneCandidates: local.rows,
+      startedAt: session.startedAt,
     });
 
     return true;
@@ -368,7 +521,6 @@ export async function discoverMyBoards(
   userDid: string,
 ): Promise<number> {
   const knownBoardUris = new Set<string>();
-  let newCount = 0;
 
   // Collect boards already in Dexie (including archived) so we don't re-fetch them
   const existingBoards = await db.boards.toArray();
@@ -426,12 +578,6 @@ export async function discoverMyBoards(
     toLoad.push(b);
   }
 
-  await Promise.allSettled(
-    toLoad.map(async (b) => {
-      const ok = await loadBoardFromConstellation(b.ownerDid, b.rkey, b.uri);
-      if (ok) newCount++;
-    }),
-  );
-
-  return newCount;
+  const loaded = await loadBoardsFromConstellation(toLoad);
+  return loaded.filter(Boolean).length;
 }

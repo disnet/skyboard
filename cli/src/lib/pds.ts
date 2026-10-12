@@ -48,8 +48,7 @@ async function resolvePds(did: string): Promise<PdsResolution> {
   let url: string;
   if (did.startsWith("did:plc:")) url = `https://plc.directory/${did}`;
   else if (did.startsWith("did:web:")) {
-    const host = did.slice("did:web:".length).replaceAll(":", "/");
-    url = `https://${host}/.well-known/did.json`;
+    url = `https://${didWebPath(did)}/.well-known/did.json`;
   } else {
     return { status: "failed", reason: `unsupported DID method in ${did}` };
   }
@@ -96,6 +95,18 @@ async function resolvePds(did: string): Promise<PdsResolution> {
   }
   pdsCache.set(did, service.serviceEndpoint);
   return { status: "ok", pds: service.serviceEndpoint };
+}
+
+/**
+ * `did:web:example.com%3A8080:user` → `example.com:8080/user`. Segments are
+ * colon-separated and percent-encoded, so a port arrives as `%3A`.
+ */
+function didWebPath(did: string): string {
+  return did
+    .slice("did:web:".length)
+    .split(":")
+    .map((segment) => decodeURIComponent(segment))
+    .join("/");
 }
 
 function errorText(error: unknown): string {
@@ -385,6 +396,13 @@ export interface BoardData {
   trusts: Trust[];
   comments: Comment[];
   allParticipants: string[];
+  /**
+   * Participants whose repos could not be read. Only untrusted participants
+   * are ever skipped — their records can only be proposals, and anyone can
+   * become a participant by pointing a record at the board, so one broken
+   * identity must not make the board unreadable for everyone.
+   */
+  unreadableParticipants: string[];
 }
 
 /**
@@ -405,14 +423,51 @@ export async function fetchBoardData(
   const dids = await linkingDids(boardUri);
   dids.add(boardDid);
   if (currentUserDid) dids.add(currentUserDid);
-  const fetched = await Promise.all(
-    [...dids].flatMap((did) =>
-      CHILD_COLLECTIONS.map((collection) => listRecords(did, collection)),
+  const participants = [...dids];
+  const listed = await Promise.allSettled(
+    participants.map(async (did) =>
+      (
+        await Promise.all(
+          CHILD_COLLECTIONS.map((collection) => listRecords(did, collection)),
+        )
+      ).flat(),
     ),
   );
-  const records = fetched
-    .flat()
-    .filter((record) => record.value.boardUri === boardUri);
+
+  // The owner's trust records decide whose reads must be complete, so the
+  // owner's own listing can never be skipped.
+  const ownerListing = listed[participants.indexOf(boardDid)];
+  if (ownerListing.status === "rejected") throw ownerListing.reason;
+  const required = new Set<string>([boardDid]);
+  if (currentUserDid) required.add(currentUserDid);
+  for (const record of ownerListing.value) {
+    if (
+      record.value.$type === "dev.skyboard.trust" &&
+      record.value.boardUri === boardUri &&
+      typeof record.value.trustedDid === "string"
+    ) {
+      required.add(record.value.trustedDid);
+    }
+  }
+
+  const unreadableParticipants: string[] = [];
+  const records: RepoRecord[] = [];
+  listed.forEach((result, i) => {
+    const did = participants[i];
+    if (result.status === "fulfilled") {
+      for (const record of result.value) {
+        if (record.value.boardUri === boardUri) records.push(record);
+      }
+      return;
+    }
+    if (required.has(did) || !(result.reason instanceof BoardReadError)) {
+      throw result.reason;
+    }
+    unreadableParticipants.push(did);
+    console.warn(
+      `Skipping untrusted participant ${did}: ${errorText(result.reason)}`,
+    );
+  });
 
   const tasks: Task[] = records
     .filter((r) => r.value.$type === "dev.skyboard.task")
@@ -512,6 +567,7 @@ export async function fetchBoardData(
     trusts,
     comments,
     allParticipants: [...allParticipants],
+    unreadableParticipants,
   };
 }
 

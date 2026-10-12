@@ -6,6 +6,7 @@
   import { generateTID, BOARD_COLLECTION, buildAtUri } from "$lib/tid.js";
   import type { Board, Column } from "$lib/types.js";
   import { loadBoardFromConstellation } from "$lib/constellation.js";
+  import { watchBoard } from "$lib/jetstream.js";
   import { grantTrust } from "$lib/trust.js";
   import { getDiscoveryState } from "$lib/discovery.svelte.js";
   import {
@@ -118,6 +119,7 @@
 
       // Fetch the board from Constellation + the participants' PDSes
       const boardAtUri = buildAtUri(ownerDid, BOARD_COLLECTION, rkey);
+      watchBoard(boardAtUri);
       const ok = await loadBoardFromConstellation(ownerDid, rkey, boardAtUri);
       if (!ok) {
         joinError = "Could not fetch board. Check the URI and try again.";
