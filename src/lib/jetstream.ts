@@ -32,7 +32,13 @@ const REPLAY_OVERLAP_US = 5_000_000;
 /** Beyond this gap, replay is not trustworthy — reload the boards instead. */
 const MAX_REPLAY_AGE_MS = 60 * 60 * 1000;
 /** A tab hidden longer than this may have had its socket quietly killed. */
-const RESYNC_AFTER_HIDDEN_MS = 60_000;
+const RECONNECT_AFTER_HIDDEN_MS = 60_000;
+/**
+ * The first connection replays from this far before it was requested, so a
+ * board load started while the socket is still opening can't miss an event —
+ * and the margin absorbs the client clock running ahead of Jetstream's.
+ */
+const FIRST_CONNECT_REWIND_MS = 60_000;
 
 interface CommitEvent {
   did: string;
@@ -54,20 +60,32 @@ export interface JetstreamHandlers {
 }
 
 /**
- * Boards a page has asked to watch. They are kept across subscriptions so a
- * board opened before the socket exists (or across a re-login) still gets
- * events once one does.
+ * Boards being loaded that may not have a local row yet, with how many loads
+ * hold each. Once a board is in Dexie the board list keeps it watched; once
+ * it leaves Dexie (left, deleted) and no load holds it, its events stop.
  */
-const watchedBoards = new Set<string>();
+const loadingBoards = new Map<string, number>();
 let activeSubscription: JetstreamSubscription | null = null;
 
 /**
- * Receive live events for a board. Call before loading it, so nothing that
- * happens during the load is missed.
+ * Receive live events for a board while it loads. Call before loading it, so
+ * nothing that happens during the load is missed, and call the returned
+ * release function once the load has finished.
  */
-export function watchBoard(boardUri: string): void {
-  watchedBoards.add(boardUri);
-  activeSubscription?.subscribe(boardUri);
+export function watchBoard(boardUri: string): () => void {
+  loadingBoards.set(boardUri, (loadingBoards.get(boardUri) ?? 0) + 1);
+  activeSubscription?.refreshBoards();
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    const holds = (loadingBoards.get(boardUri) ?? 1) - 1;
+    if (holds > 0) loadingBoards.set(boardUri, holds);
+    else loadingBoards.delete(boardUri);
+    // No refresh here: the board list may not have caught up with a row the
+    // load just wrote, and dropping the board until it does would lose
+    // events. The next board-list update settles it either way.
+  };
 }
 
 export class JetstreamSubscription {
@@ -77,54 +95,41 @@ export class JetstreamSubscription {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private onlineListener: (() => void) | null = null;
   private visibilityListener: (() => void) | null = null;
+  /** Boards with a local row, as last reported by `setBoards`. */
+  private listedBoards = new Set<string>();
   private boards = new Map<string, BoardRef>();
   private lastCursorUs: number | null = null;
-  private hasConnected = false;
   private hiddenSince: number | null = null;
-  private resyncing = false;
+  private resyncing: Promise<void> | null = null;
+  private resyncAgain = false;
   /** Events are applied strictly in arrival order. */
   private queue: Promise<void> = Promise.resolve();
-  /** Set when a caller stopped waiting for the first open (see waitForOpen). */
-  private resyncOnFirstOpen = false;
-  private openWaiters: Array<() => void> = [];
 
   constructor(private handlers: JetstreamHandlers) {}
 
-  /**
-   * Resolve once the socket is open, so a load started afterwards can't fall
-   * in the gap before events start flowing. If it takes longer than
-   * `timeoutMs` this resolves anyway, and the eventual open reloads every
-   * board to cover the gap.
-   */
-  waitForOpen(timeoutMs: number): Promise<void> {
-    if (this.ws?.readyState === WebSocket.OPEN) return Promise.resolve();
-    return new Promise((resolve) => {
-      const timer = setTimeout(() => {
-        this.resyncOnFirstOpen = true;
-        resolve();
-      }, timeoutMs);
-      this.openWaiters.push(() => {
-        clearTimeout(timer);
-        resolve();
-      });
-    });
+  /** Set the boards held locally. Replaces the previous set. */
+  setBoards(boardUris: Iterable<string>): void {
+    this.listedBoards = new Set(boardUris);
+    this.refreshBoards();
   }
 
-  /** Start receiving events for a board. Does not load it. */
-  subscribe(boardUri: string): void {
-    const ref = parseBoardUri(boardUri);
-    if (ref) this.boards.set(boardUri, ref);
-  }
-
-  unsubscribe(boardUri: string): void {
-    this.boards.delete(boardUri);
+  /** Watch exactly the local boards plus any still loading. */
+  refreshBoards(): void {
+    const boards = new Map<string, BoardRef>();
+    for (const uri of [...this.listedBoards, ...loadingBoards.keys()]) {
+      const ref = this.boards.get(uri) ?? parseBoardUri(uri);
+      if (ref) boards.set(uri, ref);
+    }
+    this.boards = boards;
   }
 
   connect(): void {
     this.shouldReconnect = true;
     activeSubscription = this;
-    for (const boardUri of watchedBoards) this.subscribe(boardUri);
+    this.refreshBoards();
     if (this.ws) return;
+    // Replay from before this subscription began (see FIRST_CONNECT_REWIND_MS)
+    this.lastCursorUs ??= (Date.now() - FIRST_CONNECT_REWIND_MS) * 1000;
 
     if (typeof navigator !== "undefined" && !navigator.onLine) {
       this.waitForOnline();
@@ -138,27 +143,19 @@ export class JetstreamSubscription {
     const replayFrom = this.replayCursor();
     if (replayFrom !== null) params.append("cursor", String(replayFrom));
 
-    this.ws = new WebSocket(`${JETSTREAM_URL}?${params.toString()}`);
+    const ws = new WebSocket(`${JETSTREAM_URL}?${params.toString()}`);
+    this.ws = ws;
 
-    this.ws.onopen = () => {
+    ws.onopen = () => {
       this.reconnectDelay = INITIAL_RECONNECT_DELAY_MS;
       // A connection that couldn't replay from a cursor has an unknown gap in
-      // it, so fall back to reloading every subscribed board. The very first
-      // open is covered by the caller's own load, unless it gave up waiting.
-      if (
-        replayFrom === null &&
-        (this.hasConnected || this.resyncOnFirstOpen)
-      ) {
-        void this.resyncAll();
-      }
-      this.hasConnected = true;
-      this.resyncOnFirstOpen = false;
-      const waiters = this.openWaiters;
-      this.openWaiters = [];
-      for (const wake of waiters) wake();
+      // it, so fall back to reloading every subscribed board
+      if (replayFrom === null) void this.resyncAll();
     };
 
-    this.ws.onmessage = (event: MessageEvent) => {
+    ws.onmessage = (event: MessageEvent) => {
+      // A replaced socket's stragglers would land after its successor's replay
+      if (this.ws !== ws) return;
       // Handling is async (Dexie), so without the queue a delete could look
       // up its row before the preceding create had written it
       this.queue = this.queue
@@ -166,12 +163,14 @@ export class JetstreamSubscription {
         .catch((err) => console.error("Jetstream event failed:", err));
     };
 
-    this.ws.onclose = () => {
+    ws.onclose = () => {
+      // A socket replaced by `reconnectNow` must not touch its successor
+      if (this.ws !== ws) return;
       this.ws = null;
       this.scheduleReconnect();
     };
 
-    this.ws.onerror = () => {
+    ws.onerror = () => {
       // `close` always follows, which is where reconnection is handled
     };
 
@@ -184,9 +183,6 @@ export class JetstreamSubscription {
   disconnect(): void {
     this.shouldReconnect = false;
     if (activeSubscription === this) activeSubscription = null;
-    const waiters = this.openWaiters;
-    this.openWaiters = [];
-    for (const wake of waiters) wake();
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
@@ -246,30 +242,56 @@ export class JetstreamSubscription {
     const hiddenMs = this.hiddenSince ? Date.now() - this.hiddenSince : 0;
     this.hiddenSince = null;
 
-    if (this.ws?.readyState !== WebSocket.OPEN) {
-      // Reconnect right away rather than waiting out the backoff
-      if (this.reconnectTimer) {
-        clearTimeout(this.reconnectTimer);
-        this.reconnectTimer = null;
-      }
-      this.reconnectDelay = INITIAL_RECONNECT_DELAY_MS;
-      if (this.shouldReconnect && !this.ws) this.connect();
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      // A socket that sat in a background tab may have been dropped without
+      // a close event. Reopening from the last cursor replays anything it
+      // missed, which is far cheaper than reloading every board.
+      if (hiddenMs > RECONNECT_AFTER_HIDDEN_MS) this.reconnectNow();
       return;
     }
 
-    if (hiddenMs > RESYNC_AFTER_HIDDEN_MS) void this.resyncAll();
+    // Reconnect right away rather than waiting out the backoff
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    this.reconnectDelay = INITIAL_RECONNECT_DELAY_MS;
+    if (this.shouldReconnect && !this.ws) this.connect();
   }
 
-  private async resyncAll(): Promise<void> {
-    if (this.resyncing) return;
-    this.resyncing = true;
-    try {
-      await this.handlers.onResync([...this.boards.values()]);
-    } catch (err) {
-      console.error("Jetstream resync failed:", err);
-    } finally {
-      this.resyncing = false;
+  private reconnectNow(): void {
+    if (!this.shouldReconnect) return;
+    const ws = this.ws;
+    this.ws = null;
+    ws?.close();
+    this.connect();
+  }
+
+  /**
+   * Reload every watched board. A request that arrives while a reload is
+   * running gets one more reload once it finishes, since the running one may
+   * have read some PDSes before the new gap began.
+   */
+  private resyncAll(): Promise<void> {
+    if (this.resyncing) {
+      this.resyncAgain = true;
+      return this.resyncing;
     }
+    this.resyncing = (async () => {
+      try {
+        do {
+          this.resyncAgain = false;
+          try {
+            await this.handlers.onResync([...this.boards.values()]);
+          } catch (err) {
+            console.error("Jetstream resync failed:", err);
+          }
+        } while (this.resyncAgain && this.shouldReconnect);
+      } finally {
+        this.resyncing = null;
+      }
+    })();
+    return this.resyncing;
   }
 
   private async handleMessage(event: MessageEvent): Promise<void> {

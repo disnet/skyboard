@@ -119,8 +119,13 @@
 
       // Fetch the board from Constellation + the participants' PDSes
       const boardAtUri = buildAtUri(ownerDid, BOARD_COLLECTION, rkey);
-      watchBoard(boardAtUri);
-      const ok = await loadBoardFromConstellation(ownerDid, rkey, boardAtUri);
+      const release = watchBoard(boardAtUri);
+      let ok: boolean;
+      try {
+        ok = await loadBoardFromConstellation(ownerDid, rkey, boardAtUri);
+      } finally {
+        release();
+      }
       if (!ok) {
         joinError = "Could not fetch board. Check the URI and try again.";
         return;

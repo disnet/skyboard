@@ -32,17 +32,19 @@ All data is stored as AT Protocol records in each user's repo. Collection consta
 
 **Reading:** `loadBoardFromConstellation(ownerDid, rkey, boardUri)` in `src/lib/constellation.ts`:
 
-1. Read the board record from the owner's PDS (`com.atproto.repo.getRecord`) — the board is the link _target_, so Constellation can't return it. Failure here is the only thing that makes the load return `false`.
+1. Read the board record from the owner's PDS (`com.atproto.repo.getRecord`) — the board is the link _target_, so Constellation can't return it. A missing, unreadable, or invalid board record is the only thing that makes the load return `false`.
 2. `GET /links/all?target=<boardUri>` on Constellation → which of the six child collections are non-empty.
-3. `GET /links/distinct-dids` per collection → the participant DIDs.
-4. `com.atproto.repo.listRecords` on each (participant × collection), keeping records whose `value.boardUri` matches. Run in parallel; a dead PDS is skipped, not fatal.
+3. `GET /links` per non-empty collection → every linked record as (did, rkey).
+4. `com.atproto.repo.getRecord` for each linked record, kept if its `value.boardUri` still matches. Records are never listed out of whole repos, so a load costs what the board holds, not what its participants have written elsewhere. Ops, trusts, approvals, and reactions are never rewritten in place, so ones already held as synced are not refetched.
 5. Upsert everything into Dexie in one transaction via `applyBoardSnapshot` (`src/lib/board-store.ts`).
 
-Constellation only knows about records that still exist, so the fetch set is unioned with `localBoardFootprint()` — the collections and DIDs we already hold — otherwise emptied collections could never be pruned.
+Constellation only knows about records that still exist, so every synced local row it no longer links is also read with `getRecord`: a `RecordNotFound` (or a record now on another board) prunes it, a failed read keeps it, and a record the index simply hasn't caught up with is kept and refreshed.
+
+If Constellation can't be reached, or reports no links at all (which is also what an unindexed new board looks like), the load falls back to `listRecords` over the owner plus the DIDs already held locally.
 
 **Writing:** unchanged. All mutations write to Dexie first with `syncStatus: 'pending'`. Background sync (`src/lib/sync.ts`) pushes pending records to the user's PDS via `putRecord`/`deleteRecord`.
 
-**Real-time:** one `JetstreamSubscription` (`src/lib/jetstream.ts`) for the whole app, subscribed to all `dev.skyboard.*` collections. Commit events carry the full record, so changes are applied straight to Dexie — no refetch. Reconnects replay from the last `time_us` cursor; if the gap exceeds an hour, subscribed boards are reloaded instead.
+**Real-time:** one `JetstreamSubscription` (`src/lib/jetstream.ts`) for the whole app, subscribed to all `dev.skyboard.*` collections. Commit events carry the full record, so changes are applied straight to Dexie — no refetch. The watched set is the boards in Dexie plus any being loaded (`watchBoard` returns a release function), so leaving or deleting a board stops its events. The first connection replays from a minute before it was requested, so loads needn't wait for the socket; reconnects (including after a tab was hidden for over a minute) replay from the last `time_us` cursor, and only a gap over an hour reloads the subscribed boards.
 
 ### Local-wins and pruning
 
@@ -50,7 +52,7 @@ Both read paths funnel through `src/lib/board-store.ts`, which enforces:
 
 - a local record with `syncStatus: 'pending'` always beats remote data (this also swallows the echo of the user's own in-flight writes)
 - unchanged records are not rewritten, so `liveQuery` doesn't churn
-- records that vanished from a repo we successfully listed are deleted locally — but only for those (did, collection) pairs, so an unreachable PDS never causes data loss
+- only records the network confirmed are gone (`RecordNotFound`, moved to another board, or absent from a successful fallback listing) are deleted locally, so an unreachable PDS never causes data loss
 
 Records from other people's repos are shape-checked by `src/lib/record-schemas.ts`, which mirrors the appview's zod schemas without adding zod to the bundle.
 

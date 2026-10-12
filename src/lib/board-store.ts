@@ -58,10 +58,11 @@ export interface BoardSnapshot {
   /** Child records keyed by collection, already filtered to this board. */
   records: Map<string, RawRecord[]>;
   /**
-   * (did, collection) pairs whose repo listing succeeded. Only these are
-   * pruned — a participant whose PDS was unreachable keeps their local data.
+   * Per collection, `did\0rkey` of local rows the network confirmed are gone
+   * (or no longer on this board). Only these are pruned — a record whose PDS
+   * was unreachable keeps its local data.
    */
-  hydrated: Array<{ did: string; collection: string }>;
+  missing: Map<string, Set<string>>;
   /** Rows that existed before this snapshot's network reads began. */
   pruneCandidates: Map<string, Set<string>>;
   /** `beginSnapshot()` token taken before any listing was fetched. */
@@ -482,8 +483,7 @@ const CHILD_UPSERTS: Record<string, ChildUpsert> = {
 /**
  * Apply a full board snapshot in one transaction.
  *
- * Records that vanished from a participant's repo are pruned locally, but only
- * for the (did, collection) pairs we successfully listed — the appview never
+ * Records confirmed gone upstream are pruned locally — the appview never
  * pruned, so deletes by other users used to linger forever.
  */
 export async function applyBoardSnapshot(
@@ -508,42 +508,18 @@ export async function applyBoardSnapshot(
       }
     }
 
-    // Prune records that are gone upstream. `seen` and `hydratedDids` are both
-    // collection -> did -> ... so each table is scanned at most once.
-    const seen = new Map<string, Map<string, Set<string>>>();
-    for (const [collection, records] of snapshot.records) {
-      const byDid = new Map<string, Set<string>>();
-      seen.set(collection, byDid);
-      for (const record of records) {
-        let rkeys = byDid.get(record.did);
-        if (!rkeys) byDid.set(record.did, (rkeys = new Set()));
-        rkeys.add(record.rkey);
-      }
-    }
-
-    const hydratedDids = new Map<string, Set<string>>();
-    for (const { did, collection } of snapshot.hydrated) {
-      let dids = hydratedDids.get(collection);
-      if (!dids) hydratedDids.set(collection, (dids = new Set()));
-      dids.add(did);
-    }
-
-    for (const [collection, dids] of hydratedDids) {
+    // Prune records that are gone upstream
+    for (const [collection, ids] of snapshot.missing) {
       const table = childTable(collection);
       if (!table) continue;
-      const keep = seen.get(collection);
-      const rows = await table.where("boardUri").equals(boardUri).toArray();
-      for (const row of rows) {
-        if (!dids.has(row.did)) continue;
+      const candidates = snapshot.pruneCandidates.get(collection);
+      for (const id of ids) {
+        if (!candidates?.has(id)) continue;
+        const [did, rkey] = id.split("\0");
+        if (touchedSince(start, collection, did, rkey)) continue;
+        const row = await table.where("[did+rkey]").equals([did, rkey]).first();
+        if (!row || row.boardUri !== boardUri) continue;
         if (row.syncStatus !== "synced") continue;
-        if (keep?.get(row.did)?.has(row.rkey)) continue;
-        if (touchedSince(start, collection, row.did, row.rkey)) continue;
-        if (
-          !snapshot.pruneCandidates
-            .get(collection)
-            ?.has(`${row.did}\0${row.rkey}`)
-        )
-          continue;
         if (row.id !== undefined) await table.delete(row.id);
       }
     }

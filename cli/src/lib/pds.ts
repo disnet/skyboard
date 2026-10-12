@@ -2,7 +2,7 @@
 
 import type { Agent } from "@atproto/api";
 import { BOARD_COLLECTION, buildAtUri } from "./tid.js";
-import type { Board, Task, Op, OpFields, Trust, Comment } from "./types.js";
+import type { Board, Task, Op, Trust, Comment } from "./types.js";
 import {
   safeParse,
   BoardRecordSchema,
@@ -21,8 +21,12 @@ const CHILD_COLLECTIONS = [
   "dev.skyboard.trust",
   "dev.skyboard.comment",
 ] as const;
+type ChildCollection = (typeof CHILD_COLLECTIONS)[number];
+/** Concurrent `getRecord` calls while hydrating a board. */
+const MAX_CONCURRENT_READS = 16;
 
-const pdsCache = new Map<string, string>();
+/** Resolutions by DID, shared by parallel reads. Failures are not kept. */
+const pdsCache = new Map<string, Promise<PdsResolution>>();
 
 export class BoardReadError extends Error {
   constructor(message: string, options?: ErrorOptions) {
@@ -41,10 +45,19 @@ type PdsResolution =
   | { status: "missing" }
   | { status: "failed"; reason: string };
 
-async function resolvePds(did: string): Promise<PdsResolution> {
-  const cached = pdsCache.get(did);
-  if (cached) return { status: "ok", pds: cached };
+function resolvePds(did: string): Promise<PdsResolution> {
+  let resolution = pdsCache.get(did);
+  if (!resolution) {
+    resolution = lookUpPds(did);
+    pdsCache.set(did, resolution);
+    void resolution.then((r) => {
+      if (r.status === "failed") pdsCache.delete(did);
+    });
+  }
+  return resolution;
+}
 
+async function lookUpPds(did: string): Promise<PdsResolution> {
   let url: string;
   if (did.startsWith("did:plc:")) url = `https://plc.directory/${did}`;
   else if (did.startsWith("did:web:")) {
@@ -93,7 +106,6 @@ async function resolvePds(did: string): Promise<PdsResolution> {
       reason: `DID document for ${did} lists no atproto PDS`,
     };
   }
-  pdsCache.set(did, service.serviceEndpoint);
   return { status: "ok", pds: service.serviceEndpoint };
 }
 
@@ -203,109 +215,90 @@ async function getRecord(
   return data.value as Record<string, unknown>;
 }
 
-interface RepoRecord {
+interface LinkedRecord {
   did: string;
+  collection: ChildCollection;
   rkey: string;
+}
+
+interface RepoRecord extends LinkedRecord {
   value: Record<string, unknown>;
 }
 
-async function listRecords(
-  did: string,
-  collection: string,
-): Promise<RepoRecord[]> {
-  const resolved = await resolvePds(did);
-  if (resolved.status !== "ok") {
-    // Even a participant whose identity has vanished is a hole in the board:
-    // their records may still be referenced, so report rather than skip.
-    throw new BoardReadError(
-      resolved.status === "failed"
-        ? `Could not resolve PDS for ${did}: ${resolved.reason}`
-        : `Could not resolve PDS for ${did}: identity not found`,
-    );
+/** Run `fn` over `items` with at most `limit` calls in flight. */
+async function mapLimit<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+): Promise<PromiseSettledResult<R>[]> {
+  const results: PromiseSettledResult<R>[] = new Array(items.length);
+  let next = 0;
+  async function worker(): Promise<void> {
+    while (next < items.length) {
+      const i = next++;
+      try {
+        results[i] = { status: "fulfilled", value: await fn(items[i]) };
+      } catch (reason) {
+        results[i] = { status: "rejected", reason };
+      }
+    }
   }
-  const pds = resolved.pds;
-  const records: RepoRecord[] = [];
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, worker),
+  );
+  return results;
+}
+
+/**
+ * Every record in `collection` that Constellation links to `boardUri`. Raises
+ * `BoardReadError` rather than returning a partial list.
+ */
+async function linkedRecords(
+  boardUri: string,
+  collection: ChildCollection,
+): Promise<LinkedRecord[]> {
+  const linked: LinkedRecord[] = [];
   let cursor: string | undefined;
-  try {
-    do {
-      const params = new URLSearchParams({
-        repo: did,
-        collection,
-        limit: "100",
-      });
-      if (cursor) params.set("cursor", cursor);
+  do {
+    const params = new URLSearchParams({
+      target: boardUri,
+      collection,
+      path: ".boardUri",
+      limit: "100",
+    });
+    if (cursor) params.set("cursor", cursor);
+    try {
       const res = await fetch(
-        `${pds}/xrpc/com.atproto.repo.listRecords?${params.toString()}`,
+        `${CONSTELLATION_URL}/links?${params.toString()}`,
         { signal: AbortSignal.timeout(10_000) },
       );
       if (!res.ok) {
         throw new BoardReadError(
-          `PDS returned HTTP ${res.status} while reading ${collection} from ${did}`,
+          `Constellation returned HTTP ${res.status} while discovering ${collection}`,
         );
       }
       const data = (await res.json()) as {
-        records?: Array<{ uri: string; value: Record<string, unknown> }>;
-        cursor?: string;
+        linking_records?: Array<{
+          did: string;
+          collection: string;
+          rkey: string;
+        }>;
+        cursor?: string | null;
       };
-      for (const record of data.records ?? []) {
-        records.push({
-          did,
-          rkey: record.uri.split("/").pop()!,
-          value: record.value,
-        });
+      for (const link of data.linking_records ?? []) {
+        if (link.collection !== collection) continue;
+        linked.push({ did: link.did, collection, rkey: link.rkey });
       }
-      cursor = data.cursor;
-    } while (cursor);
-  } catch (error) {
-    if (error instanceof BoardReadError) throw error;
-    throw new BoardReadError(
-      `Could not completely read ${collection} from ${did}`,
-      { cause: error },
-    );
-  }
-  return records;
-}
-
-async function linkingDids(boardUri: string): Promise<Set<string>> {
-  const dids = new Set<string>();
-  await Promise.all(
-    CHILD_COLLECTIONS.map(async (collection) => {
-      let cursor: string | undefined;
-      do {
-        const params = new URLSearchParams({
-          target: boardUri,
-          collection,
-          path: ".boardUri",
-          limit: "100",
-        });
-        if (cursor) params.set("cursor", cursor);
-        try {
-          const res = await fetch(
-            `${CONSTELLATION_URL}/links/distinct-dids?${params.toString()}`,
-            { signal: AbortSignal.timeout(10_000) },
-          );
-          if (!res.ok) {
-            throw new BoardReadError(
-              `Constellation returned HTTP ${res.status} while discovering ${collection}`,
-            );
-          }
-          const data = (await res.json()) as {
-            linking_dids?: string[];
-            cursor?: string | null;
-          };
-          for (const did of data.linking_dids ?? []) dids.add(did);
-          cursor = data.cursor ?? undefined;
-        } catch (error) {
-          if (error instanceof BoardReadError) throw error;
-          throw new BoardReadError(
-            `Could not completely discover ${collection} participants`,
-            { cause: error },
-          );
-        }
-      } while (cursor);
-    }),
-  );
-  return dids;
+      cursor = data.cursor ?? undefined;
+    } catch (error) {
+      if (error instanceof BoardReadError) throw error;
+      throw new BoardReadError(
+        `Could not completely discover ${collection} records`,
+        { cause: error },
+      );
+    }
+  } while (cursor);
+  return linked;
 }
 
 /**
@@ -406,10 +399,10 @@ export interface BoardData {
 }
 
 /**
- * Fetch all data for a board from Constellation and participant PDSes.
- * Returns null only when the board record itself does not exist; any read that
- * could not be completed raises `BoardReadError` rather than reporting a
- * missing or partial board.
+ * Fetch all data for a board: Constellation says which records are on it, and
+ * each one is read from its author's PDS. Returns null only when the board
+ * record itself does not exist; any read that could not be completed raises
+ * `BoardReadError` rather than reporting a missing or partial board.
  */
 export async function fetchBoardData(
   boardDid: string,
@@ -420,30 +413,43 @@ export async function fetchBoardData(
   const board = await fetchBoardFromPds(boardDid, boardRkey);
   if (!board) return null;
 
-  const dids = await linkingDids(boardUri);
-  dids.add(boardDid);
-  if (currentUserDid) dids.add(currentUserDid);
-  const participants = [...dids];
-  const listed = await Promise.allSettled(
-    participants.map(async (did) =>
-      (
-        await Promise.all(
-          CHILD_COLLECTIONS.map((collection) => listRecords(did, collection)),
-        )
-      ).flat(),
-    ),
+  const linked = (
+    await Promise.all(
+      CHILD_COLLECTIONS.map((collection) =>
+        linkedRecords(boardUri, collection),
+      ),
+    )
+  ).flat();
+
+  const fetched = await mapLimit(linked, MAX_CONCURRENT_READS, (link) =>
+    getRecord(link.did, link.collection, link.rkey),
   );
 
-  // The owner's trust records decide whose reads must be complete, so the
-  // owner's own listing can never be skipped.
-  const ownerListing = listed[participants.indexOf(boardDid)];
-  if (ownerListing.status === "rejected") throw ownerListing.reason;
+  // Group failures by author: whether a failure is fatal depends on whether
+  // the owner trusts them, which is only known once the owner's records are in.
+  const records: RepoRecord[] = [];
+  const failures = new Map<string, unknown>();
+  fetched.forEach((result, i) => {
+    const link = linked[i];
+    if (result.status === "rejected") {
+      if (!failures.has(link.did)) failures.set(link.did, result.reason);
+      return;
+    }
+    // Deleted since it was indexed, or since moved to another board
+    if (!result.value || result.value.boardUri !== boardUri) return;
+    records.push({ ...link, value: result.value });
+  });
+
+  // The owner's trust records decide whose reads must be complete, so none of
+  // the owner's own reads can be skipped.
+  const ownerFailure = failures.get(boardDid);
+  if (ownerFailure) throw ownerFailure;
   const required = new Set<string>([boardDid]);
   if (currentUserDid) required.add(currentUserDid);
-  for (const record of ownerListing.value) {
+  for (const record of records) {
     if (
-      record.value.$type === "dev.skyboard.trust" &&
-      record.value.boardUri === boardUri &&
+      record.did === boardDid &&
+      record.collection === "dev.skyboard.trust" &&
       typeof record.value.trustedDid === "string"
     ) {
       required.add(record.value.trustedDid);
@@ -451,27 +457,16 @@ export async function fetchBoardData(
   }
 
   const unreadableParticipants: string[] = [];
-  const records: RepoRecord[] = [];
-  listed.forEach((result, i) => {
-    const did = participants[i];
-    if (result.status === "fulfilled") {
-      for (const record of result.value) {
-        if (record.value.boardUri === boardUri) records.push(record);
-      }
-      return;
-    }
-    if (required.has(did) || !(result.reason instanceof BoardReadError)) {
-      throw result.reason;
-    }
+  for (const [did, reason] of failures) {
+    if (required.has(did) || !(reason instanceof BoardReadError)) throw reason;
     unreadableParticipants.push(did);
-    console.warn(
-      `Skipping untrusted participant ${did}: ${errorText(result.reason)}`,
-    );
-  });
+    console.warn(`Skipping untrusted participant ${did}: ${errorText(reason)}`);
+  }
+  const ofCollection = (collection: ChildCollection) =>
+    records.filter((r) => r.collection === collection && !failures.has(r.did));
 
-  const tasks: Task[] = records
-    .filter((r) => r.value.$type === "dev.skyboard.task")
-    .flatMap(({ did, rkey, value }) => {
+  const tasks: Task[] = ofCollection("dev.skyboard.task").flatMap(
+    ({ did, rkey, value }) => {
       const v = safeParse(TaskRecordSchema, value, "TaskRecord");
       if (!v) return [];
       return [
@@ -490,11 +485,11 @@ export async function fetchBoardData(
           updatedAt: v.updatedAt,
         },
       ];
-    });
+    },
+  );
 
-  const ops: Op[] = records
-    .filter((r) => r.value.$type === "dev.skyboard.op")
-    .flatMap(({ did, rkey, value }) => {
+  const ops: Op[] = ofCollection("dev.skyboard.op").flatMap(
+    ({ did, rkey, value }) => {
       const v = safeParse(OpRecordSchema, value, "OpRecord");
       if (!v) return [];
       return [
@@ -507,11 +502,11 @@ export async function fetchBoardData(
           createdAt: v.createdAt,
         },
       ];
-    });
+    },
+  );
 
-  const trusts: Trust[] = records
-    .filter((r) => r.value.$type === "dev.skyboard.trust")
-    .flatMap(({ did, rkey, value }) => {
+  const trusts: Trust[] = ofCollection("dev.skyboard.trust").flatMap(
+    ({ did, rkey, value }) => {
       const v = safeParse(TrustRecordSchema, value, "TrustRecord");
       if (!v) return [];
       return [
@@ -523,11 +518,11 @@ export async function fetchBoardData(
           createdAt: v.createdAt,
         },
       ];
-    });
+    },
+  );
 
-  const comments: Comment[] = records
-    .filter((r) => r.value.$type === "dev.skyboard.comment")
-    .flatMap(({ did, rkey, value }) => {
+  const comments: Comment[] = ofCollection("dev.skyboard.comment").flatMap(
+    ({ did, rkey, value }) => {
       const v = safeParse(CommentRecordSchema, value, "CommentRecord");
       if (!v) return [];
       return [
@@ -540,7 +535,8 @@ export async function fetchBoardData(
           createdAt: v.createdAt,
         },
       ];
-    });
+    },
+  );
 
   const trustedDids = new Set(
     trusts.filter((t) => t.did === boardDid).map((t) => t.trustedDid),

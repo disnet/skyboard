@@ -69,9 +69,9 @@
     error = null;
 
     (async () => {
+      // Subscribe first, so edits made during the load aren't missed
+      const release = watchBoard(boardUri);
       try {
-        // Subscribe first, so edits made during the load aren't missed
-        watchBoard(boardUri);
         const ok = await loadBoardFromConstellation(ownerDid, rkey, boardUri);
         if (!ok) {
           error = "Board not found";
@@ -81,6 +81,8 @@
         console.error("Failed to load board:", err);
         error = "Failed to load board";
         loading = false;
+      } finally {
+        release();
       }
     })();
   });

@@ -11,8 +11,8 @@ atproto infrastructure, and writes go directly to each user's PDS.
 
 Users sign in with their Bluesky account and create boards. Each board gets an
 AT URI (e.g. `at://did:plc:abc.../dev.skyboard.board/3k...`) that can be shared
-with collaborators. To open a board the browser asks [Constellation] who
-participates in it, reads those participants' records from their PDSes, and
+with collaborators. To open a board the browser asks [Constellation] which
+records point at it, reads each of those records from its author's PDS, and
 subscribes to [Jetstream] for live updates.
 
 All data is stored locally in IndexedDB (via Dexie). Writes (creating tasks,
@@ -27,14 +27,14 @@ applies it directly.
 
 Three public services divide the work. **Constellation** is a global atproto
 backlink index: every `dev.skyboard.*` record carries a `boardUri`, so asking
-it for links to one board URI reveals every participant and which record types
-they wrote. **Each PDS** remains the source of truth for record content.
+it for links to one board URI lists every record on the board, by author and
+record key. **Each PDS** remains the source of truth for record content.
 **Jetstream** delivers live commits, which carry the full record body, so a
 change is applied without any refetch.
 
 If Constellation is unreachable, boards already in Dexie keep working and
-writes keep syncing; discovery degrades to the board owner plus participants
-already known locally.
+writes keep syncing; loads degrade to listing the repos of the board owner plus
+participants already known locally.
 
 ```
  ┌─ Browser (per user) ────────────────────────────────────────────┐
@@ -63,16 +63,16 @@ already known locally.
         │                              │  (backlink index)     │
         │                              │                       │
         │                              │  /links/all           │
-        │                              │  /links/distinct-dids │
+        │                              │  /links               │
         │                              └───────────────────────┘
-        │                                  who participates,
-        │                                  which collections
+        │                                  which records are
+        │                                  on the board
         │
         │ background sync              ┌───────────────────────┐
         │ putRecord / deleteRecord     │  Participants' PDSes  │
         │                              │                       │
         ▼                        ◀──── │  getRecord            │
- ┌──────────────────────────────┐ REST │  listRecords          │
+ ┌──────────────────────────────┐ REST │  listRecords (backup) │
  │        User's PDS            │      └───────────────────────┘
  │   (Personal Data Server)     │          record content
  │                              │
@@ -310,10 +310,10 @@ shown greyed out as pending, awaiting board author approval.
 Reading board data (src/lib/constellation.ts)
   → Browser reads the board record from the owner's PDS (getRecord)
   → GET /links/all?target=<boardUri> → which collections are non-empty
-  → GET /links/distinct-dids per collection → who participates
-  → listRecords on each participant's PDS, kept if value.boardUri matches
+  → GET /links per non-empty collection → each record's (did, rkey)
+  → getRecord for each one, kept if value.boardUri still matches
   → Upserted into Dexie in one transaction (local pending records take
-    priority); records gone from a repo we listed are pruned
+    priority); local rows the PDS reports as RecordNotFound are pruned
 
 Real-time (src/lib/jetstream.ts)
   → One WebSocket to Jetstream, wantedCollections=dev.skyboard.*
@@ -329,9 +329,10 @@ Writing (task creation, edits, comments, etc.)
   → PDS commit picked up by Jetstream → every subscribed browser applies it
 ```
 
-Cross-PDS aggregation happens in the browser. A cold board load costs one
-Constellation call plus one PDS listing per (participant × non-empty
-collection), run in parallel; DID→PDS lookups are cached in localStorage for a
+Cross-PDS aggregation happens in the browser. A cold board load costs a few
+Constellation calls plus one `getRecord` per record on the board, run in
+parallel; a reload skips records that can't have changed (ops, trusts,
+approvals, reactions already held); DID→PDS lookups are cached in localStorage for a
 day. Boards already in Dexie render instantly while that refresh runs.
 
 ## Appview (legacy)
@@ -443,8 +444,8 @@ sb whoami --json
 
 ### How it works
 
-The CLI authenticates via OAuth and has no local database. It discovers board
-participants through Constellation, reads records directly from their PDSes,
+The CLI authenticates via OAuth and has no local database. It asks Constellation which
+records are on a board, reads each one directly from its author's PDS,
 runs the same `materializeTasks()` merge logic as the web app, and displays the
 result. Write commands (`new`, `mv`, `edit`, `comment`) create AT Protocol
 records (tasks, ops, comments) in your PDS; other clients receive them through

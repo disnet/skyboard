@@ -45,22 +45,6 @@ const boardRecord = {
   createdAt: "2025-01-01T00:00:00.000Z",
 };
 
-function successfulBoardReadResponse(url: string): Response {
-  if (url.startsWith(`https://plc.directory/${OWNER_DID}`)) {
-    return jsonResponse(makePLCResponse(OWNER_DID, PDS_ENDPOINT));
-  }
-  if (url.includes("com.atproto.repo.getRecord")) {
-    return jsonResponse({ value: boardRecord });
-  }
-  if (url.includes("links/distinct-dids")) {
-    return jsonResponse({ linking_dids: [] });
-  }
-  if (url.includes("com.atproto.repo.listRecords")) {
-    return jsonResponse({ records: [] });
-  }
-  return new Response("", { status: 404 });
-}
-
 function jsonResponse(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
     status,
@@ -261,76 +245,223 @@ describe("fetchBoardFromPds", () => {
   });
 });
 
-describe("fetchBoardData degraded reads", () => {
-  it("returns null when the board record is genuinely missing", async () => {
-    stubFetch((url) => {
-      if (url.includes("com.atproto.repo.getRecord")) {
-        return jsonResponse({ error: "RecordNotFound" }, 400);
+describe("fetchBoardData", () => {
+  const BOARD_URI = `at://${OWNER_DID}/dev.skyboard.board/${BOARD_RKEY}`;
+  const CONSTELLATION = "https://constellation.microcosm.blue";
+
+  type Stored = {
+    did: string;
+    collection: string;
+    rkey: string;
+    value: object;
+  };
+
+  /**
+   * A fake network: Constellation links every stored record whose `boardUri`
+   * is this board (or that is listed in `extraLinks`), and each PDS serves
+   * the stored records. `override` sees every request first.
+   */
+  function stubNetwork(
+    stored: Stored[],
+    override: (url: string) => Response | undefined = () => undefined,
+    extraLinks: Stored[] = [],
+  ) {
+    return stubFetch((url) => {
+      const custom = override(url);
+      if (custom) return custom;
+
+      const plc = url.match(/^https:\/\/plc\.directory\/(.+)$/);
+      if (plc) {
+        return jsonResponse(
+          makePLCResponse(decodeURIComponent(plc[1]), PDS_ENDPOINT),
+        );
       }
-      return successfulBoardReadResponse(url);
+
+      const parsed = new URL(url);
+      if (url.startsWith(`${CONSTELLATION}/links?`)) {
+        const collection = parsed.searchParams.get("collection");
+        const linking_records = [
+          ...stored.filter(
+            (r) => (r.value as { boardUri?: string }).boardUri === BOARD_URI,
+          ),
+          ...extraLinks,
+        ]
+          .filter((r) => r.collection === collection)
+          .map(({ did, collection, rkey }) => ({ did, collection, rkey }));
+        return jsonResponse({ linking_records, cursor: null });
+      }
+
+      if (url.includes("com.atproto.repo.getRecord")) {
+        const repo = parsed.searchParams.get("repo");
+        const collection = parsed.searchParams.get("collection");
+        const rkey = parsed.searchParams.get("rkey");
+        if (collection === "dev.skyboard.board" && repo === OWNER_DID) {
+          return jsonResponse({ value: boardRecord });
+        }
+        const found = stored.find(
+          (r) =>
+            r.did === repo && r.collection === collection && r.rkey === rkey,
+        );
+        return found
+          ? jsonResponse({ value: found.value })
+          : jsonResponse({ error: "RecordNotFound" }, 400);
+      }
+      return new Response("", { status: 404 });
     });
+  }
+
+  function task(
+    did: string,
+    rkey: string,
+    title: string,
+    boardUri = BOARD_URI,
+  ): Stored {
+    return {
+      did,
+      collection: "dev.skyboard.task",
+      rkey,
+      value: {
+        boardUri,
+        title,
+        columnId: "todo",
+        position: "a0",
+        createdAt: "2025-01-01T00:00:00.000Z",
+      },
+    };
+  }
+
+  const ownerTrust: Stored = {
+    did: OWNER_DID,
+    collection: "dev.skyboard.trust",
+    rkey: "trust1",
+    value: {
+      $type: "dev.skyboard.trust",
+      boardUri: BOARD_URI,
+      trustedDid: TRUSTED_DID,
+      createdAt: "2025-01-01T00:00:00.000Z",
+    },
+  };
+
+  it("hydrates each linked record from its author's PDS", async () => {
+    const mockFetch = stubNetwork([
+      task(OWNER_DID, "t1", "Owner task"),
+      task(USER_DID, "t2", "User task"),
+      ownerTrust,
+    ]);
+
+    const data = await fetchBoardData(OWNER_DID, BOARD_RKEY, USER_DID);
+    expect(data?.tasks.map((t) => t.title).sort()).toEqual([
+      "Owner task",
+      "User task",
+    ]);
+    expect(data?.trusts.map((t) => t.trustedDid)).toEqual([TRUSTED_DID]);
+    // Only the board's own records are read — never whole repos
+    expect(
+      mockFetch.mock.calls.some(([u]) => String(u).includes("listRecords")),
+    ).toBe(false);
+  });
+
+  it("classifies records by the collection they were linked from, not $type", async () => {
+    // `task()` records carry no $type at all
+    stubNetwork([task(OWNER_DID, "t1", "Untyped task")]);
+
+    const data = await fetchBoardData(OWNER_DID, BOARD_RKEY, "");
+    expect(data?.tasks.map((t) => t.title)).toEqual(["Untyped task"]);
+  });
+
+  it("drops linked records that were deleted or moved to another board", async () => {
+    stubNetwork(
+      [
+        task(OWNER_DID, "t1", "Still here"),
+        task(
+          OWNER_DID,
+          "t2",
+          "Moved",
+          `at://${OWNER_DID}/dev.skyboard.board/other`,
+        ),
+      ],
+      undefined,
+      [
+        task(OWNER_DID, "t2", "Moved"),
+        task(OWNER_DID, "gone", "Deleted since indexed"),
+      ],
+    );
+
+    const data = await fetchBoardData(OWNER_DID, BOARD_RKEY, "");
+    expect(data?.tasks.map((t) => t.title)).toEqual(["Still here"]);
+  });
+
+  it("returns null when the board record is genuinely missing", async () => {
+    stubNetwork([], (url) =>
+      url.includes("com.atproto.repo.getRecord")
+        ? jsonResponse({ error: "RecordNotFound" }, 400)
+        : undefined,
+    );
 
     await expect(fetchBoardData(OWNER_DID, BOARD_RKEY, "")).resolves.toBeNull();
   });
 
   it("rejects instead of returning null when the owner's PDS is failing", async () => {
-    stubFetch((url) => {
-      if (url.includes("com.atproto.repo.getRecord")) {
-        return new Response("", { status: 503 });
-      }
-      return successfulBoardReadResponse(url);
-    });
+    stubNetwork([], (url) =>
+      url.includes("com.atproto.repo.getRecord")
+        ? new Response("", { status: 503 })
+        : undefined,
+    );
 
     await expect(fetchBoardData(OWNER_DID, BOARD_RKEY, "")).rejects.toThrow(
       /HTTP 503.*dev\.skyboard\.board/,
     );
   });
 
-  it("rejects when Constellation participant discovery fails", async () => {
-    stubFetch((url) => {
-      if (url.includes("links/distinct-dids")) {
-        return new Response("", { status: 503 });
-      }
-      return successfulBoardReadResponse(url);
-    });
+  it("rejects when Constellation discovery fails", async () => {
+    stubNetwork([], (url) =>
+      url.startsWith(`${CONSTELLATION}/links?`)
+        ? new Response("", { status: 503 })
+        : undefined,
+    );
 
     await expect(fetchBoardData(OWNER_DID, BOARD_RKEY, "")).rejects.toThrow(
       /Constellation returned HTTP 503/,
     );
   });
 
-  it("rejects when a trusted participant PDS cannot be resolved", async () => {
-    stubFetch((url) => {
+  it("rejects instead of returning only the first Constellation page", async () => {
+    stubNetwork([], (url) => {
       if (
-        url.includes("links/distinct-dids") &&
-        url.includes("collection=dev.skyboard.task")
+        !url.startsWith(`${CONSTELLATION}/links?`) ||
+        !url.includes("collection=dev.skyboard.task")
       ) {
-        return jsonResponse({ linking_dids: [TRUSTED_DID] });
+        return undefined;
       }
-      if (
-        url.includes("com.atproto.repo.listRecords") &&
-        url.includes("collection=dev.skyboard.trust") &&
-        url.includes(`repo=${encodeURIComponent(OWNER_DID)}`)
-      ) {
-        return jsonResponse({
-          records: [
-            {
-              uri: `at://${OWNER_DID}/dev.skyboard.trust/trust1`,
-              value: {
-                $type: "dev.skyboard.trust",
-                boardUri: `at://${OWNER_DID}/dev.skyboard.board/${BOARD_RKEY}`,
-                trustedDid: TRUSTED_DID,
-                createdAt: "2025-01-01T00:00:00.000Z",
-              },
-            },
-          ],
-        });
-      }
-      if (url.startsWith(`https://plc.directory/${TRUSTED_DID}`)) {
-        return new Response("", { status: 503 });
-      }
-      return successfulBoardReadResponse(url);
+      return url.includes("cursor=next-page")
+        ? new Response("", { status: 503 })
+        : jsonResponse({ linking_records: [], cursor: "next-page" });
     });
+
+    await expect(fetchBoardData(OWNER_DID, BOARD_RKEY, "")).rejects.toThrow(
+      /Constellation returned HTTP 503.*dev\.skyboard\.task/,
+    );
+  });
+
+  it("rejects when one of the owner's records can't be read", async () => {
+    stubNetwork([task(OWNER_DID, "t1", "Owner task")], (url) =>
+      url.includes("collection=dev.skyboard.task") &&
+      url.includes("com.atproto.repo.getRecord")
+        ? new Response("", { status: 503 })
+        : undefined,
+    );
+
+    await expect(fetchBoardData(OWNER_DID, BOARD_RKEY, "")).rejects.toThrow(
+      /PDS returned HTTP 503.*dev\.skyboard\.task/,
+    );
+  });
+
+  it("rejects when a trusted participant PDS cannot be resolved", async () => {
+    stubNetwork([ownerTrust, task(TRUSTED_DID, "t1", "Trusted task")], (url) =>
+      url.startsWith(`https://plc.directory/${TRUSTED_DID}`)
+        ? new Response("", { status: 503 })
+        : undefined,
+    );
 
     await expect(fetchBoardData(OWNER_DID, BOARD_RKEY, "")).rejects.toThrow(
       `Could not resolve PDS for ${TRUSTED_DID}`,
@@ -339,53 +470,34 @@ describe("fetchBoardData degraded reads", () => {
 
   it("skips an untrusted participant whose PDS cannot be resolved", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
-    stubFetch((url) => {
-      if (
-        url.includes("links/distinct-dids") &&
-        url.includes("collection=dev.skyboard.comment")
-      ) {
-        return jsonResponse({ linking_dids: [UNTRUSTED_DID] });
-      }
-      if (url.startsWith(`https://plc.directory/${UNTRUSTED_DID}`)) {
-        return new Response("", { status: 503 });
-      }
-      return successfulBoardReadResponse(url);
-    });
+    stubNetwork(
+      [
+        task(OWNER_DID, "t1", "Owner task"),
+        task(UNTRUSTED_DID, "t2", "Untrusted task"),
+      ],
+      (url) =>
+        url.startsWith(`https://plc.directory/${UNTRUSTED_DID}`)
+          ? new Response("", { status: 503 })
+          : undefined,
+    );
 
     const data = await fetchBoardData(OWNER_DID, BOARD_RKEY, "");
     expect(data?.board.name).toBe("Test Board");
+    expect(data?.tasks.map((t) => t.title)).toEqual(["Owner task"]);
     expect(data?.unreadableParticipants).toEqual([UNTRUSTED_DID]);
   });
 
-  it("rejects when the owner's own listing fails", async () => {
-    stubFetch((url) => {
-      if (url.includes("com.atproto.repo.listRecords")) {
-        return new Response("", { status: 503 });
-      }
-      return successfulBoardReadResponse(url);
-    });
+  it("resolves each participant's PDS once however many records they have", async () => {
+    const mockFetch = stubNetwork([
+      task(USER_DID, "t1", "One"),
+      task(USER_DID, "t2", "Two"),
+      task(USER_DID, "t3", "Three"),
+    ]);
 
-    await expect(fetchBoardData(OWNER_DID, BOARD_RKEY, "")).rejects.toThrow(
-      /PDS returned HTTP 503/,
+    await fetchBoardData(OWNER_DID, BOARD_RKEY, "");
+    const lookups = mockFetch.mock.calls.filter(([u]) =>
+      String(u).startsWith(`https://plc.directory/${USER_DID}`),
     );
-  });
-
-  it("rejects instead of returning records from only the first PDS page", async () => {
-    stubFetch((url) => {
-      if (
-        url.includes("com.atproto.repo.listRecords") &&
-        url.includes("collection=dev.skyboard.task")
-      ) {
-        if (url.includes("cursor=next-page")) {
-          return new Response("", { status: 503 });
-        }
-        return jsonResponse({ records: [], cursor: "next-page" });
-      }
-      return successfulBoardReadResponse(url);
-    });
-
-    await expect(fetchBoardData(OWNER_DID, BOARD_RKEY, "")).rejects.toThrow(
-      /PDS returned HTTP 503.*dev.skyboard.task/,
-    );
+    expect(lookups).toHaveLength(1);
   });
 });
