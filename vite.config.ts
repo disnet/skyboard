@@ -6,7 +6,10 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [sveltekit()],
     define: {
-      __SKYBOARD_APPVIEW_URL__: JSON.stringify(env.VITE_APPVIEW_URL || ""),
+      __SKYBOARD_CONSTELLATION_URL__: JSON.stringify(
+        env.VITE_CONSTELLATION_URL || "",
+      ),
+      __SKYBOARD_JETSTREAM_URL__: JSON.stringify(env.VITE_JETSTREAM_URL || ""),
     },
     server: {
       port: 3001,

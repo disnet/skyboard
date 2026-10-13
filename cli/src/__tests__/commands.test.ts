@@ -91,6 +91,7 @@ function setupMocks(
     trusts: [],
     comments: [],
     allParticipants: [OWNER_DID],
+    unreadableParticipants: [],
   };
 
   vi.mocked(fetchBoardData).mockResolvedValue(boardData);

@@ -8,10 +8,12 @@
   import { useLiveQuery } from "$lib/db.svelte.js";
   import { generateCatchUpNotifications } from "$lib/notifications.js";
   import {
-    loadBoardFromAppview,
-    AppviewSubscription,
+    loadBoardsFromConstellation,
     discoverMyBoards,
-  } from "$lib/appview.js";
+  } from "$lib/constellation.js";
+  import { JetstreamSubscription } from "$lib/jetstream.js";
+  import { liveQuery, type Subscription } from "dexie";
+  import { buildAtUri, BOARD_COLLECTION, type BoardRef } from "$lib/tid.js";
   import { setDiscovering } from "$lib/discovery.svelte.js";
   import type { Board } from "$lib/types.js";
   import { initTheme, getTheme, cycleTheme } from "$lib/theme.svelte.js";
@@ -33,8 +35,14 @@
   let showNotifications = $state(false);
   let showShortcuts = $state(false);
   let showBoardSwitcher = $state(false);
-  let boardSubs: AppviewSubscription[] = [];
+  let jetstreamSub: JetstreamSubscription | null = null;
+  let boardListSub: Subscription | null = null;
+  /** Live events arrive in bursts; scan for notifications once per burst. */
+  const NOTIFICATION_DEBOUNCE_MS = 1_000;
   let effectGeneration = 0;
+  let notificationTimer: ReturnType<typeof setTimeout> | null = null;
+  let notificationScan: Promise<void> | null = null;
+  let notificationRescan = false;
 
   const unreadCount = useLiveQuery<number>(() => {
     if (!auth.did) return 0;
@@ -55,35 +63,89 @@
     };
   });
 
-  // Refresh all local boards via appview, then generate catch-up notifications
-  async function catchUpAllBoards(userDid: string, handle: string | undefined) {
-    const boards = await db.boards.toArray();
-    await Promise.allSettled(
-      boards.map(async (b) => {
-        const boardUri = `at://${b.did}/dev.skyboard.board/${b.rkey}`;
-        await loadBoardFromAppview(b.did, b.rkey, boardUri);
-      }),
+  function boardRefs(boards: Board[]): BoardRef[] {
+    return boards.map((b) => ({
+      ownerDid: b.did,
+      rkey: b.rkey,
+      uri: buildAtUri(b.did, BOARD_COLLECTION, b.rkey),
+    }));
+  }
+
+  // Refresh all local boards (except ones discovery just loaded), then
+  // generate catch-up notifications
+  async function catchUpAllBoards(
+    userDid: string,
+    handle: string | undefined,
+    freshlyLoaded: Set<string>,
+  ) {
+    const stale = boardRefs(await db.boards.toArray()).filter(
+      (ref) => !freshlyLoaded.has(ref.uri),
     );
+    await loadBoardsFromConstellation(stale);
     await generateCatchUpNotifications(userDid, handle);
   }
 
-  function disconnectAllSubs() {
-    for (const sub of boardSubs) sub.disconnect();
-    boardSubs = [];
+  // Coalesce a burst of live events into one notification scan, run off the
+  // Jetstream event queue so it doesn't hold up later events
+  function scheduleNotificationScan(userDid: string) {
+    if (notificationTimer) clearTimeout(notificationTimer);
+    notificationTimer = setTimeout(() => {
+      notificationTimer = null;
+      void runNotificationScan(userDid);
+    }, NOTIFICATION_DEBOUNCE_MS);
   }
 
-  function connectBoardSubs(boards: Board[], userDid: string) {
-    disconnectAllSubs();
-    for (const b of boards) {
-      const boardUri = `at://${b.did}/dev.skyboard.board/${b.rkey}`;
-      const sub = new AppviewSubscription(boardUri, async () => {
-        await loadBoardFromAppview(b.did, b.rkey, boardUri);
-        const handle = getProfile(userDid)?.data?.handle;
-        await generateCatchUpNotifications(userDid, handle);
-      });
-      sub.connect();
-      boardSubs.push(sub);
+  async function runNotificationScan(userDid: string) {
+    if (notificationScan) {
+      notificationRescan = true;
+      return notificationScan;
     }
+    notificationScan = (async () => {
+      try {
+        do {
+          notificationRescan = false;
+          const handle = getProfile(userDid)?.data?.handle;
+          await generateCatchUpNotifications(userDid, handle);
+        } while (notificationRescan && jetstreamSub);
+      } catch (err) {
+        console.error("Notification scan failed:", err);
+      } finally {
+        notificationScan = null;
+      }
+    })();
+    return notificationScan;
+  }
+
+  function disconnectAllSubs() {
+    if (notificationTimer) clearTimeout(notificationTimer);
+    notificationTimer = null;
+    boardListSub?.unsubscribe();
+    boardListSub = null;
+    jetstreamSub?.disconnect();
+    jetstreamSub = null;
+  }
+
+  // One Jetstream socket covers every board: commit events carry the full
+  // record, so changes are applied directly instead of triggering a refetch.
+  function connectBoardSubs(userDid: string): void {
+    disconnectAllSubs();
+
+    const sub = new JetstreamSubscription({
+      onBoardUpdate: () => scheduleNotificationScan(userDid),
+      onResync: async (boards) => {
+        await loadBoardsFromConstellation(boards);
+        await runNotificationScan(userDid);
+      },
+    });
+
+    // Follow the board list, so boards created or joined later get events
+    // and boards left or deleted stop getting them
+    boardListSub = liveQuery(() => db.boards.toArray()).subscribe({
+      next: (boards) => sub.setBoards(boardRefs(boards).map((ref) => ref.uri)),
+      error: console.error,
+    });
+    sub.connect();
+    jetstreamSub = sub;
   }
 
   $effect(() => {
@@ -93,17 +155,23 @@
       const userAgent = auth.agent;
       const handle = currentProfile?.data?.handle;
 
+      // Connect before loading anything, so a change that lands while the
+      // boards load arrives as an event instead of falling in the gap. The
+      // socket replays from before it was requested, so the loads needn't
+      // wait for it to open.
+      connectBoardSubs(userDid);
       setDiscovering(true);
       discoverMyBoards(userAgent, userDid)
-        .catch(console.error)
+        .catch((err) => {
+          console.error(err);
+          return new Set<string>();
+        })
         .finally(() => {
           setDiscovering(false);
         })
-        .then(() => catchUpAllBoards(userDid, handle))
-        .then(async () => {
+        .then(async (discovered) => {
           if (generation !== effectGeneration) return;
-          const boards = await db.boards.toArray();
-          connectBoardSubs(boards, userDid);
+          await catchUpAllBoards(userDid, handle, discovered);
         })
         .catch(console.error);
       startBackgroundSync(userAgent, userDid);

@@ -13,7 +13,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Skyboard is a collaborative kanban board built on the AT Protocol (atproto). The web app uses Svelte 5 with SvelteKit as a fully client-side SPA (SSR and prerendering are disabled in `+layout.ts`). It deploys as a static site via `@sveltejs/adapter-static` with a `200.html` fallback for SPA routing.
 
-An **appview** server (`appview/`) aggregates board data from all participants and serves it to clients. Clients read from the appview and write to their own PDS.
+The web app has **no server of its own**. It assembles board state in the browser from public atproto infrastructure: Constellation (backlink index) for discovery, participant PDSes for record content, and Jetstream for real-time updates. Writes go to the user's own PDS.
+
+The `appview/` directory is the legacy aggregation server. Neither the web app nor the CLI uses it; retain it only for the rollout soak before decommissioning.
 
 ### Data Model: Four Record Types
 
@@ -26,24 +28,41 @@ All data is stored as AT Protocol records in each user's repo. Collection consta
 
 `Board`, `Task`, `Op`, and `Trust` are the local Dexie models (with auto-increment `id` and `syncStatus`). `BoardRecord`, `TaskRecord`, `OpRecord`, and `TrustRecord` are the wire format for PDS storage (no local fields). Both sets defined in `src/lib/types.ts`.
 
-### Data Flow: Appview for Reads, PDS for Writes
+### Data Flow: Constellation + PDS for Reads, PDS for Writes
 
-**Reading:** The browser fetches full board state from the appview (`src/lib/appview.ts`) via `GET /board/:did/:rkey`. The response includes all tasks, ops, trusts, comments, approvals, and reactions, which are upserted into Dexie. Local pending records take priority over appview data (local-wins).
+**Reading:** `loadBoardFromConstellation(ownerDid, rkey, boardUri)` in `src/lib/constellation.ts`:
 
-**Writing:** All mutations write to Dexie first with `syncStatus: 'pending'`. Background sync (`src/lib/sync.ts`) pushes pending records to the user's PDS via `putRecord`/`deleteRecord`.
+1. Read the board record from the owner's PDS (`com.atproto.repo.getRecord`) — the board is the link _target_, so Constellation can't return it. A missing, unreadable, or invalid board record is the only thing that makes the load return `false`.
+2. `GET /links/all?target=<boardUri>` on Constellation → which of the six child collections are non-empty.
+3. `GET /links` per non-empty collection → every linked record as (did, rkey).
+4. `com.atproto.repo.getRecord` for each linked record, kept if its `value.boardUri` still matches. Records are never listed out of whole repos, so a load costs what the board holds, not what its participants have written elsewhere. Ops, trusts, approvals, and reactions are never rewritten in place, so ones already held as synced are not refetched.
+5. Upsert everything into Dexie in one transaction via `applyBoardSnapshot` (`src/lib/board-store.ts`).
 
-**Real-time:** The browser subscribes to the appview's WebSocket (`AppviewSubscription` in `src/lib/appview.ts`). When the appview detects changes (via Jetstream), it sends an update notification and the client re-fetches the board.
+Constellation only knows about records that still exist, so every synced local row it no longer links is also read with `getRecord`: a `RecordNotFound` (or a record now on another board) prunes it, a failed read keeps it, and a record the index simply hasn't caught up with is kept and refreshed.
 
-### Appview
+If Constellation can't be reached, or reports no links at all (which is also what an unindexed new board looks like), the load falls back to `listRecords` over the owner plus the DIDs already held locally.
 
-The appview (`appview/`) is a Bun + SQLite caching server deployed on Fly.io:
+**Writing:** unchanged. All mutations write to Dexie first with `syncStatus: 'pending'`. Background sync (`src/lib/sync.ts`) pushes pending records to the user's PDS via `putRecord`/`deleteRecord`.
 
-- Subscribes to Jetstream for real-time ingestion of all `dev.skyboard.*` records
-- Backfills from PDS endpoints on demand when a board is first requested
-- Serves full board state via REST and pushes update notifications via WebSocket
-- Persists Jetstream cursor for graceful restart recovery (safe with Fly auto-stop)
+**Real-time:** one `JetstreamSubscription` (`src/lib/jetstream.ts`) for the whole app, subscribed to all `dev.skyboard.*` collections. Commit events carry the full record, so changes are applied straight to Dexie — no refetch. The watched set is the boards in Dexie plus any being loaded (`watchBoard` returns a release function), so leaving or deleting a board stops its events. The first connection replays from a minute before it was requested, so loads needn't wait for the socket; reconnects (including after a tab was hidden for over a minute) replay from the last `time_us` cursor, and only a gap over an hour reloads the subscribed boards.
 
-See `appview/README.md` for API docs, development, and deployment.
+### Local-wins and pruning
+
+Both read paths funnel through `src/lib/board-store.ts`, which enforces:
+
+- a local record with `syncStatus: 'pending'` always beats remote data (this also swallows the echo of the user's own in-flight writes)
+- unchanged records are not rewritten, so `liveQuery` doesn't churn
+- only records the network confirmed are gone (`RecordNotFound`, moved to another board, or absent from a successful fallback listing) are deleted locally, so an unreachable PDS never causes data loss
+
+Records from other people's repos are shape-checked by `src/lib/record-schemas.ts`, which mirrors the appview's zod schemas without adding zod to the bundle.
+
+### Configuration
+
+`vite.config.ts` defines `__SKYBOARD_CONSTELLATION_URL__` (`VITE_CONSTELLATION_URL`) and `__SKYBOARD_JETSTREAM_URL__` (`VITE_JETSTREAM_URL`). Both default to the public instances; keep them configurable so the services can be self-hosted.
+
+### Appview (legacy)
+
+`appview/` is a Bun + SQLite caching server on Fly.io. It is no longer in any client read path. Keep it during the rollout soak for old web bundles, then decommission it separately. See `appview/README.md`.
 
 ### Materialization and Conflict Resolution
 
